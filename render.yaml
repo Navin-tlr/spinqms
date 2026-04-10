@@ -9,8 +9,13 @@ services:
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
     envVars:
+      # ── Supabase Transaction Pooler (port 6543) ──────────────────────────────
+      # Get this from: Supabase Dashboard → Project → Settings → Database
+      # Choose "Transaction mode" (Supavisor) — port 6543.
+      # Format: postgresql://postgres.[ref]:[password]@aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres
+      # Supabase project ref: homjuhxvoxrtknounjqz (ap-southeast-1)
       - key: DATABASE_URL
-        sync: false          # paste your Neon/Supabase connection string in Render dashboard
+        sync: false
       - key: PYTHON_VERSION
         value: 3.11.0
 

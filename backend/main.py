@@ -91,16 +91,25 @@ async def _http_handler(request: Request, exc: HTTPException) -> JSONResponse:
 # ── Startup: run Alembic migrations ──────────────────────────────────────────
 @app.on_event("startup")
 def startup() -> None:
-    """Run pending Alembic migrations on startup.  Safe to call repeatedly."""
-    from alembic.config import Config
-    from alembic import command
+    """
+    Apply any pending Alembic migrations on startup.
 
-    ini_path = os.path.join(os.path.dirname(__file__), "alembic.ini")
-    cfg = Config(ini_path)
-    # Ensure alembic resolves paths relative to the backend directory
-    cfg.set_main_option("script_location", os.path.join(os.path.dirname(__file__), "alembic"))
-    command.upgrade(cfg, "head")
-    logger.info("Database migrations applied — schema at head")
+    For Supabase / managed Postgres: the schema is pre-applied via MCP and the
+    alembic_version table is stamped at head, so this becomes a fast no-op.
+    The try/except ensures a misconfigured migration never prevents the app
+    from starting — the error is logged and the app proceeds.
+    """
+    try:
+        from alembic.config import Config
+        from alembic import command
+
+        ini_path = os.path.join(os.path.dirname(__file__), "alembic.ini")
+        cfg = Config(ini_path)
+        cfg.set_main_option("script_location", os.path.join(os.path.dirname(__file__), "alembic"))
+        command.upgrade(cfg, "head")
+        logger.info("Database migrations applied — schema at head")
+    except Exception as exc:
+        logger.warning("Alembic migration skipped on startup: %s", exc)
 
 
 # ── Internal helpers ──────────────────────────────────────────────────────────
