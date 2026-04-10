@@ -1,6 +1,7 @@
 """
 Alembic migration environment.
-Imports our SQLAlchemy models so that autogenerate can detect schema changes.
+Reads DATABASE_URL from the environment so migrations run against the
+same database as the application (SQLite locally, Postgres on Render/Neon).
 """
 
 import os
@@ -10,18 +11,24 @@ from logging.config import fileConfig
 from sqlalchemy import engine_from_config, pool
 from alembic import context
 
-# Make sure the backend package is importable when alembic is run from backend/
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from database import Base   # noqa: E402
-import models               # noqa: E402, F401  ← registers all tables with Base.metadata
+import models               # noqa: E402, F401
 
 config = context.config
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
+# Override the ini-file URL with DATABASE_URL env var when present
+_db_url = os.environ.get("DATABASE_URL", "sqlite:///./qms.db")
+if _db_url.startswith("postgres://"):
+    _db_url = _db_url.replace("postgres://", "postgresql://", 1)
+config.set_main_option("sqlalchemy.url", _db_url)
+
 target_metadata = Base.metadata
+_is_sqlite = _db_url.startswith("sqlite")
 
 
 def run_migrations_offline() -> None:
@@ -31,7 +38,7 @@ def run_migrations_offline() -> None:
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
-        render_as_batch=True,   # required for SQLite column alterations
+        render_as_batch=_is_sqlite,   # batch mode only needed for SQLite
     )
     with context.begin_transaction():
         context.run_migrations()
@@ -47,7 +54,7 @@ def run_migrations_online() -> None:
         context.configure(
             connection=connection,
             target_metadata=target_metadata,
-            render_as_batch=True,   # required for SQLite column alterations
+            render_as_batch=_is_sqlite,   # batch mode only needed for SQLite
         )
         with context.begin_transaction():
             context.run_migrations()

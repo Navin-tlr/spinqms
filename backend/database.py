@@ -1,38 +1,39 @@
 """
 database.py — SQLAlchemy engine + session factory
 ==================================================
-SQLite with WAL journal mode for concurrent read performance.
+Connection priority:
+  1. DATABASE_URL env var  — set this in Render / Neon / Supabase
+  2. ./qms.db              — local SQLite fallback (dev only)
 
-Production path resolution:
-  1. DATABASE_URL env var (full SQLAlchemy URL, e.g. sqlite:////data/qms.db)
-  2. /data/qms.db  — Render persistent disk mount point
-  3. ./qms.db      — local development fallback
+SQLite extras (WAL mode, FK enforcement) are applied only when the
+dialect is SQLite — they are invalid syntax on PostgreSQL.
 """
 
 import os
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import sessionmaker, DeclarativeBase
 
-# Priority: DATABASE_URL env → /data (Render persistent disk) → local dev
-_DB_URL = (
-    os.environ.get("DATABASE_URL")
-    or (
-        "sqlite:////data/qms.db"
-        if os.path.isdir("/data")
-        else "sqlite:///./qms.db"
-    )
-)
+DATABASE_URL = os.environ.get("DATABASE_URL", "sqlite:///./qms.db")
+
+# Render / Heroku historically prefix postgres:// — SQLAlchemy needs postgresql://
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+
+_is_sqlite = DATABASE_URL.startswith("sqlite")
 
 engine = create_engine(
-    _DB_URL,
-    connect_args={"check_same_thread": False},
+    DATABASE_URL,
+    # SQLite needs check_same_thread=False; harmless to omit for Postgres
+    connect_args={"check_same_thread": False} if _is_sqlite else {},
     pool_pre_ping=True,
 )
 
 
 @event.listens_for(engine, "connect")
-def _set_sqlite_pragma(dbapi_conn, _connection_record):
-    """Enable WAL mode and foreign-key enforcement on every new connection."""
+def _on_connect(dbapi_conn, _record):
+    """SQLite-only: enable WAL journal mode and foreign-key enforcement."""
+    if not _is_sqlite:
+        return
     cursor = dbapi_conn.cursor()
     cursor.execute("PRAGMA journal_mode=WAL")
     cursor.execute("PRAGMA foreign_keys=ON")
