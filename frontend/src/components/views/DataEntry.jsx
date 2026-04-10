@@ -184,7 +184,8 @@ export default function DataEntry({ depts, currentDept, setCurrentDept, onSaved 
       {/* ── Measurement settings ─── */}
       <Sect>
         <MicroLabel>Measurement settings</MicroLabel>
-        <div style={{ display:'grid', gridTemplateColumns: machineConf ? (currentDept === 'simplex' ? '1fr 1fr 1fr 1fr 1fr' : '1fr 1fr 1fr') : '1fr 1fr', gap:14, padding:'14px 16px', background:'var(--bg-2)', borderRadius:'var(--r)', border:'1px solid var(--bd)' }}>
+        {/* Row 1: Sample length · Entry mode · Machine # */}
+        <div style={{ display:'grid', gridTemplateColumns: machineConf ? '1fr 1fr 1fr' : '1fr 1fr', gap:14, padding:'14px 16px', background:'var(--bg-2)', borderRadius: currentDept === 'simplex' ? 'var(--r) var(--r) 0 0' : 'var(--r)', border:'1px solid var(--bd)', borderBottom: currentDept === 'simplex' ? 'none' : '1px solid var(--bd)' }}>
           {/* Sample length */}
           <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
             <span style={ML}>Sample length</span>
@@ -206,7 +207,7 @@ export default function DataEntry({ depts, currentDept, setCurrentDept, onSaved 
             </span>
           </div>
 
-          {/* Machine number — ringframe (1-25), carding (1-3), simplex (1-3) */}
+          {/* Machine number */}
           {machineConf && (
             <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
               <span style={ML}>{machineConf.label}</span>
@@ -217,31 +218,36 @@ export default function DataEntry({ depts, currentDept, setCurrentDept, onSaved 
               <span style={{ fontSize:11, color:'var(--tx-4)' }}>{machineConf.hint}</span>
             </div>
           )}
-
-          {/* Simplex-only: Lane + Bubble type */}
-          {currentDept === 'simplex' && (
-            <>
-              <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
-                <span style={ML}>Lane</span>
-                <SegCtrl
-                  opts={[['front', '⇑ Front'], ['back', '⇓ Back']]}
-                  value={simplexLane}
-                  onChange={setSimplexLane}
-                />
-                <span style={{ fontSize:11, color:'var(--tx-4)' }}>Front = standard count</span>
-              </div>
-              <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
-                <span style={ML}>Bubble type</span>
-                <SegCtrl
-                  opts={[['full_bubble', '⬤ Full'], ['half_bubble', '◐ Half']]}
-                  value={bubbleType}
-                  onChange={setBubbleType}
-                />
-                <span style={{ fontSize:11, color:'var(--tx-4)' }}>Full = standard tension</span>
-              </div>
-            </>
-          )}
         </div>
+
+        {/* Row 2 (Simplex only): Lane + Bubble type — full-width bar */}
+        {currentDept === 'simplex' && (
+          <div style={{
+            display:'grid', gridTemplateColumns:'1fr 1fr', gap:14,
+            padding:'12px 16px',
+            background:'var(--bg-2)', borderRadius:'0 0 var(--r) var(--r)',
+            border:'1px solid var(--bd)', borderTop:'1px dashed var(--bd-md)',
+          }}>
+            <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+              <span style={ML}>Lane</span>
+              <SegCtrl
+                opts={[['front', '⇑ Front'], ['back', '⇓ Back']]}
+                value={simplexLane}
+                onChange={setSimplexLane}
+              />
+              <span style={{ fontSize:11, color:'var(--tx-4)' }}>Front = standard count · Back = additional stretch</span>
+            </div>
+            <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+              <span style={ML}>Bubble type</span>
+              <SegCtrl
+                opts={[['full_bubble', '⬤ Full'], ['half_bubble', '◐ Half']]}
+                value={bubbleType}
+                onChange={setBubbleType}
+              />
+              <span style={{ fontSize:11, color:'var(--tx-4)' }}>Full = standard tension · Half = reduced</span>
+            </div>
+          </div>
+        )}
 
         {mode === 'weight' && (
           <div style={{ marginTop:10, display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:8 }}>
