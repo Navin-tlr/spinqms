@@ -4,19 +4,13 @@ services:
     name: spinqms-api
     runtime: python
     region: singapore
-    plan: starter
+    plan: free
     rootDir: backend
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
     envVars:
-      - key: DATABASE_URL
-        value: sqlite:////data/qms.db
       - key: PYTHON_VERSION
         value: 3.11.0
-    disk:
-      name: qms-data
-      mountPath: /data
-      sizeGB: 1
 
   # ── React Frontend (Static Site) ────────────────────────────────────────────
   - type: web
