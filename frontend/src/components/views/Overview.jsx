@@ -1,11 +1,86 @@
-import { Card, CardHeader, LabelCaps, Badge, Alert, Metric, TblWrap, Empty, qualityLabel } from '../Primitives.jsx'
+import { useState, useEffect, useCallback } from 'react'
+import { Card, LabelCaps, Badge, Alert, Metric, TblWrap, Empty, qualityLabel } from '../Primitives.jsx'
+import { getOverview } from '../../api.js'
 
-export default function Overview({ overview, alerts, currentDept, setCurrentDept }) {
-  const hasBad = alerts.some(a => a.severity === 'bad')
-  const icons = { ok: '✓', warn: '⚠', bad: '✕', info: 'ℹ' }
+/* ── Time range config ──────────────────────────────────────────────────── */
+const RANGES = [
+  { id: 'shift',   label: 'Past Shift',   hours: 8   },
+  { id: '24h',     label: 'Past 24 h',    hours: 24  },
+  { id: 'week',    label: 'Past Week',    hours: 168 },
+  { id: 'month',   label: 'Past Month',   hours: 720 },
+  { id: 'all',     label: 'All Time',     hours: null },
+]
+
+function rangeParams(id) {
+  const r = RANGES.find(x => x.id === id)
+  if (!r || r.hours == null) return {}
+  const from = new Date(Date.now() - r.hours * 3600 * 1000).toISOString()
+  return { date_from: from }
+}
+
+export default function Overview({ overview: propOverview, alerts, currentDept, setCurrentDept }) {
+  const [range,    setRange]    = useState(() => localStorage.getItem('spinqms_ov_range') || 'all')
+  const [overview, setOverview] = useState(propOverview)
+  const [loading,  setLoading]  = useState(false)
+
+  /* Re-fetch when range changes */
+  const fetchOverview = useCallback((r) => {
+    setLoading(true)
+    getOverview(rangeParams(r))
+      .then(data => setOverview(data))
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
+
+  useEffect(() => {
+    fetchOverview(range)
+  }, [range, fetchOverview])
+
+  /* Sync prop changes (e.g. after a new save triggers parent refresh) */
+  useEffect(() => {
+    if (range === 'all') setOverview(propOverview)
+  }, [propOverview, range])
+
+  const handleRange = (id) => {
+    setRange(id)
+    localStorage.setItem('spinqms_ov_range', id)
+  }
+
+  const icons  = { ok: '✓', warn: '⚠', bad: '✕', info: 'ℹ' }
 
   return (
     <>
+      {/* ── Time Range Selector ── */}
+      <div style={{
+        display:'flex', alignItems:'center', gap:6, flexWrap:'wrap',
+        padding:'10px 16px',
+        background:'var(--bg)', border:'1px solid var(--bd)', borderRadius:'var(--r-lg)',
+      }}>
+        <span style={{ fontSize:10, fontWeight:600, letterSpacing:'.08em', textTransform:'uppercase', color:'var(--tx-3)', marginRight:4, flexShrink:0 }}>
+          Time range
+        </span>
+        {RANGES.map(r => (
+          <button key={r.id} onClick={() => handleRange(r.id)} style={{
+            padding:'4px 14px', fontSize:11, fontWeight: range === r.id ? 600 : 400,
+            border:'1.5px solid', borderRadius:20, cursor:'pointer',
+            fontFamily:'var(--font)', transition:'all .12s', lineHeight:1,
+            background:   range === r.id ? 'var(--claude)' : 'transparent',
+            color:        range === r.id ? '#fff' : 'var(--tx-2)',
+            borderColor:  range === r.id ? 'var(--claude)' : 'var(--bd-md)',
+          }}>
+            {r.label}
+          </button>
+        ))}
+        {loading && (
+          <span style={{ fontSize:11, color:'var(--tx-4)', marginLeft:4, fontStyle:'italic' }}>Updating…</span>
+        )}
+        {range !== 'all' && (
+          <span style={{ fontSize:11, color:'var(--tx-3)', marginLeft:'auto' }}>
+            Showing data from {RANGES.find(r => r.id === range)?.label.toLowerCase()}
+          </span>
+        )}
+      </div>
+
       {/* Process flow */}
       <Card sm>
         <LabelCaps>Process flow · live status</LabelCaps>

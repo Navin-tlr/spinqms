@@ -182,7 +182,9 @@ class Sample(Base):
     mean_hank      = Column(Float,   nullable=False, index=True)
     readings_count = Column(Integer, nullable=False)   # len(readings)
     cv_pct         = Column(Float,   nullable=True)    # batch CV%
-    frame_number   = Column(Integer, nullable=True)    # 1–25, ring frame only
+    frame_number     = Column(Integer, nullable=True)    # 1–25, ring frame only
+    simplex_lane     = Column(String, nullable=True)   # 'front' | 'back'  (Simplex only)
+    measurement_type = Column(String, nullable=True)   # 'full_bubble' | 'half_bubble' (Simplex only)
 
     # Relationships
     department       = relationship("Department",     back_populates="samples")

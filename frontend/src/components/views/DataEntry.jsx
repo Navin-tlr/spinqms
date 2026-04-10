@@ -36,6 +36,8 @@ export default function DataEntry({ depts, currentDept, setCurrentDept, onSaved 
   const [errMsg,       setErrMsg]       = useState('')
   const [historical,   setHistorical]   = useState(false)     // historical entry mode
   const [historicalTs, setHistoricalTs] = useState('')        // datetime-local value
+  const [simplexLane,  setSimplexLane]  = useState('front')        // 'front' | 'back'
+  const [bubbleType,   setBubbleType]   = useState('full_bubble')  // 'full_bubble' | 'half_bubble'
 
   const dept       = depts.find(d => d.id === currentDept) ?? depts[0]
   const target     = dept?.target ?? 0
@@ -91,6 +93,10 @@ export default function DataEntry({ depts, currentDept, setCurrentDept, onSaved 
         readings: hanks, avg_weight: avgWeight, sample_length: sampleLen,
       }
       if (machineConf && frameNum) body.frame_number = parseInt(frameNum)
+      if (currentDept === 'simplex') {
+        body.simplex_lane = simplexLane
+        body.measurement_type = bubbleType
+      }
       // datetime-local gives local time — append offset so backend receives unambiguous ISO-8601
       if (historical && historicalTs) {
         body.recorded_at = new Date(historicalTs).toISOString()
@@ -178,7 +184,7 @@ export default function DataEntry({ depts, currentDept, setCurrentDept, onSaved 
       {/* ── Measurement settings ─── */}
       <Sect>
         <MicroLabel>Measurement settings</MicroLabel>
-        <div style={{ display:'grid', gridTemplateColumns: machineConf ? '1fr 1fr 1fr' : '1fr 1fr', gap:14, padding:'14px 16px', background:'var(--bg-2)', borderRadius:'var(--r)', border:'1px solid var(--bd)' }}>
+        <div style={{ display:'grid', gridTemplateColumns: machineConf ? (currentDept === 'simplex' ? '1fr 1fr 1fr 1fr 1fr' : '1fr 1fr 1fr') : '1fr 1fr', gap:14, padding:'14px 16px', background:'var(--bg-2)', borderRadius:'var(--r)', border:'1px solid var(--bd)' }}>
           {/* Sample length */}
           <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
             <span style={ML}>Sample length</span>
@@ -210,6 +216,30 @@ export default function DataEntry({ depts, currentDept, setCurrentDept, onSaved 
                 style={{ width:72, padding:'8px 10px', border:'1px solid var(--bd-md)', borderRadius:'var(--r)', fontSize:18, fontWeight:600, fontFamily:'var(--mono)', background:'var(--bg)', color:'var(--tx)', textAlign:'center' }} />
               <span style={{ fontSize:11, color:'var(--tx-4)' }}>{machineConf.hint}</span>
             </div>
+          )}
+
+          {/* Simplex-only: Lane + Bubble type */}
+          {currentDept === 'simplex' && (
+            <>
+              <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+                <span style={ML}>Lane</span>
+                <SegCtrl
+                  opts={[['front', '⇑ Front'], ['back', '⇓ Back']]}
+                  value={simplexLane}
+                  onChange={setSimplexLane}
+                />
+                <span style={{ fontSize:11, color:'var(--tx-4)' }}>Front = standard count</span>
+              </div>
+              <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+                <span style={ML}>Bubble type</span>
+                <SegCtrl
+                  opts={[['full_bubble', '⬤ Full'], ['half_bubble', '◐ Half']]}
+                  value={bubbleType}
+                  onChange={setBubbleType}
+                />
+                <span style={{ fontSize:11, color:'var(--tx-4)' }}>Full = standard tension</span>
+              </div>
+            </>
           )}
         </div>
 
@@ -397,6 +427,11 @@ function ResultCallout({ result, sampleLen, mode, deptName, machineConf, wasHist
             {wasHistorical && (
               <span style={{ fontSize:10, fontWeight:600, padding:'2px 8px', borderRadius:20, background:'var(--info-bg)', color:'var(--info)', border:'1px solid var(--info-bd)' }}>
                 Historical entry
+              </span>
+            )}
+            {result.simplex_lane && (
+              <span style={{ fontSize:10, fontWeight:600, padding:'2px 8px', borderRadius:20, background:'var(--bg-3)', color:'var(--tx-2)', border:'1px solid var(--bd-md)' }}>
+                {result.simplex_lane === 'front' ? '⇑ Front Lane' : '⇓ Back Lane'} · {result.measurement_type === 'full_bubble' ? '⬤ Full Bubble' : '◐ Half Bubble'}
               </span>
             )}
           </div>

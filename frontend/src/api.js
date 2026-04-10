@@ -19,11 +19,16 @@ export const getDepts = () => http.get('/depts').then(r => r.data)
 // body may include an optional `recorded_at` ISO-8601 string for historical entry
 export const createSample = (body)                          => http.post('/samples', body).then(r => r.data)
 export const getSamples   = (deptId, shift, frameNumber)    => http.get('/samples', { params: { dept_id: deptId, shift, frame_number: frameNumber ?? undefined } }).then(r => r.data)
+export const getSample    = (id)                             => http.get(`/samples/${id}`).then(r => r.data)
+export const updateSample = (id, body)                       => http.put(`/samples/${id}`, body).then(r => r.data)
 export const clearSamples  = ()                              => http.delete('/samples')
 export const deleteSample  = (id)                            => http.delete(`/samples/${id}`)
 
 // ── Overview ──────────────────────────────────────────────────────────────────
-export const getOverview = (shift) => http.get('/overview', { params: { shift } }).then(r => r.data)
+export const getOverview = (params = {}) => {
+  const clean = Object.fromEntries(Object.entries(params).filter(([, v]) => v != null && v !== ''))
+  return http.get('/overview', { params: clean }).then(r => r.data)
+}
 export const getAlerts   = ()      => http.get('/alerts').then(r => r.data)
 
 // ── Data Log ──────────────────────────────────────────────────────────────────

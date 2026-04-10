@@ -40,9 +40,23 @@ class SampleCreate(BaseModel):
         None,
         description="Optional historical timestamp (ISO-8601). If omitted, current UTC is used.",
     )
+    simplex_lane:     Optional[str] = Field(None, description="'front' or 'back' (Simplex only)")
+    measurement_type: Optional[str] = Field(None, description="'full_bubble' or 'half_bubble' (Simplex only)")
 
     @model_validator(mode="after")
     def readings_positive(self) -> "SampleCreate":
+        if any(r <= 0 for r in self.readings):
+            raise ValueError("All readings must be positive")
+        return self
+
+
+# ── Sample update ─────────────────────────────────────────────────────────────
+class SampleUpdate(BaseModel):
+    readings:   List[float] = Field(..., min_length=3, max_length=50)
+    avg_weight: Optional[float] = Field(None, gt=0)
+
+    @model_validator(mode="after")
+    def readings_positive(self) -> "SampleUpdate":
         if any(r <= 0 for r in self.readings):
             raise ValueError("All readings must be positive")
         return self
@@ -70,7 +84,9 @@ class SampleOut(BaseModel):
     cpk:     Optional[float]
     cp:      Optional[float]
     quality: Optional[str]   # 'ok' | 'warn' | 'bad'
-    frame_number: Optional[int]
+    frame_number:     Optional[int]
+    simplex_lane:     Optional[str]
+    measurement_type: Optional[str]
 
     model_config = {"from_attributes": True}
 

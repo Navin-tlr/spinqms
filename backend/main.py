@@ -39,6 +39,7 @@ from schemas import (
     PredictRequest,
     SampleCreate,
     SampleOut,
+    SampleUpdate,
     SettingsOut,
     SettingsUpdate,
 )
@@ -169,7 +170,13 @@ def _utc_iso(dt: datetime) -> str:
     return s
 
 
-def _batch_means(dept_id: str, shift: Optional[str], db: Session) -> List[float]:
+def _batch_means(
+    dept_id: str,
+    shift: Optional[str],
+    db: Session,
+    date_from: Optional[datetime] = None,
+    date_to: Optional[datetime] = None,
+) -> List[float]:
     """
     Return the mean_hank column only (no JSON parsing) for the given dept/shift.
     Ordered by timestamp ascending for correct time-series analysis.
@@ -182,6 +189,10 @@ def _batch_means(dept_id: str, shift: Optional[str], db: Session) -> List[float]
     )
     if shift and shift != "ALL":
         q = q.filter(Sample.shift == shift)
+    if date_from is not None:
+        q = q.filter(Sample.timestamp >= date_from)
+    if date_to is not None:
+        q = q.filter(Sample.timestamp <= date_to)
     return [row.mean_hank for row in q.all()]
 
 
@@ -226,6 +237,8 @@ def _enrich_sample(s: Sample) -> SampleOut:
         cp=round(cp, 4)          if cp  is not None else None,
         quality=q,
         frame_number=s.frame_number,
+        simplex_lane=s.simplex_lane,
+        measurement_type=s.measurement_type,
     )
 
 
@@ -330,6 +343,8 @@ def create_sample(body: SampleCreate, db: Session = Depends(get_db)):
         readings_count=len(readings),
         cv_pct=cv_pct,
         frame_number=body.frame_number,
+        simplex_lane=body.simplex_lane,
+        measurement_type=body.measurement_type,
     )
     db.add(sample)
     db.commit()
@@ -372,6 +387,55 @@ def list_samples(
     return [_enrich_sample(s) for s in q.all()]
 
 
+@app.get("/api/samples/{sample_id}", response_model=SampleOut)
+def get_sample(sample_id: int, db: Session = Depends(get_db)):
+    s = (
+        db.query(Sample)
+        .options(joinedload(Sample.settings_version), joinedload(Sample.department))
+        .filter_by(id=sample_id)
+        .first()
+    )
+    if not s:
+        raise HTTPException(404, "Sample not found")
+    return _enrich_sample(s)
+
+
+@app.put("/api/samples/{sample_id}", response_model=SampleOut)
+def update_sample(sample_id: int, body: SampleUpdate, db: Session = Depends(get_db)):
+    s = (
+        db.query(Sample)
+        .options(joinedload(Sample.settings_version), joinedload(Sample.department))
+        .filter_by(id=sample_id)
+        .first()
+    )
+    if not s:
+        raise HTTPException(404, "Sample not found")
+
+    readings  = [round(r, 6) for r in body.readings]
+    mean_hank = sum(readings) / len(readings)
+    cv_stats  = logic.calc_stats(readings)
+    cv_pct    = round(cv_stats["cv"], 4) if cv_stats else None
+
+    s.readings_json    = json.dumps(readings)
+    s.mean_hank        = round(mean_hank, 6)
+    s.readings_count   = len(readings)
+    s.cv_pct           = cv_pct
+    if body.avg_weight is not None:
+        s.avg_weight   = body.avg_weight
+
+    db.commit()
+    db.refresh(s)
+
+    # Re-load with relationships for _enrich_sample
+    s = (
+        db.query(Sample)
+        .options(joinedload(Sample.settings_version), joinedload(Sample.department))
+        .filter_by(id=sample_id)
+        .one()
+    )
+    return _enrich_sample(s)
+
+
 @app.delete("/api/samples/{sample_id}", status_code=204)
 def delete_sample(sample_id: int, db: Session = Depends(get_db)):
     s = db.query(Sample).filter_by(id=sample_id).first()
@@ -389,7 +453,12 @@ def clear_all_samples(db: Session = Depends(get_db)):
 
 # ── Overview / KPIs ───────────────────────────────────────────────────────────
 @app.get("/api/overview", response_model=List[DeptKPI])
-def get_overview(shift: Optional[str] = None, db: Session = Depends(get_db)):
+def get_overview(
+    shift: Optional[str] = None,
+    date_from: Optional[datetime] = None,
+    date_to: Optional[datetime] = None,
+    db: Session = Depends(get_db),
+):
     """
     Performance-optimised overview.
 
@@ -404,7 +473,7 @@ def get_overview(shift: Optional[str] = None, db: Session = Depends(get_db)):
     result: List[DeptKPI] = []
 
     for dept in _ordered_depts(db):
-        batch_means = _batch_means(dept.dept_id, shift, db)
+        batch_means = _batch_means(dept.dept_id, shift, db, date_from, date_to)
         stats       = logic.calc_stats(batch_means)
         sg_size     = _subgroup_size(dept.dept_id, db)
         dept_dict   = dept.to_dict()
@@ -585,6 +654,8 @@ def get_log(
             "usl_value":       sv.usl    if sv else None,
             "lsl_value":       sv.lsl    if sv else None,
             "frame_number":    s.frame_number,
+            "simplex_lane":    s.simplex_lane,
+            "measurement_type": s.measurement_type,
         })
 
     return {"total": len(rows), "rows": rows}
