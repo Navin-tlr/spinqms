@@ -1,0 +1,33 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "SpinQMS Static Server",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-m", "http.server", "3000"],
+      "cwd": "/Users/navinsivakumar/Desktop/QMS",
+      "port": 3000
+    },
+    {
+      "name": "JD-Copilot API (FastAPI/Uvicorn)",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"],
+      "cwd": "/Users/navinsivakumar/Desktop/JD-Copilot",
+      "port": 8000
+    },
+    {
+      "name": "JD-Copilot Frontend (React/CRA)",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["start"],
+      "cwd": "/Users/navinsivakumar/Desktop/JD-Copilot",
+      "port": 3001
+    },
+    {
+      "name": "JD-Copilot Spark UI (Vite + Express)",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "cwd": "/Users/navinsivakumar/Desktop/JD-Copilot/spark-home-2",
+      "port": 8080
+    }
+  ]
+}

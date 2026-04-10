@@ -1,0 +1,2151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SpinQMS — Ne 47 Weft Quality System</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+/* ═══════════════════════════════
+   DESIGN TOKENS
+═══════════════════════════════ */
+:root {
+  --font:   -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --mono:   "SF Mono", "Fira Code", "Consolas", monospace;
+
+  --bg:        #ffffff;
+  --bg-2:      #f9f9f8;
+  --bg-3:      #f1f0ea;
+  --bg-hover:  #f0efea;
+  --bg-active: #e9e8e3;
+
+  --bd:        rgba(0,0,0,.09);
+  --bd-md:     rgba(0,0,0,.16);
+  --bd-hv:     rgba(0,0,0,.28);
+
+  --tx:        #1a1a19;
+  --tx-2:      #6b6b67;
+  --tx-3:      #9c9a92;
+  --tx-4:      #c4c2ba;
+
+  --ok:        #2d6a0a; --ok-bg:   #e8f5d8; --ok-bd:   #a8d878;
+  --warn:      #7a4a08; --warn-bg: #fdf0d5; --warn-bd: #f5c260;
+  --bad:       #8b1f1f; --bad-bg:  #fbeaea; --bad-bd:  #e89090;
+  --info:      #1a5fa8; --info-bg: #e5f0fc; --info-bd: #90bdf0;
+  --purple:    #5940a8; --purple-bg:#ede9fc; --purple-bd:#b8a8f0;
+
+  --r:    8px;
+  --r-lg: 12px;
+  --r-xl: 14px;
+
+  --sidebar: 240px;
+  --hdr:     52px;
+
+  --shadow: 0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.06);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg:#191918; --bg-2:#222220; --bg-3:#2b2b28;
+    --bg-hover:#2a2a27; --bg-active:#333330;
+    --bd:rgba(255,255,255,.08); --bd-md:rgba(255,255,255,.15); --bd-hv:rgba(255,255,255,.28);
+    --tx:#e8e6df; --tx-2:#9c9a92; --tx-3:#6b6b67; --tx-4:#4a4a46;
+    --ok:#7dc44a; --ok-bg:#192e08; --ok-bd:#3a6d11;
+    --warn:#f0a030; --warn-bg:#2c1e06; --warn-bd:#7a4a08;
+    --bad:#f09090; --bad-bg:#2c0c0c; --bad-bd:#7f1f1f;
+    --info:#80b5eb; --info-bg:#0c2038; --info-bd:#1a5fa8;
+    --purple:#9888f0; --purple-bg:#1e1640; --purple-bd:#5940a8;
+    --shadow: 0 1px 3px rgba(0,0,0,.3);
+  }
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden}
+body{font-family:var(--font);font-size:14px;line-height:1.5;color:var(--tx);background:var(--bg)}
+
+/* ═══ SHELL ═══ */
+.shell{display:grid;grid-template-columns:var(--sidebar) 1fr;height:100vh}
+
+/* ═══ SIDEBAR ═══ */
+.sb{
+  display:flex;flex-direction:column;
+  border-right:1px solid var(--bd);
+  background:var(--bg-2);
+  overflow-y:auto;overflow-x:hidden;
+  flex-shrink:0;
+}
+.sb-brand{
+  display:flex;align-items:center;gap:10px;
+  padding:14px 16px 12px;
+  border-bottom:1px solid var(--bd);
+  flex-shrink:0;
+}
+.sb-logo{
+  width:30px;height:30px;
+  background:var(--tx);border-radius:7px;
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;
+}
+.sb-logo svg{width:16px;height:16px}
+.sb-brand-text{display:flex;flex-direction:column}
+.sb-brand-name{font-size:14px;font-weight:600;letter-spacing:-.02em;line-height:1.2}
+.sb-brand-tag{font-size:10px;color:var(--tx-3);margin-top:1px;letter-spacing:.02em}
+
+.sb-section{padding:6px 8px 4px}
+.sb-sec-label{
+  font-size:10px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;
+  color:var(--tx-3);padding:10px 8px 4px;
+}
+.nav{
+  display:flex;align-items:center;gap:8px;padding:7px 10px;
+  border-radius:var(--r);cursor:pointer;font-size:13px;color:var(--tx-2);
+  transition:background .1s,color .1s;white-space:nowrap;overflow:hidden;
+  user-select:none;
+}
+.nav:hover{background:var(--bg-hover);color:var(--tx)}
+.nav.on{background:var(--bg-active);color:var(--tx);font-weight:500}
+.nav-ic{font-size:15px;width:20px;text-align:center;flex-shrink:0}
+.nav-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;margin-left:auto;transition:background .3s}
+.sb-div{height:1px;background:var(--bd);margin:4px 8px}
+
+.sb-footer{
+  margin-top:auto;padding:12px 14px;
+  border-top:1px solid var(--bd);flex-shrink:0;
+}
+.status-row{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--tx-2)}
+.status-pulse{
+  width:7px;height:7px;border-radius:50%;background:var(--ok);flex-shrink:0;
+  animation:pulse 2.5s ease-in-out infinite;
+}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+
+/* ═══ MAIN ═══ */
+.main{display:flex;flex-direction:column;overflow:hidden}
+.main-hdr{
+  height:var(--hdr);display:flex;align-items:center;justify-content:space-between;
+  padding:0 24px;border-bottom:1px solid var(--bd);flex-shrink:0;gap:12px;
+}
+.hdr-left{display:flex;align-items:center;gap:10px}
+.hdr-title{font-size:15px;font-weight:500;letter-spacing:-.01em}
+.hdr-right{display:flex;align-items:center;gap:8px}
+.main-body{flex:1;overflow-y:auto;padding:22px 24px;display:flex;flex-direction:column;gap:16px}
+
+/* ═══ VIEWS ═══ */
+.view{display:none;flex-direction:column;gap:16px}
+.view.on{display:flex}
+
+/* ═══ TYPOGRAPHY ═══ */
+.label-caps{
+  font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--tx-3);margin-bottom:12px;
+}
+.label-sm{font-size:12px;color:var(--tx-2)}
+.mono{font-family:var(--mono)}
+
+/* ═══ BADGES ═══ */
+.badge{
+  display:inline-flex;align-items:center;gap:4px;
+  font-size:11px;padding:3px 9px;border-radius:20px;border:1px solid;
+  font-weight:400;line-height:1;white-space:nowrap;
+}
+.badge.ok{background:var(--ok-bg);color:var(--ok);border-color:var(--ok-bd)}
+.badge.warn{background:var(--warn-bg);color:var(--warn);border-color:var(--warn-bd)}
+.badge.bad{background:var(--bad-bg);color:var(--bad);border-color:var(--bad-bd)}
+.badge.info{background:var(--info-bg);color:var(--info);border-color:var(--info-bd)}
+.badge.neutral{background:var(--bg-3);color:var(--tx-2);border-color:var(--bd-md)}
+.badge.purple{background:var(--purple-bg);color:var(--purple);border-color:var(--purple-bd)}
+
+/* ═══ CARDS ═══ */
+.card{
+  background:var(--bg);border:1px solid var(--bd);
+  border-radius:var(--r-lg);padding:16px 20px;
+}
+.card-sm{padding:14px 16px}
+.card-hd{
+  display:flex;align-items:center;justify-content:space-between;
+  flex-wrap:wrap;gap:8px;margin-bottom:14px;
+}
+.card-title{font-size:13px;font-weight:500}
+
+/* ═══ GRID ═══ */
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}
+.g4{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.gauto{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px}
+@media(max-width:720px){.g2,.g3,.g4{grid-template-columns:1fr}}
+
+/* ═══ METRICS ═══ */
+.metric{
+  background:var(--bg-2);border-radius:var(--r);
+  padding:13px 16px;display:flex;flex-direction:column;gap:4px;
+  transition:transform .2s, box-shadow .2s;
+}
+.metric:hover{transform:translateY(-2px);box-shadow:var(--shadow)}
+.metric-val{font-size:24px;font-weight:500;letter-spacing:-.03em;line-height:1.1}
+.metric-lbl{font-size:11px;color:var(--tx-3)}
+.metric-sub{font-size:11px;color:var(--tx-4);margin-top:2px}
+.metric.ok  .metric-val{color:var(--ok)}
+.metric.warn .metric-val{color:var(--warn)}
+.metric.bad .metric-val{color:var(--bad)}
+
+/* ═══ BUTTONS ═══ */
+.btn{
+  display:inline-flex;align-items:center;gap:6px;
+  padding:7px 15px;font-size:13px;font-family:var(--font);
+  border:1px solid var(--bd-md);border-radius:var(--r);
+  background:var(--bg);color:var(--tx);
+  cursor:pointer;transition:all .12s;white-space:nowrap;line-height:1;
+}
+.btn:hover{background:var(--bg-2);border-color:var(--bd-hv)}
+.btn:active{transform:scale(.98)}
+.btn.primary{background:var(--tx);color:var(--bg);border-color:var(--tx)}
+.btn.primary:hover{opacity:.86}
+.btn.ghost{border-color:transparent;background:transparent}
+.btn.ghost:hover{background:var(--bg-hover)}
+.btn.danger{color:var(--bad)}
+.btn.sm{padding:5px 11px;font-size:12px}
+.btn-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+
+/* ═══ MEASUREMENT BLOCK ═══ */
+.meas-grid{
+  display:grid;grid-template-columns:1fr 1fr;gap:16px;
+  padding:16px;background:var(--bg-2);border-radius:var(--r);
+  border:1px solid var(--bd);
+}
+@media(max-width:520px){.meas-grid{grid-template-columns:1fr}}
+.mf{display:flex;flex-direction:column;gap:7px}
+.mf-lbl{font-size:12px;font-weight:500;color:var(--tx-2)}
+.mf-hint{font-size:11px;color:var(--tx-3)}
+.len-row{display:flex;align-items:center;gap:8px}
+.len-input{
+  width:90px;padding:8px 10px;
+  border:1px solid var(--bd-md);border-radius:var(--r);
+  font-size:16px;font-weight:500;font-family:var(--font);
+  background:var(--bg);color:var(--tx);text-align:center;
+  transition:border-color .12s;
+}
+.len-input:focus{outline:none;border-color:var(--bd-hv)}
+.len-unit{font-size:13px;color:var(--tx-2)}
+.expected-note{
+  font-size:12px;color:var(--tx-3);margin-top:10px;
+  padding:8px 12px;background:var(--bg);
+  border-radius:var(--r);border:1px solid var(--bd);
+  line-height:1.6;
+}
+
+/* ═══ MODE TOGGLE ═══ */
+.tog{display:inline-flex;border:1px solid var(--bd-md);border-radius:var(--r);overflow:hidden}
+.tog-btn{
+  padding:7px 14px;font-size:12px;font-family:var(--font);
+  background:transparent;color:var(--tx-2);
+  border:none;cursor:pointer;transition:all .12s;line-height:1;
+}
+.tog-btn:not(:last-child){border-right:1px solid var(--bd-md)}
+.tog-btn.on{background:var(--tx);color:var(--bg)}
+
+/* ═══ READINGS ═══ */
+.readings-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.r-cell{display:flex;flex-direction:column;gap:4px}
+.r-cell label{font-size:10px;font-weight:600;letter-spacing:.06em;color:var(--tx-4);text-align:center}
+.r-input{
+  padding:10px 8px;border:1px solid var(--bd);border-radius:var(--r);
+  font-size:14px;font-family:var(--font);background:var(--bg);color:var(--tx);
+  text-align:center;transition:all .12s;width:100%;
+}
+.r-input:focus{outline:none;border-color:var(--bd-hv);background:var(--bg)}
+.r-input.has-val{background:var(--bg-2);border-color:var(--bd-md)}
+.r-input.err{border-color:var(--bad-bd);background:var(--bad-bg);animation:shake .3s}
+@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}
+
+/* ═══ RESULT CARD ═══ */
+.result-wrap{
+  border:1px solid var(--bd);border-radius:var(--r-lg);
+  background:var(--bg);overflow:hidden;
+  animation:slideIn .3s ease-out;
+}
+@keyframes slideIn{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
+.result-hdr{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:11px 16px;border-bottom:1px solid var(--bd);gap:10px;
+  background:var(--bg-2);
+}
+.result-hdr-left{display:flex;flex-direction:column;gap:2px}
+.result-dept{font-size:13px;font-weight:500}
+.result-meta{font-size:11px;color:var(--tx-3)}
+.result-body{
+  display:grid;grid-template-columns:1fr 1fr;
+  padding:0;
+}
+@media(max-width:600px){.result-body{grid-template-columns:1fr}}
+.result-section{padding:16px 20px}
+.result-section+.result-section{border-left:1px solid var(--bd)}
+.result-sec-label{
+  font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--tx-3);margin-bottom:12px;
+}
+.result-row{
+  display:flex;align-items:baseline;justify-content:space-between;
+  gap:10px;padding:6px 0;border-bottom:1px solid var(--bd);
+}
+.result-row:last-child{border-bottom:none}
+.result-key{font-size:12px;color:var(--tx-2);flex-shrink:0}
+.result-val{font-size:12px;font-weight:500;font-family:var(--mono);color:var(--tx);text-align:right}
+.result-val.ok  {color:var(--ok)}
+.result-val.warn{color:var(--warn)}
+.result-val.bad {color:var(--bad)}
+.result-foot{
+  padding:9px 16px;border-top:1px solid var(--bd);
+  font-size:11px;color:var(--tx-3);background:var(--bg-2);
+}
+
+/* ═══ ALERTS ═══ */
+.alert-stack{display:flex;flex-direction:column;gap:8px}
+.al{
+  display:flex;align-items:flex-start;gap:10px;
+  padding:10px 14px;border-radius:var(--r);border:1px solid;
+  font-size:12px;line-height:1.5;animation:slideIn .3s ease-out;
+}
+.al.ok  {background:var(--ok-bg);  color:var(--ok);  border-color:var(--ok-bd)}
+.al.warn{background:var(--warn-bg);color:var(--warn);border-color:var(--warn-bd)}
+.al.bad {background:var(--bad-bg); color:var(--bad); border-color:var(--bad-bd)}
+.al.info{background:var(--info-bg);color:var(--info);border-color:var(--info-bd)}
+.al-icon{flex-shrink:0;font-size:13px;margin-top:1px}
+
+/* ═══ TABLES ═══ */
+.tbl-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{
+  padding:8px 12px;text-align:left;white-space:nowrap;
+  font-size:10px;font-weight:600;color:var(--tx-3);letter-spacing:.05em;text-transform:uppercase;
+  border-bottom:1px solid var(--bd-md);
+}
+td{padding:9px 12px;border-bottom:1px solid var(--bd);vertical-align:middle}
+tbody tr:last-child td{border-bottom:none}
+tbody tr:hover td{background:var(--bg-2)}
+
+/* ═══ PROCESS FLOW ═══ */
+.pflow{display:flex;flex-wrap:wrap;align-items:center;row-gap:8px}
+.pf-step{
+  display:flex;flex-direction:column;align-items:center;text-align:center;
+  padding:10px 13px;min-width:90px;
+  border:1px solid var(--bd);border-radius:var(--r);
+  cursor:pointer;background:var(--bg);transition:all .12s;
+}
+.pf-step:hover{border-color:var(--bd-md);background:var(--bg-2);transform:translateY(-1px)}
+.pf-step.on{border-color:var(--tx);background:var(--bg-2)}
+.pf-name{font-size:12px;font-weight:500}
+.pf-target{font-size:10px;color:var(--tx-3);margin-top:2px}
+.pf-cv{font-size:11px;margin-top:3px;font-weight:500}
+.pf-arr{padding:0 5px;color:var(--tx-4);font-size:12px;flex-shrink:0}
+
+/* ═══ CHART ═══ */
+.chart-wrap{position:relative;width:100%;height:240px}
+
+/* ═══ HISTOGRAM ═══ */
+.hist-row{display:flex;align-items:center;gap:10px;margin-bottom:5px;font-size:12px}
+.hist-range{width:120px;text-align:right;color:var(--tx-3);font-family:var(--mono);font-size:11px;flex-shrink:0}
+.hist-bar-bg{flex:1;height:18px;background:var(--bg-2);border-radius:3px;overflow:hidden}
+.hist-bar{height:100%;border-radius:3px;transition:width .3s}
+.hist-ct{width:24px;text-align:right;color:var(--tx-2);flex-shrink:0}
+.hist-tag{font-size:11px;flex-shrink:0}
+
+/* ═══ FORMULA BOX ═══ */
+.fml{
+  font-family:var(--mono);font-size:12px;background:var(--bg-2);
+  padding:13px 16px;border-radius:var(--r);line-height:2;color:var(--tx-2);
+  border:1px solid var(--bd);
+}
+
+/* ═══ SETTINGS CARDS ═══ */
+.dept-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px}
+.dept-card{
+  background:var(--bg-2);border:1px solid var(--bd);border-radius:var(--r);
+  padding:14px 16px;display:flex;flex-direction:column;gap:10px;
+}
+.dept-card-name{font-size:13px;font-weight:500}
+.dept-card-target{font-size:11px;color:var(--tx-3);margin-top:-6px}
+.sf-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.sf-row label{font-size:12px;color:var(--tx-2);flex-shrink:0}
+.sf-row input{
+  width:72px;padding:5px 8px;border:1px solid var(--bd-md);border-radius:var(--r);
+  font-size:13px;font-family:var(--font);background:var(--bg);color:var(--tx);
+  text-align:center;transition:all .12s;
+}
+.sf-row input:focus{outline:none;border-color:var(--bd-hv)}
+.sf-row span{font-size:12px;color:var(--tx-3)}
+.dept-expected{font-size:11px;color:var(--tx-3)}
+
+/* ═══ SHIFT SELECTOR ═══ */
+.shift-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.shift-btn{
+  padding:5px 14px;font-size:12px;border:1px solid var(--bd-md);
+  border-radius:20px;cursor:pointer;background:transparent;
+  color:var(--tx-2);font-family:var(--font);transition:all .12s;
+}
+.shift-btn:hover{border-color:var(--bd-hv)}
+.shift-btn.on{background:var(--tx);color:var(--bg);border-color:var(--tx)}
+
+/* ═══ FORMULA VERIFY BOX ═══ */
+.formula-verify{
+  padding:16px;background:var(--info-bg);border:1px solid var(--info-bd);
+  border-radius:var(--r);margin-bottom:16px;
+}
+.formula-verify h4{font-size:13px;font-weight:500;color:var(--info);margin-bottom:10px}
+.formula-verify .fml{background:transparent;border:none;padding:0;color:var(--info)}
+
+/* ═══ SETTINGS TABLE ═══ */
+.settings-input {
+  width:100%;padding:5px 8px;
+  border:1px solid var(--bd-md);border-radius:var(--r);
+  font-size:13px;font-family:var(--mono);
+  background:var(--bg);color:var(--tx);text-align:right;
+  transition:border-color .12s;
+}
+.settings-input:focus{outline:none;border-color:var(--bd-hv)}
+.settings-computed{
+  font-size:12px;font-family:var(--mono);color:var(--tx-2);
+  text-align:right;
+}
+.settings-computed.out{color:var(--bad)}
+
+/* ═══ SUGGESTION BOX ═══ */
+.suggest-box{
+  padding:12px 14px;background:var(--warn-bg);border:1px solid var(--warn-bd);
+  border-radius:var(--r);font-size:12px;color:var(--warn);margin-top:8px;
+  line-height:1.5;animation:slideIn .3s ease-out;
+}
+
+/* ═══ MISC ═══ */
+.row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.col{display:flex;flex-direction:column;gap:4px}
+.col label{font-size:12px;color:var(--tx-2)}
+.col input{
+  padding:7px 10px;border:1px solid var(--bd-md);border-radius:var(--r);
+  font-size:13px;font-family:var(--font);background:var(--bg);color:var(--tx);
+}
+.col input:focus{outline:none;border-color:var(--bd-hv)}
+.sep{height:1px;background:var(--bd);margin:2px 0 14px}
+.text-2{color:var(--tx-2)}
+.text-3{color:var(--tx-3)}
+.fw5{font-weight:500}
+.fs12{font-size:12px}
+.fs13{font-size:13px}
+.empty{padding:28px;text-align:center;color:var(--tx-3);font-size:13px}
+
+/* ═══ PRINT ═══ */
+@media print{
+  .sb,.main-hdr .hdr-right,.btn-row button:not(.print-keep){display:none!important}
+  .shell{display:block;height:auto}
+  .main{overflow:visible}
+  .main-body{padding:0;overflow:visible}
+  .view{display:flex!important}
+  body{overflow:visible}
+}
+
+/* ═══════════════════════════════════════════════
+   MOBILE CHROME — OVERLAY · DRAWER · BOTTOM NAV
+═══════════════════════════════════════════════ */
+#mob-overlay{
+  display:none;position:fixed;inset:0;
+  background:rgba(0,0,0,.45);z-index:200;
+  backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px);
+}
+#mob-overlay.on{display:block}
+
+#mob-menu-btn{
+  display:none;width:38px;height:38px;border:none;
+  background:transparent;cursor:pointer;color:var(--tx);
+  font-size:22px;align-items:center;justify-content:center;
+  border-radius:var(--r);transition:background .1s;flex-shrink:0;
+  -webkit-tap-highlight-color:transparent;
+}
+#mob-menu-btn:hover{background:var(--bg-hover)}
+
+#sb-close{
+  display:none;position:absolute;top:11px;right:11px;
+  width:32px;height:32px;border:none;background:transparent;
+  cursor:pointer;color:var(--tx-2);font-size:18px;line-height:1;
+  align-items:center;justify-content:center;
+  border-radius:var(--r);z-index:1;
+  -webkit-tap-highlight-color:transparent;
+}
+#sb-close:hover{background:var(--bg-hover)}
+
+#mob-nav{
+  display:none;
+  position:fixed;bottom:0;left:0;right:0;
+  height:calc(60px + env(safe-area-inset-bottom,0px));
+  padding-bottom:env(safe-area-inset-bottom,0px);
+  z-index:150;
+  background:var(--bg);border-top:1px solid var(--bd-md);
+}
+.mob-nav-btn{
+  flex:1;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;gap:2px;
+  border:none;background:transparent;color:var(--tx-3);
+  font-size:10px;letter-spacing:.01em;font-family:var(--font);
+  cursor:pointer;padding:0 2px;transition:color .15s;
+  -webkit-tap-highlight-color:transparent;
+}
+.mob-nav-btn.on{color:var(--tx)}
+.mob-nav-btn .mn-ic{font-size:20px;line-height:1.1}
+
+/* ═══════════════════════════════════════════════
+   RESPONSIVE — MOBILE  (≤ 768 px)
+═══════════════════════════════════════════════ */
+@media(max-width:768px){
+  /* Allow page to scroll naturally */
+  html,body{overflow:auto;height:auto}
+
+  /* Shell: single-column, no sidebar gutter */
+  .shell{display:block;height:auto;min-height:100dvh}
+
+  /* Sidebar: off-screen slide-out drawer */
+  .sb{
+    position:fixed;top:0;left:0;bottom:0;
+    width:min(280px,85vw);z-index:210;
+    transform:translateX(-100%);
+    transition:transform .25s cubic-bezier(.4,0,.2,1);
+    overflow-y:auto;
+  }
+  .sb.open{transform:translateX(0);box-shadow:8px 0 32px rgba(0,0,0,.2)}
+
+  /* Show mobile chrome */
+  #mob-menu-btn{display:flex}
+  #sb-close{display:flex}
+  #mob-nav{display:flex}
+
+  /* Sticky compact header */
+  .main-hdr{
+    height:52px;padding:0 12px;
+    position:sticky;top:0;z-index:100;background:var(--bg);
+  }
+  .hdr-title{font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:50vw}
+  .hdr-right{display:none}
+
+  /* Main fills full width */
+  .main{display:flex;flex-direction:column;overflow:visible;min-height:100dvh}
+  .main-body{
+    flex:none;overflow-y:visible;
+    padding:14px 12px calc(72px + env(safe-area-inset-bottom,0px)) 12px;
+  }
+
+  /* Card padding: tighter */
+  .card,.card.card-sm{padding:14px 14px}
+
+  /* Touch targets ≥ 44 px */
+  .btn{padding:10px 16px;min-height:44px}
+  .btn.sm{padding:8px 14px;min-height:40px}
+  .shift-btn{padding:10px 18px;min-height:44px;font-size:13px;border-radius:22px}
+  .tog-btn{padding:10px 14px;min-height:44px;font-size:13px}
+  .nav{padding:11px 12px;min-height:44px;font-size:14px}
+
+  /* Control chart: taller */
+  .chart-wrap{height:280px}
+
+  /* Process flow: horizontal scroll strip */
+  .pflow{
+    flex-wrap:nowrap;overflow-x:auto;padding-bottom:8px;
+    gap:0;scrollbar-width:none;-webkit-overflow-scrolling:touch;
+  }
+  .pflow::-webkit-scrollbar{display:none}
+  .pf-arr{padding:0 3px}
+  .pf-step{min-width:76px;padding:8px 10px}
+
+  /* Readings: 2-column grid, larger inputs */
+  .readings-grid{grid-template-columns:repeat(2,1fr);gap:10px}
+  .r-input{padding:14px 8px;font-size:16px}
+
+  /* Result sections: stack vertically */
+  .result-section+.result-section{border-left:none;border-top:1px solid var(--bd)}
+
+  /* Measurement settings: single column */
+  .meas-grid{grid-template-columns:1fr}
+  .len-input{width:110px}
+
+  /* Settings table inputs */
+  .settings-input{font-size:14px;padding:7px 8px}
+
+  /* Card header: allow wrap */
+  .card-hd{flex-wrap:wrap;gap:6px}
+
+  /* Shift bar: tighter gap */
+  .shift-bar{gap:6px}
+}
+
+/* ─── Compact phones ≤ 380 px ─── */
+@media(max-width:380px){
+  .mob-nav-btn{font-size:9px}
+  .mob-nav-btn .mn-ic{font-size:18px}
+  .main-hdr{padding:0 8px}
+  .card,.card.card-sm{padding:12px 10px}
+  .readings-grid{grid-template-columns:repeat(2,1fr)}
+}
+</style>
+</head>
+<body>
+<div class="shell">
+
+<!-- ═══════ SIDEBAR ═══════ -->
+<aside class="sb">
+  <button id="sb-close" onclick="closeMenu()" aria-label="Close navigation">✕</button>
+  <div class="sb-brand">
+    <div class="sb-logo">
+      <svg viewBox="0 0 20 20" fill="none" stroke="white" stroke-width="1.6" stroke-linecap="round">
+        <circle cx="10" cy="10" r="8"/>
+        <circle cx="10" cy="10" r="3"/>
+        <line x1="10" y1="2" x2="10" y2="7"/>
+        <line x1="10" y1="13" x2="10" y2="18"/>
+        <line x1="2" y1="10" x2="7" y2="10"/>
+        <line x1="13" y1="10" x2="18" y2="10"/>
+      </svg>
+    </div>
+    <div class="sb-brand-text">
+      <div class="sb-brand-name">SpinQMS</div>
+      <div class="sb-brand-tag">Ne 47 Weft · SQC System</div>
+    </div>
+  </div>
+
+  <div class="sb-section">
+    <div class="sb-sec-label">Departments</div>
+    <div id="dept-nav"></div>
+  </div>
+
+  <div class="sb-div"></div>
+
+  <div class="sb-section">
+    <div class="sb-sec-label">Module</div>
+    <div class="nav on" data-view="overview"  onclick="gv('overview',this)"><span class="nav-ic">⬚</span>Overview</div>
+    <div class="nav"    data-view="entry"     onclick="gv('entry',this)"><span class="nav-ic">✎</span>Data Entry</div>
+    <div class="nav"    data-view="charts"    onclick="gv('charts',this)"><span class="nav-ic">▲</span>Control Charts</div>
+    <div class="nav"    data-view="uster"     onclick="gv('uster',this)"><span class="nav-ic">◈</span>Uster Benchmarks</div>
+    <div class="nav"    data-view="report"    onclick="gv('report',this)"><span class="nav-ic">≡</span>Shift Report</div>
+    <div class="nav"    data-view="settings"  onclick="gv('settings',this)"><span class="nav-ic">⚙</span>Settings</div>
+    <div class="nav"    data-view="log"       onclick="gv('log',this)"><span class="nav-ic">⊞</span>Data Log</div>
+    <div class="nav"    data-view="guide"     onclick="gv('guide',this)"><span class="nav-ic">☰</span>Operator Guide</div>
+  </div>
+
+  <div class="sb-footer">
+    <div class="status-row">
+      <div class="status-pulse" id="status-dot"></div>
+      <span id="status-txt">All systems active</span>
+    </div>
+    <div style="font-size:11px;color:var(--tx-3);margin-top:5px" id="last-saved"></div>
+  </div>
+</aside>
+
+<!-- ═══════ MAIN ═══════ -->
+<div class="main">
+  <div class="main-hdr">
+    <button id="mob-menu-btn" onclick="openMenu()" aria-label="Open navigation">☰</button>
+    <div class="hdr-left">
+      <div class="hdr-title" id="page-title">Overview</div>
+      <div id="page-badge"></div>
+    </div>
+    <div class="hdr-right">
+      <button class="btn sm ghost" onclick="exportCSV()">↓ Export CSV</button>
+      <button class="btn sm ghost" onclick="window.print()">⎙ Print</button>
+      <button class="btn sm ghost" onclick="clearAllConfirm()" style="color:var(--bad)">✕ Clear all</button>
+    </div>
+  </div>
+
+  <div class="main-body">
+
+    <!-- ── OVERVIEW ── -->
+    <div class="view on" id="view-overview">
+      <div class="card card-sm">
+        <div class="label-caps">Process flow · live status</div>
+        <div class="pflow" id="pflow"></div>
+      </div>
+      <div class="gauto" id="kpi-grid">
+        <div class="metric"><div class="metric-val" style="font-size:13px;color:var(--tx-3)">Select a department</div></div>
+      </div>
+      <div class="g2">
+        <div class="card card-sm">
+          <div class="label-caps">Active alerts · Western Electric Rules</div>
+          <div class="alert-stack" id="alert-box">
+            <div class="al info"><span class="al-icon">ℹ</span>All departments in control</div>
+          </div>
+        </div>
+        <div class="card card-sm">
+          <div class="label-caps">Department summary</div>
+          <div class="tbl-wrap">
+            <table>
+              <thead><tr><th>Department</th><th>n</th><th>Mean hank</th><th>CV%</th><th>Cpk</th><th>Status</th></tr></thead>
+              <tbody id="summary-tb">
+                <tr><td colspan="6" class="empty" style="padding:12px">No data entered yet</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── DATA ENTRY ── -->
+    <div class="view" id="view-entry">
+      <!-- Shift selector -->
+      <div class="card card-sm">
+        <div class="card-hd" style="margin-bottom:10px">
+          <div class="label-caps" style="margin:0">Shift &amp; session</div>
+          <div class="shift-bar" id="shift-bar">
+            <button class="shift-btn on" onclick="setShift('A',this)">Shift A</button>
+            <button class="shift-btn"    onclick="setShift('B',this)">Shift B</button>
+            <button class="shift-btn"    onclick="setShift('C',this)">Shift C</button>
+          </div>
+        </div>
+        <div style="font-size:12px;color:var(--tx-3)">
+          Data is stored per shift per department. Switch shifts to compare batch performance across shifts.
+        </div>
+      </div>
+
+      <!-- Measurement settings -->
+      <div class="card card-sm">
+        <div class="label-caps">Measurement settings</div>
+        <div class="meas-grid">
+          <div class="mf">
+            <div class="mf-lbl">Sample length</div>
+            <div class="len-row">
+              <input type="number" class="len-input" id="entry-len"
+                min="1" max="240" step="0.5" value="6"
+                oninput="onLenChange(this.value)">
+              <span class="len-unit">yards</span>
+            </div>
+            <div class="mf-hint" id="len-hint">Default: 6 yards for sliver/roving stages</div>
+          </div>
+          <div class="mf">
+            <div class="mf-lbl">Entry mode</div>
+            <div class="tog" style="margin-top:2px">
+              <button class="tog-btn on" id="mode-direct" onclick="setMode('direct')">Direct (hank)</button>
+              <button class="tog-btn"    id="mode-weight" onclick="setMode('weight')">Weight (grams)</button>
+            </div>
+            <div class="mf-hint" id="mode-hint">Enter calculated hank count readings</div>
+          </div>
+        </div>
+        <div id="expected-note-wrap" style="display:none">
+          <div class="expected-note" id="expected-note"></div>
+        </div>
+        <!-- Formula display -->
+        <div id="formula-display" style="display:none;margin-top:12px">
+          <div class="fml" id="formula-text"></div>
+        </div>
+      </div>
+
+      <!-- Readings -->
+      <div class="card card-sm">
+        <div class="card-hd">
+          <div>
+            <div class="card-title" id="readings-title">Readings</div>
+            <div class="fs12 text-3" id="readings-meta" style="margin-top:2px"></div>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
+            <span class="fs12 text-3" id="readings-target"></span>
+            <span id="readings-frequency" style="font-size:11px;font-weight:500;padding:3px 9px;border-radius:20px;background:var(--info-bg);color:var(--info);border:1px solid var(--info-bd)"></span>
+          </div>
+        </div>
+        <div class="readings-grid" id="readings-grid"></div>
+        <div class="btn-row" style="margin-top:16px">
+          <button class="btn primary" onclick="saveReadings()">Calculate &amp; save</button>
+          <button class="btn" onclick="clearInputs()">Clear inputs</button>
+        </div>
+      </div>
+      <div id="calc-result"></div>
+      <div id="machine-suggestion"></div>
+    </div>
+
+    <!-- ── CONTROL CHARTS ── -->
+    <div class="view" id="view-charts">
+      <div class="card card-sm">
+        <div class="card-hd">
+          <div class="label-caps" style="margin:0">X-bar control chart — <span id="chart-dept" style="text-transform:none;letter-spacing:0;font-weight:400"></span></div>
+          <div style="display:flex;flex-wrap:wrap;gap:14px;font-size:12px;color:var(--tx-2)">
+            <span style="display:flex;align-items:center;gap:5px"><span style="display:inline-block;width:18px;height:2px;background:#378ADD;vertical-align:middle;margin-right:4px"></span>Reading</span>
+            <span style="display:flex;align-items:center;gap:5px"><span style="display:inline-block;width:18px;height:2px;background:#2d6a0a;vertical-align:middle;margin-right:4px"></span>Action limit (3σ)</span>
+            <span style="display:flex;align-items:center;gap:5px"><span style="display:inline-block;width:18px;border-top:2px dashed #BA7517;vertical-align:middle;margin-right:4px"></span>Warning limit (2σ)</span>
+            <span style="display:flex;align-items:center;gap:5px"><span style="display:inline-block;width:18px;border-top:2px dashed #888;vertical-align:middle;margin-right:4px"></span>Centerline</span>
+            <span style="display:flex;align-items:center;gap:5px"><span style="display:inline-block;width:18px;border-top:2px dotted #c0392b;vertical-align:middle;margin-right:4px"></span>Target</span>
+          </div>
+        </div>
+        <div class="chart-wrap"><canvas id="xbar-canvas"></canvas></div>
+      </div>
+      <div class="card card-sm">
+        <div class="label-caps">Distribution histogram</div>
+        <div id="hist-container"><div class="empty">Enter samples to see distribution</div></div>
+      </div>
+    </div>
+
+    <!-- ── USTER ── -->
+    <div class="view" id="view-uster">
+      <div class="card card-sm">
+        <div class="card-hd">
+          <div class="label-caps" style="margin:0">Uster Statistics 2023 — Ne 47 weft benchmarks</div>
+          <span class="badge purple">★ Target: Uster 25th percentile</span>
+        </div>
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>Stage</th><th>5% (Best)</th><th>25% ★</th><th>50% Median</th><th>75%</th><th>95%</th><th>Your CV%</th><th>Rank</th></tr></thead>
+            <tbody id="uster-tb"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="g2">
+        <div class="card card-sm">
+          <div class="label-caps">Index of Irregularity (I)</div>
+          <div class="fml" style="margin-bottom:14px">I = CV_actual / CV_theoretical
+CV_th = 100 / √(2 · Ne · L(cm) · ρ)
+ρ = 1.52 g/cm³ (cotton fibre density)
+──────────────────────────────
+I &lt; 1.1  → Excellent (near ideal)
+I 1.1–1.3 → Acceptable
+I &gt; 1.3  → Machine irregularity</div>
+          <div class="row">
+            <div class="col"><label>CV actual %</label><input type="number" id="ii-cv" step=".01" placeholder="3.5" style="width:90px"></div>
+            <div class="col"><label>Ne count</label><input type="number" id="ii-ne" value="47" style="width:72px"></div>
+            <div class="col"><label>Fibre L (mm)</label><input type="number" id="ii-fl" value="28" style="width:80px"></div>
+            <div class="col" style="justify-content:flex-end"><label>&nbsp;</label><button class="btn" onclick="calcII()">Calculate</button></div>
+          </div>
+          <div id="ii-result" style="margin-top:12px;font-size:13px"></div>
+        </div>
+        <div class="card card-sm">
+          <div class="label-caps">Upstream → Ring Frame prediction</div>
+          <div class="fml" style="margin-bottom:12px">CV_RF ≈ √(CV_card² + CV_draw² + CV_simp²)
+[Root Sum of Squares — variance additive model]</div>
+          <div class="row">
+            <div class="col"><label>Carding CV%</label><input type="number" id="pred-cv" step=".01" placeholder="2.5" style="width:90px"></div>
+            <div class="col" style="justify-content:flex-end"><label>&nbsp;</label><button class="btn" onclick="predictRF()">Predict →</button></div>
+          </div>
+          <div id="pred-result" style="margin-top:12px;font-size:13px"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── SHIFT REPORT ── -->
+    <div class="view" id="view-report">
+      <div class="card card-sm">
+        <div class="card-hd">
+          <div class="label-caps" style="margin:0">Shift quality report</div>
+          <div class="shift-bar" id="report-shift-bar">
+            <button class="shift-btn on" onclick="setReportShift('A',this)">Shift A</button>
+            <button class="shift-btn"    onclick="setReportShift('B',this)">Shift B</button>
+            <button class="shift-btn"    onclick="setReportShift('C',this)">Shift C</button>
+            <button class="shift-btn"    onclick="setReportShift('ALL',this)">All Shifts</button>
+          </div>
+        </div>
+        <div class="tbl-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Department</th><th>n readings</th>
+                <th>Avg weight (μ)</th><th>Mean hank (x̄)</th>
+                <th>σ</th><th>CV%</th><th>Cpk</th><th>Cp</th>
+                <th>UCL (3σ)</th><th>LCL (3σ)</th><th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="report-tb">
+              <tr><td colspan="11" class="empty">No data for selected shift</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card card-sm">
+        <div class="label-caps">Formula reference — ISO 11462-1 validated</div>
+        <div class="g2">
+          <div class="fml">Ne (hank count) = (L × 0.54) / W_grams
+where L = sample length (yards)
+      W = weight (grams)
+Derivation: Ne = L / (840 × W_lbs)
+           = L × 453.592 / (840 × W_g)
+           = L × 0.5400 / W_g  ✓</div>
+          <div class="fml">CV%  = (σ / x̄) × 100
+σ    = √[Σ(xᵢ-x̄)²/(n-1)]   [sample]
+Cpk  = min[(USL-x̄)/3σ, (x̄-LSL)/3σ]
+Cp   = (USL-LSL) / 6σ
+UCL  = x̄ + 3σ/√n
+LCL  = x̄ - 3σ/√n
+WL±  = x̄ ± 2σ/√n</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── SETTINGS ── -->
+    <div class="view" id="view-settings">
+
+      <!-- Department configuration table -->
+      <div class="card card-sm">
+        <div class="card-hd" style="margin-bottom:16px">
+          <div>
+            <div class="label-caps" style="margin:0">Department configuration</div>
+            <div class="fs12 text-3" style="margin-top:4px">Edit target hank, sample length, and tolerance per department. USL and LSL auto-update.</div>
+          </div>
+          <button class="btn sm" onclick="resetToDefaults()">↺ Reset to defaults</button>
+        </div>
+        <div class="tbl-wrap">
+          <table id="settings-table">
+            <thead>
+              <tr>
+                <th style="width:130px">Department</th>
+                <th>Target hank</th>
+                <th>Tolerance ±</th>
+                <th>USL (auto)</th>
+                <th>LSL (auto)</th>
+                <th>Sample length</th>
+                <th>Expected weight</th>
+              </tr>
+            </thead>
+            <tbody id="settings-tb"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Data management -->
+      <div class="card card-sm">
+        <div class="label-caps">Data management</div>
+        <div class="btn-row">
+          <button class="btn" onclick="exportCSV()">↓ Export all data as CSV</button>
+          <button class="btn danger" onclick="clearAllConfirm()">✕ Clear all data</button>
+        </div>
+        <p class="fs12 text-3" style="margin-top:10px">Data is stored in browser localStorage and persists across sessions. Clearing your browser data will also clear QMS records.</p>
+      </div>
+
+    </div>
+
+    <!-- ── GUIDE ── -->
+    <div class="view" id="view-guide">
+      <div class="card card-sm">
+        <div class="label-caps">Operator quick-reference guide</div>
+
+        <div style="margin-bottom:12px">
+          <div class="fw5 fs13" style="margin-bottom:5px">1. Hank count formula — verified (ISO 11462-1)</div>
+          <div class="fml">Ne = (Sample length in yards × 0.54) / Weight in grams
+Example: 6 yards, 26.94 g → (6 × 0.54) / 26.94 = 3.24 / 26.94 = 0.1203 Ne
+Source: Ne = L(yds)/(840 × W(lbs)) = L × 453.592/(840 × W_g) = L × 0.54/W_g</div>
+        </div>
+        <div class="sep"></div>
+
+        <div style="margin-bottom:12px">
+          <div class="fw5 fs13" style="margin-bottom:5px">2. Department targets (hardcoded)</div>
+          <div class="fml">Carding:        0.120 Ne
+Breaker/RSB:    0.120 Ne
+RSB:            0.120 Ne
+Simplex:        1.120 Ne
+Ring Frame:     47.5 Ne ±0.5 (tolerance: 46.5–47.5)
+Autoconer:      47.0 Ne ±0.5 (tolerance: 46.5–47.5)</div>
+        </div>
+        <div class="sep"></div>
+
+        <div style="margin-bottom:12px">
+          <div class="fw5 fs13" style="margin-bottom:5px">3. Western Electric Control Rules</div>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <span class="al bad" style="padding:8px 10px"><strong>Rule 1:</strong> 1 point beyond 3σ action limit → STOP machine immediately</span>
+            <span class="al warn" style="padding:8px 10px"><strong>Rule 2:</strong> 2 of 3 consecutive beyond 2σ warning limit (same side) → Check machine</span>
+            <span class="al warn" style="padding:8px 10px"><strong>Rule 3:</strong> 4 of 5 consecutive beyond 1σ (same side) → Trend detected, monitor closely</span>
+            <span class="al warn" style="padding:8px 10px"><strong>Rule 4:</strong> 8 consecutive points same side of centerline → Systematic drift, adjust draft ratio</span>
+          </div>
+        </div>
+        <div class="sep"></div>
+
+        <div style="margin-bottom:12px">
+          <div class="fw5 fs13" style="margin-bottom:6px">4. Interpreting CV%</div>
+          <div style="display:flex;flex-wrap:wrap;gap:8px">
+            <span class="al ok" style="padding:6px 10px">CV% ≤ Uster 25th — top quartile, excellent</span>
+            <span class="al warn" style="padding:6px 10px">CV% 25th–50th — acceptable, monitor</span>
+            <span class="al bad" style="padding:6px 10px">CV% &gt; Uster 75th — action required</span>
+          </div>
+        </div>
+        <div class="sep"></div>
+
+        <div style="margin-bottom:12px">
+          <div class="fw5 fs13" style="margin-bottom:8px">5. Machine adjustment suggestions</div>
+          <table>
+            <thead><tr><th>Alert</th><th>Action</th></tr></thead>
+            <tbody>
+              <tr><td class="fs12"><strong>1 point beyond 3σ</strong></td><td class="fs12 text-2">Stop machine. Check draft settings, sliver can, gear teeth. Recalibrate rollers.</td></tr>
+              <tr><td class="fs12"><strong>2 of 3 beyond 2σ</strong></td><td class="fs12 text-2">Check drafting zone, aprons, top rollers. Inspect clothing, calendar conditions. Take 2 extra samples.</td></tr>
+              <tr><td class="fs12"><strong>Systematic drift (8 pts)</strong></td><td class="fs12 text-2">Check draft ratio, temperature, humidity. Verify belt tension, bearing lubrication.</td></tr>
+              <tr><td class="fs12"><strong>CV% &gt; Uster 75th</strong></td><td class="fs12 text-2">Check card clothing, flats, calendar rollers. Inspect fibre quality. Inform QC supervisor.</td></tr>
+              <tr><td class="fs12"><strong>Cpk &lt; 1.33</strong></td><td class="fs12 text-2">Process is not capable. Review specification limits and draft ratio optimization.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="sep"></div>
+
+        <div style="margin-bottom:12px">
+          <div class="fw5 fs13" style="margin-bottom:8px">6. Index of Irregularity (I)</div>
+          <div class="fml">I = CV_actual / CV_theoretical
+I &lt; 1.1  → Excellent (near ideal random drafting)
+I 1.1–1.3 → Acceptable
+I 1.3–1.5 → High — check drafting system
+I &gt; 1.5  → Critical — systematic machine fault</div>
+        </div>
+        <div class="sep"></div>
+
+        <div>
+          <div class="fw5 fs13" style="margin-bottom:5px">7. Data persistence & export</div>
+          <p class="fs13 text-2" style="line-height:1.9">
+            All sample data, targets, tolerances, and sample lengths are saved automatically to your browser's local storage.<br>
+            <strong>Export CSV:</strong> Download all readings with department, shift, and hank values for records/compliance.<br>
+            <strong>Reset defaults:</strong> Restore factory targets if specifications change.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── DATA LOG ── -->
+    <div class="view" id="view-log">
+      <div class="card card-sm">
+        <div class="card-hd">
+          <div class="label-caps" style="margin:0">Batch data log — all departments &amp; shifts</div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <select id="log-filter-dept" class="shift-btn" style="border-radius:var(--r);padding:5px 10px;font-size:12px;background:var(--bg);color:var(--tx);border:1px solid var(--bd-md);cursor:pointer" onchange="renderLog()">
+              <option value="ALL">All Departments</option>
+            </select>
+            <select id="log-filter-shift" class="shift-btn" style="border-radius:var(--r);padding:5px 10px;font-size:12px;background:var(--bg);color:var(--tx);border:1px solid var(--bd-md);cursor:pointer" onchange="renderLog()">
+              <option value="ALL">All Shifts</option>
+              <option value="A">Shift A</option>
+              <option value="B">Shift B</option>
+              <option value="C">Shift C</option>
+            </select>
+            <span id="log-count" style="font-size:12px;color:var(--tx-3)"></span>
+          </div>
+        </div>
+        <div class="tbl-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th id="log-sort-ts"   style="cursor:pointer;user-select:none" onclick="logSort('timestamp')">Date &amp; Time ↕</th>
+                <th>Department</th>
+                <th>Shift</th>
+                <th id="log-sort-wt"   style="cursor:pointer;user-select:none" onclick="logSort('avgWeight')">Avg Weight (g) ↕</th>
+                <th id="log-sort-hank" style="cursor:pointer;user-select:none" onclick="logSort('meanHank')">Mean Hank ↕</th>
+                <th id="log-sort-cv"   style="cursor:pointer;user-select:none" onclick="logSort('cv')">CV% ↕</th>
+                <th>Readings</th>
+              </tr>
+            </thead>
+            <tbody id="log-tb">
+              <tr><td colspan="7" class="empty">No batches saved yet</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- main-body -->
+</div><!-- main -->
+</div><!-- shell -->
+
+<!-- ═══════ MOBILE OVERLAY ═══════ -->
+<div id="mob-overlay"></div>
+
+<!-- ═══════ MOBILE BOTTOM NAV ═══════ -->
+<nav id="mob-nav" role="navigation" aria-label="Primary navigation">
+  <button class="mob-nav-btn on" data-view="overview" onclick="gv('overview',this);closeMenu()">
+    <span class="mn-ic">⬚</span>Overview
+  </button>
+  <button class="mob-nav-btn" data-view="entry" onclick="gv('entry',this);closeMenu()">
+    <span class="mn-ic">✎</span>Entry
+  </button>
+  <button class="mob-nav-btn" data-view="charts" onclick="gv('charts',this);closeMenu()">
+    <span class="mn-ic">▲</span>Charts
+  </button>
+  <button class="mob-nav-btn" data-view="report" onclick="gv('report',this);closeMenu()">
+    <span class="mn-ic">≡</span>Report
+  </button>
+  <button class="mob-nav-btn" id="mob-more-btn" onclick="openMenu()">
+    <span class="mn-ic">☰</span>More
+  </button>
+</nav>
+
+<script>
+/* ══════════════════════════════════════════════
+   DEPARTMENT DEFINITIONS — HARDCODED TARGETS
+══════════════════════════════════════════════ */
+const DEPTS = [
+  { id:'carding',   name:'Carding',     short:'Card.',    target:0.120, tol:0.010, unit:'hank', defLen:6,   frequency:'Every 2 hours',  us:{p5:1.5,p25:2.2,p50:3.0,p75:3.8,p95:5.5} },
+  { id:'breaker',   name:'Breaker/RSB', short:'Breaker',  target:0.120, tol:0.010, unit:'hank', defLen:6,   frequency:'Every 1 hour',   us:{p5:1.2,p25:1.8,p50:2.5,p75:3.2,p95:4.8} },
+  { id:'rsb',       name:'RSB',         short:'RSB',      target:0.120, tol:0.010, unit:'hank', defLen:6,   frequency:'Every 30 mins',  us:{p5:1.0,p25:1.5,p50:2.2,p75:2.9,p95:4.2} },
+  { id:'simplex',   name:'Simplex',     short:'Simplex',  target:1.120, tol:0.100, unit:'hank', defLen:6,   frequency:'Every 2 hours',  us:{p5:2.0,p25:2.8,p50:3.5,p75:4.5,p95:6.5} },
+  { id:'ringframe', name:'Ring Frame',  short:'R/Frame',  target:47.5,  tol:0.5,   unit:'Ne',   defLen:120, frequency:'Per doff',       us:{p5:1.5,p25:2.0,p50:2.8,p75:3.5,p95:5.0} },
+  { id:'autoconer', name:'Autoconer',   short:'Autoconer',target:47.0,  tol:0.5,   unit:'Ne',   defLen:120, frequency:'Per doff',       us:{p5:1.8,p25:2.4,p50:3.2,p75:4.0,p95:5.8} },
+];
+
+/* ══════════════════════════════════════════════
+   STATE & PERSISTENCE (IndexedDB + localStorage)
+══════════════════════════════════════════════ */
+const ST = {
+  dept:    'ringframe',
+  view:    'overview',
+  mode:    'direct',
+  shift:   'A',
+  repShift:'A',
+  actLen:  120,
+  defLens:    {},
+  targets:    {},
+  tolerances: {},
+  data: { A:{}, B:{}, C:{} },
+};
+
+function initState() {
+  DEPTS.forEach(d => {
+    ST.defLens[d.id] = d.defLen;
+    ST.targets[d.id] = d.target;
+    ST.tolerances[d.id] = d.tol;
+    'ABC'.split('').forEach(s => { ST.data[s][d.id] = []; });
+  });
+}
+
+function loadData() {
+  try {
+    const saved = localStorage.getItem('spinqms_v5');
+    if (saved) {
+      const p = JSON.parse(saved);
+      if (p.data) Object.assign(ST.data, p.data);
+      if (p.defLens)    Object.assign(ST.defLens, p.defLens);
+      if (p.targets)    Object.assign(ST.targets, p.targets);
+      if (p.tolerances) Object.assign(ST.tolerances, p.tolerances);
+    }
+  } catch(e) { console.error('Load error:', e); }
+}
+
+function saveData() {
+  try {
+    localStorage.setItem('spinqms_v5', JSON.stringify({ data: ST.data, defLens: ST.defLens, targets: ST.targets, tolerances: ST.tolerances }));
+    const el = document.getElementById('last-saved');
+    if (el) el.textContent = 'Saved ' + new Date().toLocaleTimeString();
+  } catch(e) { console.error('Save error:', e); }
+}
+
+/* ══════════════════════════════════════════════
+   HANK FORMULA — CORRECT & VALIDATED
+   Ne = (L × 0.54) / W_grams
+══════════════════════════════════════════════ */
+function dTarget(deptId) { return ST.targets[deptId]; }
+function dUSL(deptId)    { return +(dTarget(deptId) + ST.tolerances[deptId]).toFixed(6); }
+function dLSL(deptId)    { return +(dTarget(deptId) - ST.tolerances[deptId]).toFixed(6); }
+
+function weightToHank(weightGrams, lengthYards) {
+  return (lengthYards * 0.54) / weightGrams;
+}
+function hankToWeight(hank, lengthYards) {
+  return (lengthYards * 0.54) / hank;
+}
+
+/* ══════════════════════════════════════════════
+   STATISTICS ENGINE
+══════════════════════════════════════════════ */
+function calcStats(arr) {
+  if (!arr || arr.length < 2) return null;
+  const n = arr.length;
+  const mean = arr.reduce((a, b) => a + b, 0) / n;
+  const sd = Math.sqrt(arr.reduce((a, b) => a + (b - mean) ** 2, 0) / (n - 1));
+  return { n, mean, sd, cv: (sd / mean) * 100 };
+}
+
+function calcCpk(m, sd, u, l) {
+  if (!sd || sd === 0) return null;
+  return Math.min((u - m) / (3 * sd), (m - l) / (3 * sd));
+}
+
+function calcCp(sd, u, l) {
+  if (!sd || sd === 0) return null;
+  return (u - l) / (6 * sd);
+}
+
+function quality(cv, cpk, d) {
+  if (cpk !== null && cpk < 1.0) return 'bad';
+  if (cv <= d.us.p25) return 'ok';
+  if (cv <= d.us.p50) return 'warn';
+  return 'bad';
+}
+
+function dp(d) { return d.target >= 10 ? 2 : 4; }
+
+// Flatten batch objects → plain array of hank numbers for calcStats/charts
+function flattenBatches(batches) {
+  if (!Array.isArray(batches)) return [];
+  return batches.flatMap(b => (b && Array.isArray(b.readings)) ? b.readings : []);
+}
+
+function allData(deptId) {
+  return flattenBatches([
+    ...ST.data.A[deptId],
+    ...ST.data.B[deptId],
+    ...ST.data.C[deptId]
+  ]);
+}
+
+function shiftData(shift, deptId) {
+  if (shift === 'ALL') return allData(deptId);
+  return flattenBatches(ST.data[shift]?.[deptId] || []);
+}
+
+// Subgroup size = readings in the most recent batch for this dept (any shift), default 5.
+// This is the correct `n` for X-bar control limit formula: Mean ± kσ/√n.
+function getSubgroupSize(deptId) {
+  let latest = null;
+  for (const sh of ['A','B','C']) {
+    const batches = ST.data[sh]?.[deptId] || [];
+    const b = batches[batches.length - 1];
+    if (b?.readings?.length) {
+      if (!latest || new Date(b.timestamp) > new Date(latest.timestamp)) latest = b;
+    }
+  }
+  return latest?.readings?.length || 5;
+}
+
+// Return all batch objects across all shifts, sorted newest-first
+function allBatches() {
+  const rows = [];
+  DEPTS.forEach(d => {
+    'ABC'.split('').forEach(sh => {
+      (ST.data[sh][d.id] || []).forEach(b => {
+        if (b && b.timestamp) rows.push({ ...b, dept: d.name, deptId: d.id, shift: sh, unit: d.unit });
+      });
+    });
+  });
+  rows.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+  return rows;
+}
+
+/* ══════════════════════════════════════════════
+   WESTERN ELECTRIC RULES ENGINE
+══════════════════════════════════════════════ */
+function detectWEViolations(arr, mean, sd, n) {
+  const violations = [];
+  if (arr.length < 2 || !sd) return violations;
+
+  const u3 = mean + 3 * sd / Math.sqrt(n);
+  const l3 = mean - 3 * sd / Math.sqrt(n);
+  const u2 = mean + 2 * sd / Math.sqrt(n);
+  const l2 = mean - 2 * sd / Math.sqrt(n);
+  const u1 = mean + 1 * sd / Math.sqrt(n);
+  const l1 = mean - 1 * sd / Math.sqrt(n);
+
+  // Rule 1: 1 point beyond 3σ
+  for (let i = 0; i < arr.length; i++) {
+    if (arr[i] > u3 || arr[i] < l3) {
+      violations.push({ rule: 1, severity: 'bad', msg: `Point ${i + 1} beyond 3σ action limit` });
+      break;
+    }
+  }
+
+  // Rule 2: 2 of 3 consecutive beyond 2σ (same side)
+  for (let i = 0; i < arr.length - 2; i++) {
+    const chunk = arr.slice(i, i + 3);
+    const above2 = chunk.filter(v => v > u2).length;
+    const below2 = chunk.filter(v => v < l2).length;
+    if (above2 >= 2 || below2 >= 2) {
+      violations.push({ rule: 2, severity: 'warn', msg: `2 of 3 points beyond 2σ warning (points ${i + 1}-${i + 3})` });
+      break;
+    }
+  }
+
+  // Rule 4: 8 consecutive same side
+  if (arr.length >= 8) {
+    for (let i = 0; i <= arr.length - 8; i++) {
+      const chunk = arr.slice(i, i + 8);
+      const allAbove = chunk.every(v => v > mean);
+      const allBelow = chunk.every(v => v < mean);
+      if (allAbove || allBelow) {
+        violations.push({ rule: 4, severity: 'warn', msg: `8 consecutive points same side of mean (drift, points ${i + 1}-${i + 8})` });
+        break;
+      }
+    }
+  }
+
+  return violations;
+}
+
+function getMachineSuggestion(deptId, arr, mean, sd, cv, cpk) {
+  const d = DEPTS.find(x => x.id === deptId);
+  const suggestions = [];
+
+  if (cpk !== null && cpk < 1.0) {
+    suggestions.push('Process not capable — Needs attention');
+  }
+
+  if (cv > d.us.p75) {
+    suggestions.push('High CV% — Needs attention');
+  }
+
+  if (arr.length >= 3) {
+    const violations = detectWEViolations(arr, mean, sd, getSubgroupSize(deptId));
+    if (violations.some(v => v.rule === 1)) {
+      suggestions.push('Action Limit Exceeded — Machine requires immediate attention');
+    }
+    if (violations.some(v => v.rule === 2)) {
+      suggestions.push('Warning Limit Breach — Needs attention');
+    }
+    if (violations.some(v => v.rule === 4)) {
+      suggestions.push('Systematic Drift Detected — Needs attention');
+    }
+  }
+
+  if (mean > dUSL(deptId)) {
+    suggestions.push('Count above upper limit — Needs attention');
+  } else if (mean < dLSL(deptId)) {
+    suggestions.push('Count below lower limit — Needs attention');
+  }
+
+  return suggestions;
+}
+
+/* ══════════════════════════════════════════════
+   NAVIGATION
+══════════════════════════════════════════════ */
+function setDept(id) {
+  ST.dept = id;
+  ST.actLen = ST.defLens[id];
+  const el = document.getElementById('entry-len');
+  if (el) el.value = ST.actLen;
+  refreshDeptNav();
+  updateAll();
+}
+
+function gv(id, btn) {
+  ST.view = id;
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('on'));
+  document.getElementById('view-' + id).classList.add('on');
+  document.querySelectorAll('[data-view]').forEach(b => b.classList.remove('on'));
+  if (btn) btn.classList.add('on');
+  else document.querySelector(`[data-view="${id}"]`)?.classList.add('on');
+  const titles = {
+    overview:'Overview', entry:'Data Entry', charts:'Control Charts',
+    uster:'Uster Benchmarks', report:'Shift Report',
+    log:'Data Log', settings:'Settings', guide:'Operator Guide'
+  };
+  document.getElementById('page-title').textContent = titles[id] || id;
+  if (id === 'entry')    { buildReadingsGrid(); updateExpNote(); updateFormulaDisplay(); }
+  if (id === 'charts')   renderCharts();
+  if (id === 'uster')    renderUster();
+  if (id === 'report')   renderReport();
+  if (id === 'log')      renderLog();
+  if (id === 'settings') renderSettings();
+  updateBadge();
+}
+
+function setShift(s, btn) {
+  ST.shift = s;
+  document.querySelectorAll('#shift-bar .shift-btn').forEach(b => b.classList.remove('on'));
+  btn.classList.add('on');
+  updateAll();
+}
+
+function setReportShift(s, btn) {
+  ST.repShift = s;
+  document.querySelectorAll('#report-shift-bar .shift-btn').forEach(b => b.classList.remove('on'));
+  btn.classList.add('on');
+  renderReport();
+}
+
+/* ══════════════════════════════════════════════
+   SIDEBAR DEPT NAV
+══════════════════════════════════════════════ */
+function buildDeptNav() {
+  const nav = document.getElementById('dept-nav');
+  nav.innerHTML = '';
+  DEPTS.forEach(d => {
+    const arr = allData(d.id);
+    const s = calcStats(arr);
+    const cpk = s ? calcCpk(s.mean, s.sd, dUSL(d.id), dLSL(d.id)) : null;
+    const q = s ? quality(s.cv, cpk, d) : '';
+    const dotCol = {ok:'var(--ok)',warn:'var(--warn)',bad:'var(--bad)'}[q] || 'var(--tx-4)';
+    const el = document.createElement('div');
+    el.className = 'nav' + (d.id === ST.dept ? ' on' : '');
+    el.dataset.dept = d.id;
+    el.onclick = () => setDept(d.id);
+    el.innerHTML = `<span class="nav-ic" style="font-size:10px;color:var(--tx-3)">◦</span>${d.name}<span class="nav-dot" style="background:${dotCol};${!q?'opacity:0':''}"></span>`;
+    nav.appendChild(el);
+  });
+}
+
+function refreshDeptNav() {
+  document.querySelectorAll('[data-dept]').forEach(b =>
+    b.classList.toggle('on', b.dataset.dept === ST.dept)
+  );
+}
+
+/* ══════════════════════════════════════════════
+   HEADER BADGE
+══════════════════════════════════════════════ */
+function updateBadge() {
+  const d = DEPTS.find(x => x.id === ST.dept);
+  const arr = allData(ST.dept);
+  const s = calcStats(arr);
+  const cpk = s ? calcCpk(s.mean, s.sd, dUSL(d.id), dLSL(d.id)) : null;
+  const q = s ? quality(s.cv, cpk, d) : '';
+  const pb = document.getElementById('page-badge');
+  const labels = { ok:'In control', warn:'Warning', bad:'Action required' };
+  pb.innerHTML = q
+    ? `<span class="badge ${q}">${labels[q]}</span>`
+    : `<span class="badge neutral">${d.name}</span>`;
+}
+
+/* ══════════════════════════════════════════════
+   OVERVIEW
+══════════════════════════════════════════════ */
+function renderOverview() {
+  renderPFlow();
+  renderKPIs();
+  renderAlerts();
+  renderSummary();
+  updateBadge();
+}
+
+function renderPFlow() {
+  const el = document.getElementById('pflow');
+  el.innerHTML = '';
+  DEPTS.forEach((d, i) => {
+    const arr = allData(d.id);
+    const s = calcStats(arr);
+    const cpk = s ? calcCpk(s.mean, s.sd, dUSL(d.id), dLSL(d.id)) : null;
+    const q = s ? quality(s.cv, cpk, d) : '';
+    const col = {ok:'var(--ok)',warn:'var(--warn)',bad:'var(--bad)'}[q] || 'var(--tx-4)';
+    const step = document.createElement('div');
+    step.className = 'pf-step' + (d.id === ST.dept ? ' on' : '');
+    step.innerHTML = `<div class="pf-name">${d.short}</div>
+      <div class="pf-target">${dTarget(d.id)} ${d.unit}</div>
+      <div class="pf-cv" style="color:${col}">${s ? s.cv.toFixed(1)+'%' : '—'}</div>`;
+    step.onclick = () => setDept(d.id);
+    el.appendChild(step);
+    if (i < DEPTS.length - 1) {
+      const a = document.createElement('span');
+      a.className = 'pf-arr'; a.textContent = '→'; el.appendChild(a);
+    }
+  });
+}
+
+function renderKPIs() {
+  const d = DEPTS.find(x => x.id === ST.dept);
+  const arr = allData(ST.dept);
+  const s = calcStats(arr);
+  const grid = document.getElementById('kpi-grid');
+  if (!s) {
+    grid.innerHTML = `<div class="metric"><div class="metric-val" style="font-size:13px;color:var(--tx-3)">No data for ${d.name}</div></div>`;
+    return;
+  }
+  const cpk = calcCpk(s.mean, s.sd, dUSL(d.id), dLSL(d.id));
+  const cp  = calcCp(s.sd, dUSL(d.id), dLSL(d.id));
+  const q   = quality(s.cv, cpk, d);
+  const cpkQ = cpk >= 1.33 ? 'ok' : cpk >= 1 ? 'warn' : 'bad';
+  const cvQ  = q;
+  const p    = dp(d);
+  const sqn  = Math.sqrt(getSubgroupSize(ST.dept));
+  const ucl  = (s.mean + 3*s.sd/sqn).toFixed(p);
+  const lcl  = (s.mean - 3*s.sd/sqn).toFixed(p);
+  const wlu  = (s.mean + 2*s.sd/sqn).toFixed(p);
+  const wll  = (s.mean - 2*s.sd/sqn).toFixed(p);
+  grid.innerHTML = `
+    <div class="metric ${cvQ}"><div class="metric-val">${s.cv.toFixed(2)}%</div><div class="metric-lbl">CV% (n=${s.n})</div></div>
+    <div class="metric ${cpkQ}"><div class="metric-val">${cpk!==null?cpk.toFixed(2):'—'}</div><div class="metric-lbl">Cpk</div></div>
+    <div class="metric"><div class="metric-val">${s.mean.toFixed(p)}</div><div class="metric-lbl">Mean (${d.unit})</div></div>
+    <div class="metric"><div class="metric-val">${s.sd.toFixed(p+1)}</div><div class="metric-lbl">Std dev σ</div></div>
+    <div class="metric"><div class="metric-val">${cp!==null?cp.toFixed(2):'—'}</div><div class="metric-lbl">Cp</div></div>
+    <div class="metric"><div class="metric-val" style="font-size:17px">${ucl}</div><div class="metric-lbl">UCL (3σ)</div></div>
+    <div class="metric"><div class="metric-val" style="font-size:17px">${lcl}</div><div class="metric-lbl">LCL (3σ)</div></div>
+    <div class="metric"><div class="metric-val" style="font-size:17px">${wlu}</div><div class="metric-lbl">Warn + (2σ)</div></div>
+    <div class="metric"><div class="metric-val" style="font-size:17px">${wll}</div><div class="metric-lbl">Warn − (2σ)</div></div>
+    <div class="metric"><div class="metric-val">${dTarget(d.id)}</div><div class="metric-lbl">Target ${d.unit}</div></div>`;
+}
+
+function renderAlerts() {
+  const box = document.getElementById('alert-box');
+  const alts = [];
+
+  DEPTS.forEach(d => {
+    const arr = allData(d.id);
+    const s = calcStats(arr);
+    if (!s) return;
+
+    const cpk = calcCpk(s.mean, s.sd, dUSL(d.id), dLSL(d.id));
+    const violations = detectWEViolations(arr, s.mean, s.sd, getSubgroupSize(d.id));
+
+    // Add WE rule violations
+    violations.forEach(v => {
+      alts.push({ q: v.severity, m: `${d.name}: ${v.msg}` });
+    });
+
+    // Cpk check
+    if (cpk !== null && cpk < 1.0) {
+      alts.push({ q: 'bad', m: `${d.name}: Cpk = ${cpk.toFixed(2)} — process not capable (need ≥ 1.33)` });
+    } else if (cpk !== null && cpk < 1.33) {
+      alts.push({ q: 'warn', m: `${d.name}: Cpk = ${cpk.toFixed(2)} — marginal capability` });
+    }
+
+    // CV% vs Uster
+    if (s.cv > d.us.p75) {
+      alts.push({ q: 'warn', m: `${d.name}: CV% ${s.cv.toFixed(2)}% exceeds Uster 75th percentile` });
+    } else if (s.cv <= d.us.p25) {
+      alts.push({ q: 'ok', m: `${d.name}: CV% ${s.cv.toFixed(2)}% — top quartile quality ✓` });
+    }
+  });
+
+  const icons = { ok: '✓', warn: '⚠', bad: '✕', info: 'ℹ' };
+  box.innerHTML = alts.length
+    ? alts.map(a => `<div class="al ${a.q}"><span class="al-icon">${icons[a.q]}</span><span>${a.m}</span></div>`).join('')
+    : '<div class="al info"><span class="al-icon">ℹ</span><span>All departments in control — no active alerts</span></div>';
+
+  const dot = document.getElementById('status-dot');
+  const txt = document.getElementById('status-txt');
+  const hasBad  = alts.some(a => a.q === 'bad');
+  const hasWarn = alts.some(a => a.q === 'warn');
+  if (hasBad)       { dot.style.background = 'var(--bad)';  txt.textContent = 'Action required'; }
+  else if (hasWarn) { dot.style.background = 'var(--warn)'; txt.textContent = 'Warnings active'; }
+  else              { dot.style.background = 'var(--ok)';   txt.textContent = 'All systems active'; }
+}
+
+function renderSummary() {
+  document.getElementById('summary-tb').innerHTML = DEPTS.map(d => {
+    const s = calcStats(allData(d.id));
+    if (!s) return `<tr><td>${d.name}</td><td colspan="5" style="color:var(--tx-3);font-size:12px">No data</td></tr>`;
+    const cpk = calcCpk(s.mean, s.sd, dUSL(d.id), dLSL(d.id));
+    const q   = quality(s.cv, cpk, d);
+    const lbl = {ok:'In control',warn:'Warning',bad:'Action'}[q];
+    return `<tr>
+      <td>${d.name}</td>
+      <td class="mono" style="font-size:12px">${s.n}</td>
+      <td class="mono" style="font-size:12px">${s.mean.toFixed(dp(d))}</td>
+      <td>${s.cv.toFixed(2)}%</td>
+      <td class="mono" style="font-size:12px">${cpk!==null?cpk.toFixed(2):'—'}</td>
+      <td><span class="badge ${q}">${lbl}</span></td>
+    </tr>`;
+  }).join('');
+}
+
+/* ══════════════════════════════════════════════
+   DATA ENTRY
+══════════════════════════════════════════════ */
+function setMode(m) {
+  ST.mode = m;
+  document.getElementById('mode-direct').classList.toggle('on', m === 'direct');
+  document.getElementById('mode-weight').classList.toggle('on', m === 'weight');
+  document.getElementById('mode-hint').textContent = m === 'direct'
+    ? 'Enter calculated hank count readings'
+    : 'Enter gram weight per sample — hank calculated automatically';
+  updateExpNote();
+  updateFormulaDisplay();
+  buildReadingsGrid();
+}
+
+function onLenChange(v) {
+  const val = parseFloat(v);
+  if (!isNaN(val) && val > 0) {
+    ST.actLen = val;
+    const d = DEPTS.find(x => x.id === ST.dept);
+    const hint = document.getElementById('len-hint');
+    if (hint) hint.textContent = val === d.defLen
+      ? `Default: ${d.defLen} yards for this stage`
+      : `Custom: overriding default of ${d.defLen} yards`;
+    updateExpNote();
+    updateFormulaDisplay();
+    buildReadingsGrid();
+  }
+}
+
+function updateExpNote() {
+  const wrap = document.getElementById('expected-note-wrap');
+  if (!wrap) return;
+  if (ST.mode !== 'weight') { wrap.style.display = 'none'; return; }
+  wrap.style.display = 'block';
+  const d = DEPTS.find(x => x.id === ST.dept);
+  const L = ST.actLen;
+  const expW = hankToWeight(dTarget(d.id), L).toFixed(2);
+  const uslW = hankToWeight(dLSL(d.id), L).toFixed(2);
+  const lslW = hankToWeight(dUSL(d.id), L).toFixed(2);
+  document.getElementById('expected-note').innerHTML =
+    `Expected weight at <strong>${dTarget(d.id)} ${d.unit}</strong> target (${L} yd sample): <strong>~${expW} g</strong>
+    &nbsp;·&nbsp; Acceptable range: <strong>${lslW} – ${uslW} g</strong>`;
+}
+
+function updateFormulaDisplay() {
+  const wrap = document.getElementById('formula-display');
+  const txt  = document.getElementById('formula-text');
+  if (!wrap || !txt) return;
+  if (ST.mode !== 'weight') { wrap.style.display = 'none'; return; }
+  wrap.style.display = 'block';
+  const L = ST.actLen;
+  txt.textContent =
+    `Ne = (L × 0.54) / W_grams\n` +
+    `Ne = (${L} × 0.54) / W = ${(L * 0.54).toFixed(4)} / W`;
+}
+
+function buildReadingsGrid() {
+  const grid = document.getElementById('readings-grid');
+  if (!grid) return;
+  grid.innerHTML = '';
+  const d = DEPTS.find(x => x.id === ST.dept);
+  const L = ST.actLen;
+  const ph = ST.mode === 'weight'
+    ? hankToWeight(dTarget(d.id), L).toFixed(1)
+    : dTarget(d.id).toString();
+
+  for (let i = 1; i <= 9; i++) {
+    const cell = document.createElement('div');
+    cell.className = 'r-cell';
+    cell.innerHTML = `<label>READING ${i}</label>
+      <input type="number" class="r-input" id="ri${i}"
+        step="${ST.mode==='weight'?0.001:0.0001}"
+        placeholder="${ph}"
+        oninput="this.classList.toggle('has-val',this.value!='')">`;
+    grid.appendChild(cell);
+  }
+
+  const title = document.getElementById('readings-title');
+  const meta  = document.getElementById('readings-meta');
+  const tgt   = document.getElementById('readings-target');
+  const freq  = document.getElementById('readings-frequency');
+  if (title) title.textContent = `Readings — ${d.name} · Shift ${ST.shift}`;
+  if (meta)  meta.textContent  = ST.mode === 'weight'
+    ? `Weight (grams) → hank via Ne = (L × 0.54) / W`
+    : 'Enter direct hank count values';
+  if (tgt)   tgt.textContent   = `Target: ${d.target} ${d.unit} · ${L} yd sample`;
+  if (freq)  { freq.textContent = `⏱ Sample every: ${d.frequency}`; }
+}
+
+function saveReadings() {
+  const d   = DEPTS.find(x => x.id === ST.dept);
+  const L   = ST.actLen;
+  const raw = [];
+  for (let i = 1; i <= 9; i++) {
+    const v = parseFloat(document.getElementById('ri' + i)?.value);
+    if (!isNaN(v) && v > 0) raw.push(v);
+  }
+  if (raw.length < 3) {
+    document.getElementById('calc-result').innerHTML =
+      '<div class="al warn" style="margin-top:0"><span class="al-icon">⚠</span>Enter at least 3 readings.</div>';
+    return;
+  }
+
+  const hanks = ST.mode === 'weight'
+    ? raw.map(w => weightToHank(w, L))
+    : raw;
+
+  const avgW = ST.mode === 'weight'
+    ? raw.reduce((a,b) => a+b, 0) / raw.length
+    : null;
+  const avgHankFromAvgW = ST.mode === 'weight'
+    ? weightToHank(avgW, L)
+    : null;
+
+  // Store as a batch object with timestamp
+  const batch = {
+    timestamp: new Date().toISOString(),
+    avgWeight: avgW !== null ? +avgW.toFixed(4) : null,
+    meanHank:  +(hanks.reduce((a,b)=>a+b,0) / hanks.length).toFixed(6),
+    readings:  hanks
+  };
+  ST.data[ST.shift][ST.dept] = ST.data[ST.shift][ST.dept].concat([batch]);
+  saveData();
+
+  const allArr = allData(ST.dept);
+  const s    = calcStats(allArr);
+  const cpkV = calcCpk(s.mean, s.sd, dUSL(d.id), dLSL(d.id));
+  const cpV  = calcCp(s.sd, dUSL(d.id), dLSL(d.id));
+  const p    = dp(d);
+  const q    = quality(s.cv, cpkV, d);
+  const qCol = {ok:'var(--ok)',warn:'var(--warn)',bad:'var(--bad)'}[q];
+  const qBg  = {ok:'var(--ok-bg)',warn:'var(--warn-bg)',bad:'var(--bad-bg)'}[q];
+  const ql   = {ok:'In control',warn:'Warning',bad:'Action required'}[q];
+  const sqn  = Math.sqrt(getSubgroupSize(ST.dept));
+
+  document.getElementById('calc-result').innerHTML = `
+    <div class="result-wrap">
+      <div class="result-hdr">
+        <div class="result-hdr-left">
+          <div class="result-dept">${d.name} — batch result · Shift ${ST.shift}</div>
+          <div class="result-meta">${raw.length} readings added · total cumulative: ${allArr.length}</div>
+        </div>
+        <span class="badge ${q}">${ql}</span>
+      </div>
+      <div class="result-body">
+        <div class="result-section">
+          <div class="result-sec-label">Measurement</div>
+          ${avgW !== null ? `
+          <div class="result-row">
+            <span class="result-key">Avg weight (μ)</span>
+            <span class="result-val">${avgW.toFixed(3)} g</span>
+          </div>
+          <div class="result-row">
+            <span class="result-key">Hank from avg weight</span>
+            <span class="result-val">${avgHankFromAvgW.toFixed(p+2)} ${d.unit}</span>
+          </div>` : ''}
+          <div class="result-row">
+            <span class="result-key">Mean hank (x̄)</span>
+            <span class="result-val">${s.mean.toFixed(p+2)} ${d.unit}</span>
+          </div>
+          <div class="result-row">
+            <span class="result-key">Std deviation (σ)</span>
+            <span class="result-val">${s.sd.toFixed(p+3)}</span>
+          </div>
+          <div class="result-row">
+            <span class="result-key">CV%</span>
+            <span class="result-val ${q}">${s.cv.toFixed(3)}%</span>
+          </div>
+          <div class="result-row">
+            <span class="result-key">Cpk / Cp</span>
+            <span class="result-val ${q}">${cpkV!==null?cpkV.toFixed(3):'—'} / ${cpV!==null?cpV.toFixed(3):'—'}</span>
+          </div>
+        </div>
+        <div class="result-section">
+          <div class="result-sec-label">Control limits</div>
+          <div class="result-row">
+            <span class="result-key">UCL (3σ)</span>
+            <span class="result-val">${(s.mean+3*s.sd/sqn).toFixed(p+2)}</span>
+          </div>
+          <div class="result-row">
+            <span class="result-key">Warn + (2σ)</span>
+            <span class="result-val">${(s.mean+2*s.sd/sqn).toFixed(p+2)}</span>
+          </div>
+          <div class="result-row">
+            <span class="result-key">Target</span>
+            <span class="result-val">${dTarget(d.id)} ${d.unit}</span>
+          </div>
+          <div class="result-row">
+            <span class="result-key">Warn − (2σ)</span>
+            <span class="result-val">${(s.mean-2*s.sd/sqn).toFixed(p+2)}</span>
+          </div>
+          <div class="result-row">
+            <span class="result-key">LCL (3σ)</span>
+            <span class="result-val">${(s.mean-3*s.sd/sqn).toFixed(p+2)}</span>
+          </div>
+          <div class="result-row">
+            <span class="result-key">Cp (process width)</span>
+            <span class="result-val">${cpV!==null?cpV.toFixed(3):'—'}</span>
+          </div>
+        </div>
+      </div>
+      ${ST.mode==='weight'?`<div class="result-foot">Formula: Ne = (${L} × 0.54) / W_grams = ${(L*0.54).toFixed(4)} / W &nbsp;·&nbsp; ${raw.length} weight readings converted to hank counts</div>`:''}
+    </div>`;
+
+  // Machine suggestions
+  const suggestions = getMachineSuggestion(ST.dept, allArr, s.mean, s.sd, s.cv, cpkV);
+  const suggBox = document.getElementById('machine-suggestion');
+  if (suggestions.length > 0) {
+    suggBox.innerHTML = suggestions.map(s =>
+      `<div class="suggest-box">⚡ ${s}</div>`
+    ).join('');
+  } else {
+    suggBox.innerHTML = '';
+  }
+
+  updateAll();
+}
+
+function clearInputs() {
+  for (let i = 1; i <= 9; i++) {
+    const el = document.getElementById('ri' + i);
+    if (el) { el.value = ''; el.classList.remove('has-val'); }
+  }
+  document.getElementById('calc-result').innerHTML = '';
+  document.getElementById('machine-suggestion').innerHTML = '';
+}
+
+function clearAllConfirm() {
+  if (!confirm('Clear ALL sample data for all departments and shifts? This cannot be undone.')) return;
+  DEPTS.forEach(d => { 'ABC'.split('').forEach(s => { ST.data[s][d.id] = []; }); });
+  saveData();
+  clearInputs();
+  updateAll();
+}
+
+/* ══════════════════════════════════════════════
+   CONTROL CHARTS
+══════════════════════════════════════════════ */
+let xbarChart = null;
+function renderCharts() {
+  if (xbarChart) { xbarChart.destroy(); xbarChart = null; }
+  const d   = DEPTS.find(x => x.id === ST.dept);
+  const arr = allData(ST.dept);
+  const s   = calcStats(arr);
+  document.getElementById('chart-dept').textContent = d.name;
+  const ctx = document.getElementById('xbar-canvas').getContext('2d');
+  if (!s) {
+    ctx.clearRect(0,0,ctx.canvas.width,ctx.canvas.height);
+    document.getElementById('hist-container').innerHTML = '<div class="empty">Enter samples to see distribution</div>';
+    return;
+  }
+  const sqn = Math.sqrt(getSubgroupSize(ST.dept));
+  const u3=s.mean+3*s.sd/sqn, l3=s.mean-3*s.sd/sqn;
+  const u2=s.mean+2*s.sd/sqn, l2=s.mean-2*s.sd/sqn;
+  const flat = (data, c, dash, w) => ({ data, borderColor:c, borderDash:dash||[], pointRadius:0, borderWidth:w||1, tension:0 });
+
+  xbarChart = new Chart(ctx, {
+    type: 'line',
+    data: { labels: arr.map((_,i)=>'S'+(i+1)), datasets: [
+      { label:'Reading', data:arr, borderColor:'#378ADD', backgroundColor:'rgba(55,138,221,.07)', pointRadius:3, pointBackgroundColor:'#378ADD', tension:.2, borderWidth:1.5 },
+      flat(arr.map(()=>u3), '#2d6a0a'), flat(arr.map(()=>l3), '#2d6a0a'),
+      flat(arr.map(()=>u2), '#BA7517', [5,3]), flat(arr.map(()=>l2), '#BA7517', [5,3]),
+      flat(arr.map(()=>s.mean), '#888', [4,2]),
+      flat(arr.map(()=>dTarget(d.id)), '#c0392b', [2,4]),
+    ]},
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{ display:false } },
+      scales:{ y:{ title:{ display:true, text:`${d.unit==='Ne'?'Ne count':'Hank count'}`, color:'#888', font:{size:11} }}}
+    }
+  });
+
+  // Histogram
+  const mn=Math.min(...arr), mx=Math.max(...arr), bins=6, bw=(mx-mn)/bins||.001;
+  const hist=Array(bins).fill(0);
+  arr.forEach(v=>{ hist[Math.min(Math.floor((v-mn)/bw),bins-1)]++; });
+  const maxH=Math.max(...hist)||1, p=dp(d);
+  document.getElementById('hist-container').innerHTML =
+    '<div style="display:flex;flex-direction:column;gap:4px">' +
+    hist.map((c,i) => {
+      const lo=mn+i*bw, hi=mn+(i+1)*bw;
+      const inSpec = lo >= dLSL(d.id) && hi <= dUSL(d.id);
+      const fill = inSpec ? '#2d6a0a' : '#c0392b';
+      return `<div class="hist-row">
+        <span class="hist-range">${lo.toFixed(p)}–${hi.toFixed(p)}</span>
+        <div class="hist-bar-bg"><div class="hist-bar" style="width:${(c/maxH*100).toFixed(0)}%;background:${fill}"></div></div>
+        <span class="hist-ct">${c}</span>
+        <span class="hist-tag" style="color:${inSpec?'var(--tx-4)':'var(--bad)'}">${inSpec?'in spec':'out of spec'}</span>
+      </div>`;
+    }).join('') + '</div>';
+}
+
+/* ══════════════════════════════════════════════
+   USTER BENCHMARKS
+══════════════════════════════════════════════ */
+function renderUster() {
+  document.getElementById('uster-tb').innerHTML = DEPTS.map(d => {
+    const s = calcStats(allData(d.id));
+    const cv = s?.cv ?? null;
+    const rk = cv===null?'—':cv<=d.us.p5?'Top 5%':cv<=d.us.p25?'Top 25%':cv<=d.us.p50?'Median':cv<=d.us.p75?'75th':'>95th';
+    const qc = cv===null?'':cv<=d.us.p25?'ok':cv<=d.us.p50?'warn':'bad';
+    return `<tr>
+      <td>${d.name}</td>
+      <td>${d.us.p5}%</td><td>${d.us.p25}%</td><td>${d.us.p50}%</td>
+      <td>${d.us.p75}%</td><td>${d.us.p95}%</td>
+      <td class="mono" style="font-size:12px">${cv!==null?cv.toFixed(2)+'%':'—'}</td>
+      <td>${cv!==null?`<span class="badge ${qc}">${rk}</span>`:'—'}</td>
+    </tr>`;
+  }).join('');
+}
+
+function calcII() {
+  const cv = parseFloat(document.getElementById('ii-cv').value);
+  const ne = parseFloat(document.getElementById('ii-ne').value) || 47;
+  const fl = parseFloat(document.getElementById('ii-fl').value) || 28;
+  const el = document.getElementById('ii-result');
+  if (isNaN(cv)) { el.innerHTML = ''; return; }
+  const cvt = 100 / Math.sqrt(2 * ne * (fl/10) * 1.52);
+  const ii  = cv / cvt;
+  const qc  = ii < 1.1 ? 'ok' : ii < 1.3 ? 'warn' : 'bad';
+  const msg = ii < 1.1 ? 'Excellent — near ideal random drafting'
+            : ii < 1.3 ? 'Acceptable — minor irregularity'
+            : ii < 1.5 ? 'High — check drafting system'
+            : 'Critical — systematic machine fault';
+  el.innerHTML = `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+    <span class="fs12 text-2">CV theoretical = ${cvt.toFixed(2)}%</span>
+    <span class="badge ${qc}" style="font-size:12px;padding:4px 12px">I = ${ii.toFixed(3)}</span>
+    <span class="fs12 text-2">${msg}</span>
+  </div>`;
+}
+
+function predictRF() {
+  const cc = parseFloat(document.getElementById('pred-cv').value);
+  const el = document.getElementById('pred-result');
+  if (isNaN(cc)) { el.innerHTML = ''; return; }
+  const dv = calcStats(allData('breaker'))?.cv || 1.5;
+  const sv = calcStats(allData('simplex'))?.cv || 2.5;
+  const pred = Math.sqrt(cc**2 + dv**2 + sv**2);
+  const d  = DEPTS.find(x => x.id === 'ringframe');
+  const qc = pred <= d.us.p25 ? 'ok' : pred <= d.us.p50 ? 'warn' : 'bad';
+  el.innerHTML = `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+    <span class="badge ${qc}" style="font-size:12px;padding:4px 12px">Predicted CV%: ${pred.toFixed(2)}%</span>
+    <span class="fs12 text-2">Drawing: ${dv.toFixed(1)}% · Simplex: ${sv.toFixed(1)}% · Target (Uster 25th): ${d.us.p25}%</span>
+  </div>`;
+}
+
+/* ══════════════════════════════════════════════
+   SHIFT REPORT
+══════════════════════════════════════════════ */
+function renderReport() {
+  const sh = ST.repShift;
+  document.getElementById('report-tb').innerHTML = DEPTS.map(d => {
+    const arr = shiftData(sh, d.id);
+    const s   = calcStats(arr);
+    if (!s) return `<tr><td>${d.name}</td><td colspan="10" style="color:var(--tx-3);font-size:12px">No data for shift ${sh}</td></tr>`;
+    const cpk = calcCpk(s.mean, s.sd, dUSL(d.id), dLSL(d.id));
+    const cp  = calcCp(s.sd, dUSL(d.id), dLSL(d.id));
+    const q   = quality(s.cv, cpk, d);
+    const p   = dp(d);
+    const sqn = Math.sqrt(getSubgroupSize(d.id));
+    const avgW = hankToWeight(s.mean, ST.defLens[d.id]);
+    return `<tr>
+      <td>${d.name}</td>
+      <td class="mono" style="font-size:12px">${s.n}</td>
+      <td class="mono" style="font-size:12px">${avgW.toFixed(2)} g*</td>
+      <td class="mono" style="font-size:12px">${s.mean.toFixed(p+2)}</td>
+      <td class="mono" style="font-size:12px">${s.sd.toFixed(p+3)}</td>
+      <td style="font-weight:500;color:${q==='ok'?'var(--ok)':q==='warn'?'var(--warn)':'var(--bad)'}">${s.cv.toFixed(3)}%</td>
+      <td class="mono" style="font-size:12px;color:${q==='ok'?'var(--ok)':q==='warn'?'var(--warn)':'var(--bad)'}">${cpk!==null?cpk.toFixed(3):'—'}</td>
+      <td class="mono" style="font-size:12px">${cp!==null?cp.toFixed(3):'—'}</td>
+      <td class="mono" style="font-size:12px">${(s.mean+3*s.sd/sqn).toFixed(p+2)}</td>
+      <td class="mono" style="font-size:12px">${(s.mean-3*s.sd/sqn).toFixed(p+2)}</td>
+      <td><span class="badge ${q}">${{ok:'In control',warn:'Warning',bad:'Action'}[q]}</span></td>
+    </tr>`;
+  }).join('');
+}
+
+/* ══════════════════════════════════════════════
+   SETTINGS
+══════════════════════════════════════════════ */
+function renderSettings() {
+  document.getElementById('settings-tb').innerHTML = DEPTS.map(d => {
+    const tgt = ST.targets[d.id];
+    const tol = ST.tolerances[d.id];
+    const usl = dUSL(d.id);
+    const lsl = dLSL(d.id);
+    const len = ST.defLens[d.id];
+    const expW = hankToWeight(tgt, len);
+    const p = d.target >= 10 ? 1 : 4;
+    return `<tr>
+      <td style="font-weight:500;font-size:13px">${d.name}<br><span style="font-size:10px;color:var(--tx-3);font-weight:400">${d.unit}</span></td>
+      <td>
+        <input type="number" class="settings-input" id="tgt-${d.id}"
+          value="${tgt}" step="${d.target >= 10 ? 0.1 : 0.0001}" min="0"
+          oninput="updateTarget('${d.id}',this.value)">
+      </td>
+      <td>
+        <input type="number" class="settings-input" id="tol-${d.id}"
+          value="${tol}" step="${d.target >= 10 ? 0.1 : 0.0001}" min="0"
+          oninput="updateTolerance('${d.id}',this.value)">
+      </td>
+      <td><span class="settings-computed" id="usl-${d.id}">${usl.toFixed(p)}</span></td>
+      <td><span class="settings-computed" id="lsl-${d.id}">${lsl.toFixed(p)}</span></td>
+      <td>
+        <div style="display:flex;align-items:center;gap:6px">
+          <input type="number" class="settings-input" id="sl-${d.id}"
+            value="${len}" step=".5" min="1" max="240" style="width:70px"
+            oninput="updateDefLen('${d.id}',this.value)">
+          <span style="font-size:11px;color:var(--tx-3)">yds</span>
+        </div>
+      </td>
+      <td><span class="settings-computed" id="dexp-${d.id}">~${expW.toFixed(2)} g</span></td>
+    </tr>`;
+  }).join('');
+}
+
+function refreshSettingsRow(id) {
+  const d = DEPTS.find(x => x.id === id);
+  const p = d.target >= 10 ? 1 : 4;
+  const usl = dUSL(id), lsl = dLSL(id);
+  const el_usl = document.getElementById('usl-'+id);
+  const el_lsl = document.getElementById('lsl-'+id);
+  const el_exp = document.getElementById('dexp-'+id);
+  if (el_usl) el_usl.textContent = usl.toFixed(p);
+  if (el_lsl) el_lsl.textContent = lsl.toFixed(p);
+  if (el_exp) {
+    const expW = hankToWeight(dTarget(id), ST.defLens[id]);
+    el_exp.textContent = '~' + expW.toFixed(2) + ' g';
+  }
+}
+
+function updateTarget(id, v) {
+  const val = parseFloat(v); if (isNaN(val) || val <= 0) return;
+  ST.targets[id] = val;
+  refreshSettingsRow(id);
+  updateAll();
+  saveData();
+}
+
+function updateTolerance(id, v) {
+  const val = parseFloat(v); if (isNaN(val) || val <= 0) return;
+  ST.tolerances[id] = val;
+  refreshSettingsRow(id);
+  updateAll();
+  saveData();
+}
+
+function resetToDefaults() {
+  if (!confirm('Reset all targets, tolerances, and sample lengths to factory defaults?')) return;
+  DEPTS.forEach(d => {
+    ST.targets[d.id]    = d.target;
+    ST.tolerances[d.id] = d.tol;
+    ST.defLens[d.id]    = d.defLen;
+  });
+  renderSettings();
+  updateAll();
+  saveData();
+}
+
+function updateDefLen(id, v) {
+  const val = parseFloat(v); if (isNaN(val) || val <= 0) return;
+  ST.defLens[id] = val;
+  refreshSettingsRow(id);
+  if (ST.dept === id) {
+    ST.actLen = val;
+    const el = document.getElementById('entry-len');
+    if (el) el.value = val;
+    updateExpNote();
+    updateFormulaDisplay();
+  }
+  saveData();
+}
+
+/* ══════════════════════════════════════════════
+   EXPORT CSV
+══════════════════════════════════════════════ */
+function exportCSV() {
+  const rows = [
+    ['Timestamp','Department','Shift','Avg Weight (g)','Mean Hank','Unit','Reading #','Hank Value']
+  ];
+  DEPTS.forEach(d => {
+    'ABC'.split('').forEach(sh => {
+      (ST.data[sh][d.id] || []).forEach(b => {
+        if (!b || !Array.isArray(b.readings)) return;
+        b.readings.forEach((v, i) => {
+          rows.push([
+            b.timestamp || '',
+            d.name, sh,
+            b.avgWeight !== null && b.avgWeight !== undefined ? b.avgWeight : '',
+            b.meanHank !== undefined ? b.meanHank : '',
+            d.unit,
+            i + 1,
+            v.toFixed(6)
+          ]);
+        });
+      });
+    });
+  });
+  const csv = rows.map(r => r.map(c => typeof c === 'string' && c.includes(',') ? `"${c}"` : c).join(',')).join('\n');
+  const blob = new Blob([csv], { type:'text/csv;charset=utf-8;' });
+  const url  = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `spinqms_export_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click(); URL.revokeObjectURL(url);
+}
+
+/* ══════════════════════════════════════════════
+   DATA LOG
+══════════════════════════════════════════════ */
+const LOG_SORT = { col: 'timestamp', dir: -1 }; // dir: -1=desc, 1=asc
+
+function logSort(col) {
+  if (LOG_SORT.col === col) { LOG_SORT.dir *= -1; }
+  else { LOG_SORT.col = col; LOG_SORT.dir = -1; }
+  renderLog();
+}
+
+function renderLog() {
+  // Populate dept filter on first render
+  const deptSel = document.getElementById('log-filter-dept');
+  if (deptSel && deptSel.options.length === 1) {
+    DEPTS.forEach(d => {
+      const o = document.createElement('option');
+      o.value = d.id; o.textContent = d.name;
+      deptSel.appendChild(o);
+    });
+  }
+
+  const deptFilter  = document.getElementById('log-filter-dept')?.value  || 'ALL';
+  const shiftFilter = document.getElementById('log-filter-shift')?.value || 'ALL';
+
+  let rows = allBatches();
+  if (deptFilter  !== 'ALL') rows = rows.filter(r => r.deptId === deptFilter);
+  if (shiftFilter !== 'ALL') rows = rows.filter(r => r.shift  === shiftFilter);
+
+  // Attach cv to each row for sortability
+  rows = rows.map(r => {
+    const s = calcStats(r.readings);
+    return { ...r, cv: s ? s.cv : null };
+  });
+
+  // Sort
+  rows.sort((a, b) => {
+    let av = a[LOG_SORT.col], bv = b[LOG_SORT.col];
+    if (LOG_SORT.col === 'timestamp') { av = new Date(av); bv = new Date(bv); }
+    if (av == null) return 1; if (bv == null) return -1;
+    return av < bv ? -LOG_SORT.dir : av > bv ? LOG_SORT.dir : 0;
+  });
+
+  const countEl = document.getElementById('log-count');
+  if (countEl) countEl.textContent = `${rows.length} batch${rows.length !== 1 ? 'es' : ''}`;
+
+  const tbody = document.getElementById('log-tb');
+  if (!tbody) return;
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="7" class="empty">No batches match the current filter</td></tr>';
+    return;
+  }
+
+  const d = DEPTS.find(x => x.id === ST.dept);
+  tbody.innerHTML = rows.map(r => {
+    const dept = DEPTS.find(x => x.id === r.deptId);
+    const p    = dept ? dp(dept) : 4;
+    const ts   = new Date(r.timestamp);
+    const dateStr = ts.toLocaleDateString(undefined, { month:'short', day:'numeric', year:'numeric' });
+    const timeStr = ts.toLocaleTimeString(undefined, { hour:'2-digit', minute:'2-digit' });
+    const cvStr   = r.cv !== null ? r.cv.toFixed(2) + '%' : '—';
+    const cvCls   = r.cv === null ? '' : r.cv <= (dept?.us?.p25||2) ? 'style="color:var(--ok);font-weight:500"'
+                  : r.cv <= (dept?.us?.p50||3) ? 'style="color:var(--warn);font-weight:500"'
+                  : 'style="color:var(--bad);font-weight:500"';
+    const wStr    = r.avgWeight !== null && r.avgWeight !== undefined ? r.avgWeight.toFixed(3) + ' g' : '—';
+    return `<tr>
+      <td class="mono" style="font-size:12px">${dateStr} ${timeStr}</td>
+      <td style="font-size:13px">${r.dept}</td>
+      <td><span class="badge neutral">Shift ${r.shift}</span></td>
+      <td class="mono" style="font-size:12px">${wStr}</td>
+      <td class="mono" style="font-size:12px">${r.meanHank.toFixed(p)} ${r.unit}</td>
+      <td class="mono" ${cvCls}>${cvStr}</td>
+      <td class="mono" style="font-size:12px;color:var(--tx-3)">${r.readings.length} rdg</td>
+    </tr>`;
+  }).join('');
+}
+
+/* ══════════════════════════════════════════════
+   MASTER UPDATE
+══════════════════════════════════════════════ */
+function updateAll() {
+  buildDeptNav();
+  renderOverview();
+  renderUster();
+  renderReport();
+  if (ST.view === 'charts') renderCharts();
+  if (ST.view === 'log')    renderLog();
+}
+
+/* ══════════════════════════════════════════════
+   MOBILE MENU — UI ONLY, NO STATS/STORAGE
+══════════════════════════════════════════════ */
+function openMenu() {
+  document.querySelector('.sb').classList.add('open');
+  document.getElementById('mob-overlay').classList.add('on');
+  document.body.style.overflow = 'hidden';
+}
+function closeMenu() {
+  document.querySelector('.sb').classList.remove('open');
+  document.getElementById('mob-overlay').classList.remove('on');
+  document.body.style.overflow = '';
+}
+document.getElementById('mob-overlay').addEventListener('click', closeMenu);
+// Close drawer when a sidebar nav item is tapped on mobile
+document.querySelector('.sb').addEventListener('click', function(e) {
+  if (e.target.closest('.nav') && window.innerWidth <= 768) closeMenu();
+});
+// Keep bottom nav in sync when sidebar nav items are used
+const _origGv = gv;
+gv = function(id, btn) {
+  _origGv(id, btn);
+  // Sync bottom nav active state
+  document.querySelectorAll('#mob-nav .mob-nav-btn[data-view]').forEach(b => {
+    b.classList.toggle('on', b.dataset.view === id);
+  });
+};
+
+/* ══════════════════════════════════════════════
+   INIT
+══════════════════════════════════════════════ */
+(function init() {
+  initState();
+  loadData();
+  buildDeptNav();
+  renderOverview();
+  buildReadingsGrid();
+  renderUster();
+  renderReport();
+  ST.actLen = ST.defLens[ST.dept];
+  const el = document.getElementById('entry-len');
+  if (el) el.value = ST.actLen;
+})();
+</script>
+</body>
+</html>
