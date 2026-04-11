@@ -147,6 +147,39 @@ class PredictRequest(BaseModel):
     cv_simplex: Optional[float] = None    # fetched from DB if omitted
 
 
+# ── YarnLAB ───────────────────────────────────────────────────────────────────
+class LabTrialCreate(BaseModel):
+    name:        str = Field(..., min_length=1, max_length=120)
+    description: Optional[str] = None
+
+
+class LabTrialUpdate(BaseModel):
+    name:        Optional[str] = Field(None, min_length=1, max_length=120)
+    description: Optional[str] = None
+    status:      Optional[str] = Field(None, pattern="^(active|complete)$")
+
+
+class LabBenchmarkItem(BaseModel):
+    dept_id:   str
+    target:    float = Field(..., gt=0)
+    tolerance: float = Field(..., gt=0)
+
+
+class LabSampleCreate(BaseModel):
+    dept_id:       str
+    readings:      List[float] = Field(..., min_length=3, max_length=50)
+    avg_weight:    Optional[float] = Field(None, gt=0)
+    sample_length: float = Field(..., gt=0)
+    frame_number:  Optional[int] = None
+    notes:         Optional[str] = None
+
+    @model_validator(mode="after")
+    def readings_positive(self) -> "LabSampleCreate":
+        if any(r <= 0 for r in self.readings):
+            raise ValueError("All readings must be positive")
+        return self
+
+
 # ── Error response (used by global exception handler) ────────────────────────
 class ErrorResponse(BaseModel):
     detail:    str

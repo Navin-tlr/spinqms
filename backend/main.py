@@ -29,13 +29,17 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
 from database import get_db
-from models import Department, Sample, SettingsVersion
+from models import Department, LabBenchmark, LabSample, LabTrial, Sample, SettingsVersion
 from schemas import (
     Alert,
     DeptKPI,
     ErrorResponse,
     IIRequest,
     IIResponse,
+    LabBenchmarkItem,
+    LabSampleCreate,
+    LabTrialCreate,
+    LabTrialUpdate,
     PredictRequest,
     SampleCreate,
     SampleOut,
@@ -775,3 +779,288 @@ def export_csv(db: Session = Depends(get_db)):
         media_type="text/csv",
         headers={"Content-Disposition": f"attachment; filename=spinqms_{date_str}.csv"},
     )
+
+
+# ── YarnLAB ───────────────────────────────────────────────────────────────────
+
+def _lab_verdict(cpk: Optional[float], n: int) -> str:
+    """Translate cpk + sample count to a YarnLAB verdict string."""
+    if n == 0:
+        return "pending"
+    if cpk is None:
+        return "pending"
+    if cpk >= 1.33:
+        return "pass"
+    if cpk >= 1.0:
+        return "warn"
+    return "fail"
+
+
+@app.get("/api/lab/trials")
+def list_lab_trials(db: Session = Depends(get_db)):
+    """List all lab trials with summary counts."""
+    trials = db.query(LabTrial).order_by(LabTrial.created_at.desc()).all()
+    result = []
+    for t in trials:
+        bench_count  = len(t.benchmarks)
+        sample_count = len(t.samples)
+        dept_ids     = {s.dept_id for s in t.samples}
+        result.append({
+            "id":           t.id,
+            "name":         t.name,
+            "description":  t.description,
+            "status":       t.status,
+            "created_at":   _utc_iso(t.created_at),
+            "bench_count":  bench_count,
+            "sample_count": sample_count,
+            "dept_count":   len(dept_ids),
+        })
+    return result
+
+
+@app.post("/api/lab/trials", status_code=201)
+def create_lab_trial(body: LabTrialCreate, db: Session = Depends(get_db)):
+    trial = LabTrial(
+        name=body.name,
+        description=body.description,
+        status="active",
+        created_at=datetime.now(timezone.utc),
+    )
+    db.add(trial)
+    db.flush()
+
+    # Pre-populate benchmarks from current production department settings
+    for dept in _ordered_depts(db):
+        bench = LabBenchmark(
+            trial_id=trial.id,
+            dept_id=dept.dept_id,
+            target=dept.target,
+            tolerance=dept.tolerance,
+        )
+        db.add(bench)
+
+    db.commit()
+    db.refresh(trial)
+    return {
+        "id":          trial.id,
+        "name":        trial.name,
+        "description": trial.description,
+        "status":      trial.status,
+        "created_at":  _utc_iso(trial.created_at),
+    }
+
+
+@app.put("/api/lab/trials/{trial_id}")
+def update_lab_trial(trial_id: int, body: LabTrialUpdate, db: Session = Depends(get_db)):
+    t = db.query(LabTrial).filter_by(id=trial_id).first()
+    if not t:
+        raise HTTPException(404, "Trial not found")
+    if body.name is not None:
+        t.name = body.name
+    if body.description is not None:
+        t.description = body.description
+    if body.status is not None:
+        t.status = body.status
+    db.commit()
+    return {"id": t.id, "name": t.name, "description": t.description, "status": t.status}
+
+
+@app.delete("/api/lab/trials/{trial_id}", status_code=204)
+def delete_lab_trial(trial_id: int, db: Session = Depends(get_db)):
+    t = db.query(LabTrial).filter_by(id=trial_id).first()
+    if not t:
+        raise HTTPException(404, "Trial not found")
+    db.delete(t)
+    db.commit()
+
+
+@app.post("/api/lab/trials/{trial_id}/benchmarks")
+def set_lab_benchmarks(
+    trial_id: int,
+    body: List[LabBenchmarkItem],
+    db: Session = Depends(get_db),
+):
+    """Upsert benchmark targets for a trial (one item per dept)."""
+    t = db.query(LabTrial).filter_by(id=trial_id).first()
+    if not t:
+        raise HTTPException(404, "Trial not found")
+
+    existing = {b.dept_id: b for b in t.benchmarks}
+    for item in body:
+        if item.dept_id in existing:
+            existing[item.dept_id].target    = item.target
+            existing[item.dept_id].tolerance = item.tolerance
+        else:
+            db.add(LabBenchmark(
+                trial_id=trial_id,
+                dept_id=item.dept_id,
+                target=item.target,
+                tolerance=item.tolerance,
+            ))
+    db.commit()
+    return {"saved": len(body)}
+
+
+@app.post("/api/lab/trials/{trial_id}/samples", status_code=201)
+def add_lab_sample(
+    trial_id: int,
+    body: LabSampleCreate,
+    db: Session = Depends(get_db),
+):
+    t = db.query(LabTrial).filter_by(id=trial_id).first()
+    if not t:
+        raise HTTPException(404, "Trial not found")
+
+    readings  = [round(r, 6) for r in body.readings]
+    mean_hank = sum(readings) / len(readings)
+    cv_stats  = logic.calc_stats(readings)
+    cv_pct    = round(cv_stats["cv"], 4) if cv_stats else None
+
+    # Determine sample_length: use benchmark dept's def_len as fallback
+    dept = db.query(Department).filter_by(dept_id=body.dept_id).first()
+    sample_length = body.sample_length if body.sample_length else (dept.def_len if dept else 6.0)
+
+    sample = LabSample(
+        trial_id=trial_id,
+        dept_id=body.dept_id,
+        readings_json=json.dumps(readings),
+        mean_hank=round(mean_hank, 6),
+        cv_pct=cv_pct,
+        readings_count=len(readings),
+        avg_weight=body.avg_weight,
+        sample_length=sample_length,
+        frame_number=body.frame_number,
+        notes=body.notes,
+        timestamp=datetime.now(timezone.utc),
+    )
+    db.add(sample)
+    db.commit()
+    db.refresh(sample)
+    return {
+        "id":           sample.id,
+        "dept_id":      sample.dept_id,
+        "mean_hank":    sample.mean_hank,
+        "cv_pct":       sample.cv_pct,
+        "readings_count": sample.readings_count,
+        "timestamp":    _utc_iso(sample.timestamp),
+    }
+
+
+@app.delete("/api/lab/trials/{trial_id}/samples/{sample_id}", status_code=204)
+def delete_lab_sample(trial_id: int, sample_id: int, db: Session = Depends(get_db)):
+    s = db.query(LabSample).filter_by(id=sample_id, trial_id=trial_id).first()
+    if not s:
+        raise HTTPException(404, "Sample not found")
+    db.delete(s)
+    db.commit()
+
+
+@app.get("/api/lab/trials/{trial_id}/dashboard")
+def get_lab_dashboard(trial_id: int, db: Session = Depends(get_db)):
+    """
+    Validation dashboard for a trial.
+
+    For each department that has a benchmark, compute:
+    • mean, sd, cv, cpk, cp  against the gold-standard limits
+    • verdict: 'pass' | 'warn' | 'fail' | 'pending'
+    • list of individual sample means (for sparkline rendering)
+    """
+    t = db.query(LabTrial).filter_by(id=trial_id).first()
+    if not t:
+        raise HTTPException(404, "Trial not found")
+
+    # Index benchmarks and samples by dept
+    bench_by_dept  = {b.dept_id: b for b in t.benchmarks}
+    samples_by_dept: dict[str, list] = {}
+    for s in t.samples:
+        samples_by_dept.setdefault(s.dept_id, []).append(s)
+
+    # Canonical dept order — only include depts that have a benchmark
+    order    = ["carding", "breaker", "rsb", "simplex", "ringframe", "autoconer"]
+    dept_rows = []
+
+    for dept_id in order:
+        bench = bench_by_dept.get(dept_id)
+        if bench is None:
+            continue
+
+        usl = round(bench.target + bench.tolerance, 6)
+        lsl = round(bench.target - bench.tolerance, 6)
+
+        samps      = samples_by_dept.get(dept_id, [])
+        means      = [s.mean_hank for s in samps]
+        stats      = logic.calc_stats(means) if len(means) >= 2 else None
+
+        cpk = cp = None
+        if stats and stats["sd"] > 0:
+            cpk = logic.calc_cpk(stats["mean"], stats["sd"], usl, lsl)
+            cp  = logic.calc_cp( stats["sd"],                usl, lsl)
+
+        single_mean = means[0] if len(means) == 1 else None
+        display_mean = round(stats["mean"], 6) if stats else (round(single_mean, 6) if single_mean else None)
+
+        verdict = _lab_verdict(cpk, len(means))
+
+        # Get dept name from departments table
+        dept_obj = db.query(Department).filter_by(dept_id=dept_id).first()
+        dept_name = dept_obj.name if dept_obj else dept_id.title()
+        unit      = dept_obj.unit if dept_obj else "hank"
+
+        dept_rows.append({
+            "dept_id":   dept_id,
+            "dept_name": dept_name,
+            "unit":      unit,
+            "benchmark": {
+                "target":    bench.target,
+                "tolerance": bench.tolerance,
+                "usl":       usl,
+                "lsl":       lsl,
+            },
+            "result": {
+                "n":    len(means),
+                "mean": display_mean,
+                "sd":   round(stats["sd"],  6) if stats else None,
+                "cv":   round(stats["cv"],  4) if stats else None,
+                "cpk":  round(cpk, 4)          if cpk is not None else None,
+                "cp":   round(cp,  4)           if cp  is not None else None,
+            },
+            "verdict": verdict,
+            "samples": [
+                {
+                    "id":        s.id,
+                    "mean_hank": s.mean_hank,
+                    "cv_pct":    s.cv_pct,
+                    "timestamp": _utc_iso(s.timestamp),
+                    "notes":     s.notes,
+                }
+                for s in sorted(samps, key=lambda x: x.timestamp)
+            ],
+        })
+
+    # Overall trial verdict
+    verdicts   = [r["verdict"] for r in dept_rows]
+    n_pending  = verdicts.count("pending")
+    n_fail     = verdicts.count("fail")
+    n_warn     = verdicts.count("warn")
+    n_pass     = verdicts.count("pass")
+    if n_fail > 0:
+        overall = "fail"
+    elif n_pending == len(dept_rows):
+        overall = "pending"
+    elif n_warn > 0 or n_pending > 0:
+        overall = "warn"
+    else:
+        overall = "pass"
+
+    return {
+        "trial": {
+            "id":          t.id,
+            "name":        t.name,
+            "description": t.description,
+            "status":      t.status,
+            "created_at":  _utc_iso(t.created_at),
+        },
+        "overall":     overall,
+        "counts":      {"pass": n_pass, "warn": n_warn, "fail": n_fail, "pending": n_pending},
+        "departments": dept_rows,
+    }

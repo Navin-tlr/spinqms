@@ -195,3 +195,73 @@ class Sample(Base):
         Index("ix_samples_dept_ts",    "dept_id",  "timestamp"),
         Index("ix_samples_dept_shift", "dept_id",  "shift"),
     )
+
+
+# ── 4. YarnLAB — Trial Run ──────────────────────────────────────────────────
+class LabTrial(Base):
+    """
+    A named quality sandbox trial for validating machine readiness for a new
+    yarn count.  Isolated from regular production data.
+    """
+    __tablename__ = "lab_trials"
+
+    id          = Column(Integer, primary_key=True)
+    name        = Column(String,  nullable=False)
+    description = Column(String,  nullable=True)
+    status      = Column(String,  nullable=False, default="active")  # 'active' | 'complete'
+    created_at  = Column(DateTime, nullable=False,
+                         default=lambda: datetime.now(timezone.utc))
+
+    benchmarks = relationship("LabBenchmark", back_populates="trial",
+                              cascade="all, delete-orphan")
+    samples    = relationship("LabSample",    back_populates="trial",
+                              cascade="all, delete-orphan")
+
+
+# ── 5. YarnLAB — Gold Standard Benchmark ───────────────────────────────────
+class LabBenchmark(Base):
+    """
+    Per-department gold standard target/tolerance for a specific trial.
+    One row per (trial, dept) pair.  Upserted when the user edits benchmarks.
+    """
+    __tablename__ = "lab_benchmarks"
+
+    id        = Column(Integer, primary_key=True)
+    trial_id  = Column(Integer, ForeignKey("lab_trials.id", ondelete="CASCADE"),
+                       nullable=False, index=True)
+    dept_id   = Column(String,  nullable=False)
+    target    = Column(Float,   nullable=False)
+    tolerance = Column(Float,   nullable=False)
+
+    trial = relationship("LabTrial", back_populates="benchmarks")
+
+    __table_args__ = (
+        UniqueConstraint("trial_id", "dept_id", name="uq_lab_bench"),
+    )
+
+
+# ── 6. YarnLAB — Trial Sample ────────────────────────────────────────────────
+class LabSample(Base):
+    """
+    A single batch of readings logged against a lab trial (not production).
+    Denormalised fast columns mirror the production Sample model.
+    """
+    __tablename__ = "lab_samples"
+
+    id             = Column(Integer, primary_key=True)
+    trial_id       = Column(Integer, ForeignKey("lab_trials.id", ondelete="CASCADE"),
+                            nullable=False, index=True)
+    dept_id        = Column(String,  nullable=False, index=True)
+    readings_json  = Column(Text,    nullable=False)
+    mean_hank      = Column(Float,   nullable=False)
+    cv_pct         = Column(Float,   nullable=True)
+    readings_count = Column(Integer, nullable=False)
+    avg_weight     = Column(Float,   nullable=True)
+    sample_length  = Column(Float,   nullable=False)
+    frame_number   = Column(Integer, nullable=True)
+    notes          = Column(String,  nullable=True)
+    timestamp      = Column(DateTime, nullable=False,
+                            default=lambda: datetime.now(timezone.utc),
+                            index=True)
+
+    trial = relationship("LabTrial", back_populates="samples")

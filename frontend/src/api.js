@@ -50,6 +50,16 @@ export const downloadCSV = () => {
   window.open('/api/export/csv', '_blank')
 }
 
+// ── YarnLAB ───────────────────────────────────────────────────────────────────
+export const getLabTrials          = ()                    => http.get('/lab/trials').then(r => r.data)
+export const createLabTrial        = (body)                => http.post('/lab/trials', body).then(r => r.data)
+export const updateLabTrial        = (id, body)            => http.put(`/lab/trials/${id}`, body).then(r => r.data)
+export const deleteLabTrial        = (id)                  => http.delete(`/lab/trials/${id}`)
+export const setLabBenchmarks      = (id, items)           => http.post(`/lab/trials/${id}/benchmarks`, items).then(r => r.data)
+export const addLabSample          = (id, body)            => http.post(`/lab/trials/${id}/samples`, body).then(r => r.data)
+export const deleteLabSample       = (trialId, sampleId)   => http.delete(`/lab/trials/${trialId}/samples/${sampleId}`)
+export const getLabDashboard       = (id)                  => http.get(`/lab/trials/${id}/dashboard`).then(r => r.data)
+
 // ── Hank formula helpers (client-side mirror of logic.py) ────────────────────
 export const weightToHank = (weightGrams, lengthYards) =>
   (lengthYards * 0.54) / weightGrams

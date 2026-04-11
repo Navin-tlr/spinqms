@@ -12,6 +12,7 @@ const DEFAULT_NAV = [
   { id:'uster',    label:'Uster Benchmarks'},
   { id:'report',   label:'Shift Report'    },
   { id:'log',      label:'Data Log'        },
+  { id:'lab',      label:'YarnLAB'         },
   { id:'settings', label:'Settings'        },
   { id:'guide',    label:'Operator Guide'  },
 ]
@@ -25,6 +26,7 @@ const ICONS = {
   report:   'M4.5 2h7l2 2v9.5c0 .5-.5 1-1 1H3.5c-.5 0-1-.5-1-1V3c0-.5.5-1 1-1zM5.5 7h5M5.5 9.5h3.5',
   log:      'M2.5 4.5h11M2.5 8h11M2.5 11.5h7',
   settings: 'M8 5.5a2.5 2.5 0 100 5 2.5 2.5 0 000-5zM8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.5 3.5l1.5 1.5M11 11l1.5 1.5M3.5 12.5l1.5-1.5M11 5l1.5-1.5',
+  lab:      'M3 13.5h10M4.5 13.5V9a1 1 0 011-1h5a1 1 0 011 1v4.5M6 8V5.5h4V8M8 2.5v2M6 2.5h4',
   guide:    'M8 2.5c-2.2 0-4 1.8-4 4 0 2.5 4 7.5 4 7.5s4-5 4-7.5c0-2.2-1.8-4-4-4zM8 5v2.5M8 9v.5',
 }
 
@@ -179,6 +181,16 @@ export default function Layout({
                   <HandIcon d={ICONS[item.id]} active={active} />
                 </span>
                 <span style={{ flex:1 }}>{item.label}</span>
+                {item.id === 'lab' && (
+                  <span style={{
+                    fontSize: 9, fontWeight: 700, letterSpacing: '.06em',
+                    padding: '1px 5px', borderRadius: 4,
+                    background: active ? 'rgba(255,255,255,.18)' : 'var(--claude-bg)',
+                    color: active ? '#fff' : 'var(--claude)',
+                    border: `1px solid ${active ? 'rgba(255,255,255,.3)' : 'var(--claude-bd)'}`,
+                    lineHeight: 1.6,
+                  }}>NEW</span>
+                )}
               </div>
             )
           })}

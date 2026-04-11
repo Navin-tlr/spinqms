@@ -8,6 +8,7 @@ import ShiftReport from './components/views/ShiftReport.jsx'
 import Settings from './components/views/Settings.jsx'
 import DataLog from './components/views/DataLog.jsx'
 import OperatorGuide from './components/views/OperatorGuide.jsx'
+import YarnLab from './components/views/YarnLab.jsx'
 import { Spinner } from './components/Primitives.jsx'
 import { getDepts, getOverview, getAlerts, getUster } from './api.js'
 
@@ -154,6 +155,7 @@ export default function App() {
       )}
       {view === 'settings' && <Settings depts={depts} onSettingsChanged={handleSettingsChanged} />}
       {view === 'guide' && <OperatorGuide />}
+      {view === 'lab'   && <YarnLab depts={depts} />}
     </Layout>
   )
 }
