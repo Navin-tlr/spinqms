@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import {
   getLabTrials, createLabTrial, updateLabTrial, deleteLabTrial,
   setLabBenchmarks, addLabSample, deleteLabSample, getLabDashboard,
@@ -460,7 +460,71 @@ function DeptVerdictCard({ dept, onDeleteSample }) {
 /* ════════════════════════════════════════════════════════════════════════════
    FlowBoard — interactive RSB → Simplex → Ring Frame mapper
 ══════════════════════════════════════════════════════════════════════════════ */
+/* Wire color by status */
+const WIRE_COLOR = {
+  perfect: '#22c55e',
+  faulty: '#ef4444',
+  pending: '#94a3b8',
+}
+
+/* SVG overlay drawing bezier connections */
+function WireCanvas({ connections, cardRefs, containerRef }) {
+  const [lines, setLines] = useState([])
+
+  useEffect(() => {
+    if (!containerRef.current) return
+    const containerRect = containerRef.current.getBoundingClientRect()
+    const newLines = []
+    for (const { fromKey, toKey, color } of connections) {
+      const fromEl = document.querySelector(`[data-wire-id="${fromKey}"]`)
+      const toEl = document.querySelector(`[data-wire-id="${toKey}"]`)
+      if (!fromEl || !toEl) continue
+      const fr = fromEl.getBoundingClientRect()
+      const tr = toEl.getBoundingClientRect()
+      const scrollTop = containerRef.current.scrollTop || 0
+      const x1 = fr.right - containerRect.left
+      const y1 = fr.top - containerRect.top + scrollTop + fr.height / 2
+      const x2 = tr.left - containerRect.left
+      const y2 = tr.top - containerRect.top + scrollTop + tr.height / 2
+      const cx = (x1 + x2) / 2
+      newLines.push({ x1, y1, x2, y2, cx, color })
+    }
+    setLines(newLines)
+  })
+
+  if (!lines.length) return null
+  return (
+    <svg
+      style={{
+        position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
+        pointerEvents: 'none', overflow: 'visible', zIndex: 10,
+      }}
+    >
+      <defs>
+        <filter id="wire-glow">
+          <feGaussianBlur stdDeviation="2" result="blur" />
+          <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+        </filter>
+      </defs>
+      {lines.map((l, i) => (
+        <g key={i} filter="url(#wire-glow)">
+          <path
+            d={`M${l.x1},${l.y1} C${l.cx},${l.y1} ${l.cx},${l.y2} ${l.x2},${l.y2}`}
+            fill="none" stroke={l.color} strokeWidth={2}
+            strokeDasharray="5 3" opacity={0.75}
+          />
+          <circle cx={l.x1} cy={l.y1} r={4} fill={l.color} opacity={0.9} />
+          <circle cx={l.x2} cy={l.y2} r={4} fill={l.color} opacity={0.9} />
+        </g>
+      ))}
+    </svg>
+  )
+}
+
 function FlowBoard({ trialId, flow, setFlow, loading, refreshFlow }) {
+  const [linkingFrom, setLinkingFrom] = useState(null) // { type: 'rsb-can'|'simplex-bobbin', id, canObj|bobbinObj }
+  const containerRef = useRef(null)
+
   useEffect(() => {
     const handleDragOver = (e) => {
       const edge = 100;
@@ -475,6 +539,39 @@ function FlowBoard({ trialId, flow, setFlow, loading, refreshFlow }) {
     return () => window.removeEventListener('dragover', handleDragOver);
   }, []);
 
+  // Escape cancels linking mode
+  useEffect(() => {
+    const handler = (e) => { if (e.key === 'Escape') setLinkingFrom(null) }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [])
+
+  const handleStartLink = useCallback((type, id) => {
+    setLinkingFrom(prev => (prev?.type === type && prev?.id === id) ? null : { type, id })
+  }, [])
+
+  // Finalize RSB can → Simplex bobbin link
+  const handleLinkCanToBobbin = useCallback(async (bobbinId, currentRsbCans, onUpdate) => {
+    if (!linkingFrom || linkingFrom.type !== 'rsb-can') return
+    const canId = linkingFrom.id
+    const existingIds = currentRsbCans.map(c => c.id)
+    if (!existingIds.includes(canId)) {
+      await onUpdate(bobbinId, { rsb_can_ids: [...existingIds, canId] })
+    }
+    setLinkingFrom(null)
+  }, [linkingFrom])
+
+  // Finalize Simplex bobbin → Ring Frame cop link
+  const handleLinkBobbinToCop = useCallback(async (copId, currentBobbins, onUpdate) => {
+    if (!linkingFrom || linkingFrom.type !== 'simplex-bobbin') return
+    const bobbinId = linkingFrom.id
+    const existingIds = currentBobbins.map(b => b.id)
+    if (!existingIds.includes(bobbinId)) {
+      await onUpdate(copId, { simplex_bobbin_ids: [...existingIds, bobbinId] })
+    }
+    setLinkingFrom(null)
+  }, [linkingFrom])
+
   if (loading || !flow) {
     return (
       <div style={{
@@ -488,30 +585,68 @@ function FlowBoard({ trialId, flow, setFlow, loading, refreshFlow }) {
 
   const rootCause = useMemo(() => findRootCause(flow), [flow])
 
+  // Build wire connections for SVG overlay
+  const wires = []
+  for (const bobbin of flow.simplex.bobbins) {
+    for (const can of (bobbin.rsb_cans || [])) {
+      wires.push({ fromKey: `can-${can.id}`, toKey: `bobbin-${bobbin.id}`, color: WIRE_COLOR[can.status] ?? WIRE_COLOR.pending })
+    }
+  }
+  for (const cop of flow.ringframe.cops) {
+    for (const bobbin of (cop.simplex_bobbins || [])) {
+      wires.push({ fromKey: `bobbin-${bobbin.id}`, toKey: `cop-${cop.id}`, color: WIRE_COLOR[bobbin.status] ?? WIRE_COLOR.pending })
+    }
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
       <SectionHead>RSB → Simplex → Ring Frame Traceability</SectionHead>
       <p style={{ margin: 0, fontSize: 12, color: 'var(--tx-3)' }}>
         Complete the full flow within a shift by sampling five cans, verifying simplex bobbins (3-reading parity),
-        and linking ring frame cops. Drag cans onto bobbins, then bobbins onto cops for full lineage.
+        and linking ring frame cops. Click 🔗 on a card to enter linking mode, then click the target. Press Escape to cancel.
       </p>
+      {linkingFrom && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 8,
+          padding: '8px 12px', borderRadius: 'var(--r)',
+          background: 'var(--claude-bg)', border: '1px solid var(--claude-bd)',
+          fontSize: 12, color: 'var(--claude)',
+        }}>
+          <span style={{ fontWeight: 600 }}>🔗 Linking mode active</span>
+          <span>— click a highlighted {linkingFrom.type === 'rsb-can' ? 'Simplex Bobbin' : 'Ring Frame Cop'} to connect it</span>
+          <button onClick={() => setLinkingFrom(null)}
+            style={{ marginLeft: 'auto', border: '1px solid var(--claude-bd)', background: 'transparent', borderRadius: 'var(--r)', padding: '2px 10px', cursor: 'pointer', color: 'var(--claude)', fontSize: 11 }}>
+            Cancel (Esc)
+          </button>
+        </div>
+      )}
       <RootCauseBanner alert={rootCause} />
-      <div style={{
+      <div ref={containerRef} style={{
         display: 'grid', gap: 12,
         gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+        position: 'relative',
       }}>
-        <RSBPanel trialId={trialId} cans={flow.rsb.cans} refreshFlow={refreshFlow} />
+        <WireCanvas connections={wires} containerRef={containerRef} />
+        <RSBPanel
+          trialId={trialId} cans={flow.rsb.cans} refreshFlow={refreshFlow}
+          linkingFrom={linkingFrom} onStartLink={handleStartLink}
+        />
         <SimplexPanel
           trialId={trialId}
           bobbins={flow.simplex.bobbins}
           setFlow={setFlow}
           refreshFlow={refreshFlow}
+          linkingFrom={linkingFrom}
+          onStartLink={handleStartLink}
+          onLinkCanToBobbin={handleLinkCanToBobbin}
         />
         <RingFramePanel
           trialId={trialId}
           cops={flow.ringframe.cops}
           setFlow={setFlow}
           refreshFlow={refreshFlow}
+          linkingFrom={linkingFrom}
+          onLinkBobbinToCop={handleLinkBobbinToCop}
         />
       </div>
     </div>
@@ -666,7 +801,7 @@ function calcReadingPreview(weights, sampleLength) {
   return { mean, cv, avgWeight }
 }
 
-function RSBPanel({ trialId, cans, refreshFlow }) {
+function RSBPanel({ trialId, cans, refreshFlow, linkingFrom, onStartLink }) {
   const [draft, setDraft] = useState(() => cans.map(normalizeCan))
   const [saving, setSaving] = useState(false)
   const [dirty, setDirty] = useState(false)
@@ -757,7 +892,12 @@ function RSBPanel({ trialId, cans, refreshFlow }) {
                 gap: 6,
               }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--tx)' }}>Can {can.slot}</div>
+                <div
+                  data-wire-id={`can-${can.id}`}
+                  style={{ fontSize: 12, fontWeight: 600, color: 'var(--tx)' }}
+                >
+                  Can {can.slot}
+                </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--tx-3)' }}>
                     <input type="checkbox" checked={!!can.is_perfect}
@@ -773,6 +913,18 @@ function RSBPanel({ trialId, cans, refreshFlow }) {
                   >
                     ⇄
                   </span>
+                  <button
+                    onClick={() => onStartLink?.('rsb-can', can.id)}
+                    title="Enter linking mode to connect to a Simplex Bobbin"
+                    style={{
+                      border: `1px solid ${linkingFrom?.type === 'rsb-can' && linkingFrom?.id === can.id ? 'var(--claude)' : 'var(--bd)'}`,
+                      background: linkingFrom?.type === 'rsb-can' && linkingFrom?.id === can.id ? 'var(--claude-bg)' : 'transparent',
+                      borderRadius: 'var(--r)', padding: '2px 6px', fontSize: 11, cursor: 'pointer',
+                      color: linkingFrom?.type === 'rsb-can' && linkingFrom?.id === can.id ? 'var(--claude)' : 'var(--tx-3)',
+                    }}
+                  >
+                    🔗
+                  </button>
                 </div>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
@@ -884,7 +1036,7 @@ function FormulaNote({ length }) {
   )
 }
 
-function SimplexPanel({ trialId, bobbins, setFlow, refreshFlow }) {
+function SimplexPanel({ trialId, bobbins, setFlow, refreshFlow, linkingFrom, onStartLink, onLinkCanToBobbin }) {
   const [busyId, setBusyId] = useState(null)
 
   const handleAdd = () => {
@@ -959,6 +1111,9 @@ function SimplexPanel({ trialId, bobbins, setFlow, refreshFlow }) {
               busy={busyId === b.id}
               onUpdate={handleUpdate}
               onDelete={handleDelete}
+              linkingFrom={linkingFrom}
+              onStartLink={onStartLink}
+              onLinkCanToBobbin={onLinkCanToBobbin}
             />
           ))}
         </div>
@@ -967,7 +1122,7 @@ function SimplexPanel({ trialId, bobbins, setFlow, refreshFlow }) {
   )
 }
 
-function SimplexCard({ bobbin, busy, onUpdate, onDelete }) {
+function SimplexCard({ bobbin, busy, onUpdate, onDelete, linkingFrom, onStartLink, onLinkCanToBobbin }) {
   const [form, setForm] = useState(() => ({
     notes: bobbin.notes ?? '',
     verified: bobbin.verified_same_hank,
@@ -1022,16 +1177,25 @@ function SimplexCard({ bobbin, busy, onUpdate, onDelete }) {
     e.dataTransfer.effectAllowed = 'copy'
   }
 
+  const isLinkTarget = linkingFrom?.type === 'rsb-can'
+  const isLinkSource = linkingFrom?.type === 'simplex-bobbin' && linkingFrom?.id === bobbin.id
+
   return (
     <div
+      onClick={isLinkTarget ? () => onLinkCanToBobbin?.(bobbin.id, bobbin.rsb_cans || [], onUpdate) : undefined}
       style={{
-        border: `1px solid ${STATUS_BORDER[status] ?? 'var(--bd)'}`,
+        border: isLinkTarget
+          ? '2px solid var(--claude)'
+          : `1px solid ${STATUS_BORDER[status] ?? 'var(--bd)'}`,
         borderRadius: 'var(--r)',
         padding: 12,
-        background: STATUS_BG[status] ?? 'var(--bg-2)',
+        background: isLinkTarget ? 'var(--claude-bg)' : (STATUS_BG[status] ?? 'var(--bg-2)'),
         display: 'flex',
         flexDirection: 'column',
         gap: 8,
+        cursor: isLinkTarget ? 'pointer' : 'default',
+        boxShadow: isLinkTarget ? '0 0 0 3px color-mix(in srgb, var(--claude) 20%, transparent)' : 'none',
+        transition: 'all .15s',
       }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <span
@@ -1042,7 +1206,7 @@ function SimplexCard({ bobbin, busy, onUpdate, onDelete }) {
         >
           ⇄
         </span>
-        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--tx)' }}>{bobbin.label}</div>
+        <div data-wire-id={`bobbin-${bobbin.id}`} style={{ fontSize: 12, fontWeight: 600, color: 'var(--tx)' }}>{bobbin.label}</div>
         <span style={{
           fontSize: 10, fontWeight: 600, color: statusMeta.color,
           padding: '2px 6px', borderRadius: 12,
@@ -1053,7 +1217,17 @@ function SimplexCard({ bobbin, busy, onUpdate, onDelete }) {
         </span>
         {bobbin.verified_same_hank && <Badge variant="ok">Hank ok</Badge>}
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
-          <SmBtn onClick={() => onDelete(bobbin.id)} disabled={busy}>✕</SmBtn>
+          <button
+            onClick={e => { e.stopPropagation(); onStartLink?.('simplex-bobbin', bobbin.id) }}
+            title="Link this bobbin to a Ring Frame Cop"
+            style={{
+              border: `1px solid ${isLinkSource ? 'var(--claude)' : 'var(--bd)'}`,
+              background: isLinkSource ? 'var(--claude-bg)' : 'transparent',
+              borderRadius: 'var(--r)', padding: '2px 6px', fontSize: 11, cursor: 'pointer',
+              color: isLinkSource ? 'var(--claude)' : 'var(--tx-3)',
+            }}
+          >🔗</button>
+          <SmBtn onClick={e => { e.stopPropagation(); onDelete(bobbin.id) }} disabled={busy}>✕</SmBtn>
         </div>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
@@ -1149,7 +1323,7 @@ function SimplexCard({ bobbin, busy, onUpdate, onDelete }) {
   )
 }
 
-function RingFramePanel({ trialId, cops, setFlow, refreshFlow }) {
+function RingFramePanel({ trialId, cops, setFlow, refreshFlow, linkingFrom, onLinkBobbinToCop }) {
   const [busyId, setBusyId] = useState(null)
 
   const handleAdd = () => {
@@ -1223,6 +1397,8 @@ function RingFramePanel({ trialId, cops, setFlow, refreshFlow }) {
               busy={busyId === c.id}
               onUpdate={handleUpdate}
               onDelete={handleDelete}
+              linkingFrom={linkingFrom}
+              onLinkBobbinToCop={onLinkBobbinToCop}
             />
           ))}
         </div>
@@ -1231,7 +1407,7 @@ function RingFramePanel({ trialId, cops, setFlow, refreshFlow }) {
   )
 }
 
-function RingFrameCard({ cop, busy, onUpdate, onDelete }) {
+function RingFrameCard({ cop, busy, onUpdate, onDelete, linkingFrom, onLinkBobbinToCop }) {
   const [form, setForm] = useState(() => ({
     label: cop.label,
     notes: cop.notes ?? '',
@@ -1281,18 +1457,29 @@ function RingFrameCard({ cop, busy, onUpdate, onDelete }) {
     await onUpdate(cop.id, { simplex_bobbin_ids: existingIds.filter(bid => bid !== id) })
   }
 
+  const isLinkTarget = linkingFrom?.type === 'simplex-bobbin'
+
   return (
-    <div style={{
-      border: `1px solid ${STATUS_BORDER[status] ?? 'var(--bd)'}`,
-      borderRadius: 'var(--r)', padding: 12,
-      background: STATUS_BG[status] ?? 'var(--bg-2)', display: 'flex', flexDirection: 'column', gap: 8,
-    }}>
+    <div
+      onClick={isLinkTarget ? () => onLinkBobbinToCop?.(cop.id, cop.simplex_bobbins || [], onUpdate) : undefined}
+      style={{
+        border: isLinkTarget
+          ? '2px solid var(--claude)'
+          : `1px solid ${STATUS_BORDER[status] ?? 'var(--bd)'}`,
+        borderRadius: 'var(--r)', padding: 12,
+        background: isLinkTarget ? 'var(--claude-bg)' : (STATUS_BG[status] ?? 'var(--bg-2)'),
+        display: 'flex', flexDirection: 'column', gap: 8,
+        cursor: isLinkTarget ? 'pointer' : 'default',
+        boxShadow: isLinkTarget ? '0 0 0 3px color-mix(in srgb, var(--claude) 20%, transparent)' : 'none',
+        transition: 'all .15s',
+      }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         <input type="text" value={form.label}
           onChange={e => setForm(f => ({ ...f, label: e.target.value }))}
+          onClick={e => e.stopPropagation()}
           style={{ ...inputStyle, flex: 1 }}
         />
-        <span style={{
+        <span data-wire-id={`cop-${cop.id}`} style={{
           fontSize: 10, fontWeight: 600, color: statusMeta.color,
           padding: '2px 6px', borderRadius: 12,
           border: `1px solid ${STATUS_BORDER[status] ?? 'var(--bd)'}`,
@@ -1300,7 +1487,7 @@ function RingFrameCard({ cop, busy, onUpdate, onDelete }) {
         }}>
           {statusMeta.label}
         </span>
-        <SmBtn onClick={() => onDelete(cop.id)} disabled={busy}>✕</SmBtn>
+        <SmBtn onClick={e => { e.stopPropagation(); onDelete(cop.id) }} disabled={busy}>✕</SmBtn>
       </div>
       <textarea
         rows={2}
