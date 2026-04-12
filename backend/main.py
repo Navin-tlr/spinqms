@@ -227,6 +227,7 @@ def _ensure_rsb_cans(trial_id: int, db: Session) -> List[LabRSBCan]:
 
 
 def _rsb_can_payload(can: LabRSBCan) -> dict:
+    readings = json.loads(can.readings_json) if can.readings_json else []
     return {
         "id":         can.id,
         "slot":       can.slot,
@@ -234,6 +235,10 @@ def _rsb_can_payload(can: LabRSBCan) -> dict:
         "hank_value": can.hank_value,
         "notes":      can.notes,
         "is_perfect": can.is_perfect,
+        "readings":   readings,
+        "readings_count": can.readings_count,
+        "mean_hank":  can.mean_hank,
+        "cv_pct":     can.cv_pct,
     }
 
 
@@ -1297,6 +1302,19 @@ def save_rsb_cans(trial_id: int, body: RSBCanBulkSave, db: Session = Depends(get
         row.hank_value = item.hank_value
         row.notes = item.notes
         row.is_perfect = item.is_perfect
+        readings = [round(r, 6) for r in (item.readings or []) if r is not None]
+        if readings:
+            stats = logic.calc_stats(readings) if len(readings) >= 2 else None
+            row.readings_json = json.dumps(readings)
+            row.readings_count = len(readings)
+            row.mean_hank = round(sum(readings) / len(readings), 6)
+            row.cv_pct = round(stats["cv"], 4) if stats else None
+            row.hank_value = row.mean_hank
+        else:
+            row.readings_json = None
+            row.readings_count = 0
+            row.mean_hank = None
+            row.cv_pct = None
     db.commit()
     refreshed = _ensure_rsb_cans(trial_id, db)
     return {"cans": [_rsb_can_payload(c) for c in refreshed]}

@@ -185,6 +185,7 @@ class RSBCanPayload(BaseModel):
     hank_value: Optional[float] = Field(None, gt=0)
     notes: Optional[str] = Field(None, max_length=200)
     is_perfect: bool = False
+    readings: Optional[List[float]] = None
 
 
 class RSBCanBulkSave(BaseModel):
@@ -199,12 +200,22 @@ class RSBCanBulkSave(BaseModel):
             raise ValueError("RSB slots must be between 1 and 5")
         if len(slots) != 5:
             raise ValueError("Provide exactly 5 cans (slots 1–5)")
+        for c in self.cans:
+            if c.readings:
+                if len(c.readings) not in (0, 3):
+                    raise ValueError("Provide exactly 3 readings per can")
+                if any(r is not None and r <= 0 for r in c.readings):
+                    raise ValueError("All readings must be positive numbers")
         return self
 
 
 class RSBCanOut(RSBCanPayload):
     id: int
     label: str
+    readings: List[float]
+    readings_count: int
+    mean_hank: Optional[float]
+    cv_pct: Optional[float]
 
 
 class SimplexBobbinCreate(BaseModel):

@@ -284,6 +284,10 @@ class LabRSBCan(Base):
     hank_value  = Column(Float,   nullable=True)
     notes       = Column(String,  nullable=True)
     is_perfect  = Column(Boolean, nullable=False, default=False)
+    readings_json  = Column(Text,    nullable=True)
+    readings_count = Column(Integer, nullable=False, default=0)
+    mean_hank      = Column(Float,   nullable=True)
+    cv_pct         = Column(Float,   nullable=True)
     created_at  = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
     updated_at  = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc),
                          onupdate=lambda: datetime.now(timezone.utc))

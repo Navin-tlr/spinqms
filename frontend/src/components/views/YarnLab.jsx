@@ -471,16 +471,46 @@ function FlowBoard({ trialId, flow, loading, refreshFlow }) {
   )
 }
 
+const emptyReadings = () => Array(3).fill('')
+
+function normalizeCan(can) {
+  const readings = emptyReadings()
+  if (Array.isArray(can.readings) && can.readings.length > 0) {
+    can.readings.slice(0, 3).forEach((val, idx) => { readings[idx] = val ?? '' })
+  }
+  return {
+    ...can,
+    notes: can.notes ?? '',
+    readings,
+    readings_count: can.readings_count ?? can.readings?.length ?? 0,
+    mean_hank: can.mean_hank ?? null,
+    cv_pct: can.cv_pct ?? null,
+  }
+}
+
+function calcReadingPreview(readings) {
+  const nums = readings
+    .map(v => parseFloat(v))
+    .filter(v => !Number.isNaN(v) && v > 0)
+  if (nums.length < 2) return null
+  const mean = nums.reduce((a, b) => a + b, 0) / nums.length
+  if (mean <= 0) return null
+  const variance = nums.reduce((acc, v) => acc + (v - mean) ** 2, 0) / (nums.length - 1 || 1)
+  const sd = Math.sqrt(variance)
+  const cv = (sd / mean) * 100
+  return { mean, cv }
+}
+
 function RSBPanel({ trialId, cans, refreshFlow }) {
-  const [draft, setDraft] = useState(() =>
-    cans.map(c => ({ ...c, hank_value: c.hank_value ?? '' }))
-  )
+  const [draft, setDraft] = useState(() => cans.map(normalizeCan))
   const [saving, setSaving] = useState(false)
   const [dirty, setDirty] = useState(false)
+  const [err, setErr] = useState('')
 
   useEffect(() => {
-    setDraft(cans.map(c => ({ ...c, hank_value: c.hank_value ?? '' })))
+    setDraft(cans.map(normalizeCan))
     setDirty(false)
+    setErr('')
   }, [cans])
 
   const update = (slot, field, value) => {
@@ -488,15 +518,40 @@ function RSBPanel({ trialId, cans, refreshFlow }) {
     setDirty(true)
   }
 
+  const updateReading = (slot, idx, value) => {
+    setDraft(rows => rows.map(r => {
+      if (r.slot !== slot) return r
+      const readings = r.readings.slice()
+      readings[idx] = value
+      return { ...r, readings }
+    }))
+    setDirty(true)
+  }
+
   const handleSave = async () => {
+    const invalid = draft.some(can => {
+      const filled = can.readings.filter(v => v !== '' && !Number.isNaN(parseFloat(v)))
+      return filled.length !== 0 && filled.length !== 3
+    })
+    if (invalid) {
+      setErr('Enter exactly 3 readings per can (or clear all inputs).')
+      return
+    }
+    setErr('')
     setSaving(true)
     try {
-      const payload = draft.map(c => ({
-        slot: c.slot,
-        hank_value: c.hank_value === '' || Number.isNaN(parseFloat(c.hank_value)) ? null : parseFloat(c.hank_value),
-        notes: c.notes ? c.notes.trim() : null,
-        is_perfect: Boolean(c.is_perfect),
-      }))
+      const payload = draft.map(c => {
+        const readings = c.readings
+          .map(v => parseFloat(v))
+          .filter(v => !Number.isNaN(v) && v > 0)
+        return {
+          slot: c.slot,
+          hank_value: null,
+          notes: c.notes ? c.notes.trim() : null,
+          is_perfect: Boolean(c.is_perfect),
+          readings: readings.length === 3 ? readings : [],
+        }
+      })
       await saveLabRSB(trialId, payload)
       await refreshFlow()
       setDirty(false)
@@ -552,13 +607,18 @@ function RSBPanel({ trialId, cans, refreshFlow }) {
                 </span>
               </div>
             </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
+              {can.readings.map((val, idx) => (
+                <input
+                  key={idx}
+                  type="number" step="any" placeholder={`Reading ${idx + 1}`}
+                  value={val}
+                  onChange={e => updateReading(can.slot, idx, e.target.value)}
+                  style={{ ...inputStyle, background: 'var(--bg)' }}
+                />
+              ))}
+            </div>
             <div style={{ display: 'flex', gap: 6 }}>
-              <input
-                type="number" step="any" placeholder="Hank"
-                value={can.hank_value}
-                onChange={e => update(can.slot, 'hank_value', e.target.value)}
-                style={{ ...inputStyle, background: 'var(--bg)', flex: 1 }}
-              />
               <input
                 type="text" placeholder="Notes"
                 value={can.notes ?? ''}
@@ -566,10 +626,30 @@ function RSBPanel({ trialId, cans, refreshFlow }) {
                 style={{ ...inputStyle, background: 'var(--bg)', flex: 1 }}
               />
             </div>
-            <span style={{ fontSize: 10, color: 'var(--tx-4)' }}>Drag to Simplex to link</span>
+            <ReadingSummary can={can} />
+            <span style={{ fontSize: 10, color: 'var(--tx-4)' }}>Drag to Simplex once readings are saved</span>
           </div>
         ))}
+        {err && <div style={{ fontSize: 12, color: 'var(--bad)' }}>{err}</div>}
       </div>
+    </div>
+  )
+}
+
+function ReadingSummary({ can }) {
+  const preview = calcReadingPreview(can.readings)
+  if (!preview && !can.mean_hank) return null
+  const mean = preview?.mean ?? can.mean_hank
+  const cv = preview?.cv ?? can.cv_pct
+  return (
+    <div style={{
+      display: 'flex', justifyContent: 'space-between', gap: 8,
+      fontSize: 11, padding: '6px 8px', borderRadius: 'var(--r)',
+      background: 'var(--bg)', border: '1px dashed var(--bd)',
+    }}>
+      <span>x̄ = {mean ? mean.toFixed(4) : '—'}</span>
+      <span>CV {cv != null ? cv.toFixed(2) : '—'}%</span>
+      <span style={{ color: 'var(--tx-4)' }}>{can.readings_count ?? can.readings.filter(v => v).length}/3 readings</span>
     </div>
   )
 }
