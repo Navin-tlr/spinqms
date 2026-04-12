@@ -314,6 +314,7 @@ class LabSimplexBobbin(Base):
     verified_same_hank = Column(Boolean, nullable=False, default=False)
     doff_minutes       = Column(Integer, nullable=False, default=180)
     order_index        = Column(Integer, nullable=False, default=0)
+    sample_length      = Column(Float,   nullable=False, default=6.0)
     readings_json      = Column(Text,    nullable=True)
     readings_count     = Column(Integer, nullable=False, default=0)
     mean_hank          = Column(Float,   nullable=True)
@@ -356,6 +357,7 @@ class LabRingframeCop(Base):
     readings_count = Column(Integer, nullable=False, default=0)
     mean_hank      = Column(Float,   nullable=True)
     cv_pct         = Column(Float,   nullable=True)
+    sample_length = Column(Float,   nullable=False, default=120.0)
     created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
 
     trial  = relationship("LabTrial", back_populates="ringframe_cops")

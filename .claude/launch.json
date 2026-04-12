@@ -2,6 +2,20 @@
   "version": "0.0.1",
   "configurations": [
     {
+      "name": "SpinQMS Frontend",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "cwd": "/Users/navinsivakumar/Desktop/QMS/frontend",
+      "port": 5173
+    },
+    {
+      "name": "SpinQMS API",
+      "runtimeExecutable": "/opt/homebrew/bin/uvicorn",
+      "runtimeArgs": ["main:app", "--reload", "--port", "8000"],
+      "cwd": "/Users/navinsivakumar/Desktop/QMS/backend",
+      "port": 8000
+    },
+    {
       "name": "SpinQMS Static Server",
       "runtimeExecutable": "python3",
       "runtimeArgs": ["-m", "http.server", "3000"],

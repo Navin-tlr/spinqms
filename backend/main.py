@@ -20,7 +20,7 @@ import json
 import logging
 import os
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -251,6 +251,19 @@ def _set_reading_fields(
             target.hank_value = None
 
 
+LAB_FLOW_DEPT_IDS = ("rsb", "simplex", "ringframe")
+
+
+def _lab_dept_map(db: Session) -> Dict[str, Department]:
+    """Return the subset of Department rows used by the lab flow UI."""
+    rows = (
+        db.query(Department)
+        .filter(Department.dept_id.in_(LAB_FLOW_DEPT_IDS))
+        .all()
+    )
+    return {row.dept_id: row for row in rows}
+
+
 def _benchmark_payload(dept: Optional[Department]) -> dict:
     if not dept:
         return {"target": 0.0, "tolerance": 0.0, "cv_limit": 0.0}
@@ -369,9 +382,7 @@ def _ringframe_cop_payload(
 
 
 def _build_lab_flow(trial_id: int, db: Session) -> LabFlowResponse:
-    dept_meta = {
-        d.dept_id: d for d in db.query(Department).filter(Department.dept_id.in_(["rsb", "simplex", "ringframe"])).all()
-    }
+    dept_meta = _lab_dept_map(db)
     rsb_dept = dept_meta.get("rsb")
     simplex_dept = dept_meta.get("simplex")
     ring_dept = dept_meta.get("ringframe")
@@ -1371,6 +1382,8 @@ def get_lab_flow(trial_id: int, db: Session = Depends(get_db)):
 @app.put("/api/lab/trials/{trial_id}/flow/rsb", response_model=RSBSection)
 def save_rsb_cans(trial_id: int, body: RSBCanBulkSave, db: Session = Depends(get_db)):
     _get_trial_or_404(trial_id, db)
+    dept_meta = _lab_dept_map(db)
+    rsb_dept = dept_meta.get("rsb")
     cans = _ensure_rsb_cans(trial_id, db)
     slot_map = {c.slot: c for c in cans}
     for item in body.cans:
@@ -1382,7 +1395,10 @@ def save_rsb_cans(trial_id: int, body: RSBCanBulkSave, db: Session = Depends(get
         _set_reading_fields(row, weights, row.sample_length)
     db.commit()
     refreshed = _ensure_rsb_cans(trial_id, db)
-    return {"cans": [_rsb_can_payload(c) for c in refreshed]}
+    return {
+        "cans": [_rsb_can_payload(c, rsb_dept) for c in refreshed],
+        "benchmark": _benchmark_payload(rsb_dept),
+    }
 
 
 @app.post("/api/lab/trials/{trial_id}/flow/simplex", status_code=201, response_model=SimplexBobbinOut)
@@ -1392,6 +1408,7 @@ def create_simplex_bobbin(
     db: Session = Depends(get_db),
 ):
     _get_trial_or_404(trial_id, db)
+    dept_meta = _lab_dept_map(db)
     count = (
         db.query(func.count(LabSimplexBobbin.id))
         .filter(LabSimplexBobbin.trial_id == trial_id)
@@ -1417,7 +1434,7 @@ def create_simplex_bobbin(
     _set_reading_fields(bobbin, readings, bobbin.sample_length)
     db.commit()
     db.refresh(bobbin)
-    return _simplex_bobbin_payload(bobbin)
+    return _simplex_bobbin_payload(bobbin, dept_meta.get("simplex"), dept_meta.get("rsb"))
 
 
 @app.put("/api/lab/simplex/{bobbin_id}", response_model=SimplexBobbinOut)
@@ -1426,6 +1443,7 @@ def update_simplex_bobbin(
     body: SimplexBobbinUpdate,
     db: Session = Depends(get_db),
 ):
+    dept_meta = _lab_dept_map(db)
     bobbin = (
         db.query(LabSimplexBobbin)
         .options(joinedload(LabSimplexBobbin.inputs).joinedload(LabSimplexInput.rsb_can))
@@ -1455,7 +1473,7 @@ def update_simplex_bobbin(
 
     db.commit()
     db.refresh(bobbin)
-    return _simplex_bobbin_payload(bobbin)
+    return _simplex_bobbin_payload(bobbin, dept_meta.get("simplex"), dept_meta.get("rsb"))
 
 
 @app.delete("/api/lab/simplex/{bobbin_id}", status_code=204)
@@ -1474,6 +1492,7 @@ def create_ringframe_cop(
     db: Session = Depends(get_db),
 ):
     _get_trial_or_404(trial_id, db)
+    dept_meta = _lab_dept_map(db)
     count = (
         db.query(func.count(LabRingframeCop.id))
         .filter(LabRingframeCop.trial_id == trial_id)
@@ -1496,7 +1515,12 @@ def create_ringframe_cop(
     _set_reading_fields(cop, readings, cop.sample_length)
     db.commit()
     db.refresh(cop)
-    return _ringframe_cop_payload(cop)
+    return _ringframe_cop_payload(
+        cop,
+        dept_meta.get("ringframe"),
+        dept_meta.get("simplex"),
+        dept_meta.get("rsb"),
+    )
 
 
 @app.put("/api/lab/ringframe/{cop_id}", response_model=RingframeCopOut)
@@ -1505,6 +1529,7 @@ def update_ringframe_cop(
     body: RingframeCopUpdate,
     db: Session = Depends(get_db),
 ):
+    dept_meta = _lab_dept_map(db)
     cop = (
         db.query(LabRingframeCop)
         .options(
@@ -1535,7 +1560,12 @@ def update_ringframe_cop(
 
     db.commit()
     db.refresh(cop)
-    return _ringframe_cop_payload(cop)
+    return _ringframe_cop_payload(
+        cop,
+        dept_meta.get("ringframe"),
+        dept_meta.get("simplex"),
+        dept_meta.get("rsb"),
+    )
 
 
 @app.delete("/api/lab/ringframe/{cop_id}", status_code=204)

@@ -217,6 +217,7 @@ class RSBCanOut(RSBCanPayload):
     readings_count: int
     mean_hank: Optional[float]
     cv_pct: Optional[float]
+    status: str
 
 
 class SimplexBobbinCreate(BaseModel):
@@ -225,6 +226,7 @@ class SimplexBobbinCreate(BaseModel):
     notes: Optional[str] = Field(None, max_length=200)
     verified_same_hank: bool = False
     doff_minutes: int = Field(180, ge=30, le=360)
+    sample_length: float = Field(6.0, gt=0)
     rsb_can_ids: List[int] = Field(default_factory=list)
     readings: Optional[List[float]] = None
 
@@ -244,6 +246,7 @@ class SimplexBobbinUpdate(BaseModel):
     notes: Optional[str] = Field(None, max_length=200)
     verified_same_hank: Optional[bool] = None
     doff_minutes: Optional[int] = Field(None, ge=30, le=360)
+    sample_length: Optional[float] = Field(None, gt=0)
     rsb_can_ids: Optional[List[int]] = None
     readings: Optional[List[float]] = None
 
@@ -264,6 +267,7 @@ class SimplexBobbinOut(BaseModel):
     notes: Optional[str]
     verified_same_hank: bool
     doff_minutes: int
+    sample_length: float
     rsb_can_ids: List[int]
     rsb_cans: List[RSBCanOut]
     created_at: datetime
@@ -271,6 +275,7 @@ class SimplexBobbinOut(BaseModel):
     readings_count: int
     mean_hank: Optional[float]
     cv_pct: Optional[float]
+    status: str
 
 
 class SimplexBobbinRef(BaseModel):
@@ -284,6 +289,7 @@ class RingframeCopCreate(BaseModel):
     hank_value: Optional[float] = Field(None, gt=0)
     notes: Optional[str] = Field(None, max_length=200)
     simplex_bobbin_ids: List[int] = Field(default_factory=list)
+    sample_length: float = Field(120.0, gt=0)
     readings: Optional[List[float]] = None
 
     @model_validator(mode="after")
@@ -301,6 +307,7 @@ class RingframeCopUpdate(BaseModel):
     hank_value: Optional[float] = Field(None, gt=0)
     notes: Optional[str] = Field(None, max_length=200)
     simplex_bobbin_ids: Optional[List[int]] = None
+    sample_length: Optional[float] = Field(None, gt=0)
     readings: Optional[List[float]] = None
 
     @model_validator(mode="after")
@@ -318,6 +325,7 @@ class RingframeCopOut(BaseModel):
     label: str
     hank_value: Optional[float]
     notes: Optional[str]
+    sample_length: float
     simplex_bobbin_ids: List[int]
     simplex_bobbins: List[SimplexBobbinRef]
     rsb_cans: List[RSBCanOut]
@@ -326,18 +334,28 @@ class RingframeCopOut(BaseModel):
     readings_count: int
     mean_hank: Optional[float]
     cv_pct: Optional[float]
+    status: str
+
+
+class BenchmarkInfo(BaseModel):
+    target: float
+    tolerance: float
+    cv_limit: float
 
 
 class RSBSection(BaseModel):
     cans: List[RSBCanOut]
+    benchmark: BenchmarkInfo
 
 
 class SimplexSection(BaseModel):
     bobbins: List[SimplexBobbinOut]
+    benchmark: BenchmarkInfo
 
 
 class RingframeSection(BaseModel):
     cops: List[RingframeCopOut]
+    benchmark: BenchmarkInfo
 
 
 class LabFlowResponse(BaseModel):
