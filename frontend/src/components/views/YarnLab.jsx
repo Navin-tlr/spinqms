@@ -18,6 +18,9 @@ const V_ICON   = { pass:'✓',            warn:'▲',              fail:'✕',  
 
 /* ── Ordered dept list ───────────────────────────────────────────────────── */
 const DEPT_ORDER = ['rsb','simplex','ringframe']
+const RSB_READING_COUNT = 3
+const SIMPLEX_READING_COUNT = 3
+const RING_READING_COUNT = 2
 
 /* ── Small helpers ───────────────────────────────────────────────────────── */
 function fmt(v, dp = 4) {
@@ -471,13 +474,16 @@ function FlowBoard({ trialId, flow, loading, refreshFlow }) {
   )
 }
 
-const emptyReadings = () => Array(3).fill('')
+const buildReadings = (source = [], count) => {
+  const arr = Array(count).fill('')
+  if (Array.isArray(source)) {
+    source.slice(0, count).forEach((val, idx) => { arr[idx] = val ?? '' })
+  }
+  return arr
+}
 
 function normalizeCan(can) {
-  const readings = emptyReadings()
-  if (Array.isArray(can.readings) && can.readings.length > 0) {
-    can.readings.slice(0, 3).forEach((val, idx) => { readings[idx] = val ?? '' })
-  }
+  const readings = buildReadings(can.readings, RSB_READING_COUNT)
   return {
     ...can,
     notes: can.notes ?? '',
@@ -546,9 +552,9 @@ function RSBPanel({ trialId, cans, refreshFlow }) {
           .filter(v => !Number.isNaN(v) && v > 0)
         return {
           slot: c.slot,
-          hank_value: null,
           notes: c.notes ? c.notes.trim() : null,
           is_perfect: Boolean(c.is_perfect),
+          sample_length: c.sample_length || 6,
           readings: readings.length === 3 ? readings : [],
         }
       })
@@ -618,12 +624,31 @@ function RSBPanel({ trialId, cans, refreshFlow }) {
                 />
               ))}
             </div>
-            <div style={{ display: 'flex', gap: 6 }}>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              <input
+                type="number" step="any" placeholder="Sample length (yds)"
+                value={can.sample_length ?? 6}
+                onChange={e => {
+                  const val = parseFloat(e.target.value)
+                  update(can.slot, 'sample_length', Number.isNaN(val) ? 6 : val)
+                }}
+                style={{ ...inputStyle, width: 130 }}
+              />
               <input
                 type="text" placeholder="Notes"
                 value={can.notes ?? ''}
                 onChange={e => update(can.slot, 'notes', e.target.value)}
                 style={{ ...inputStyle, background: 'var(--bg)', flex: 1 }}
+              />
+            </div>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <HankCalculator
+                sampleLength={can.sample_length ?? 6}
+                onApply={(val) => {
+                  const idx = can.readings.findIndex(v => v === '' || Number.isNaN(parseFloat(v)))
+                  const targetIdx = idx === -1 ? 0 : idx
+                  updateReading(can.slot, targetIdx, val.toFixed(4))
+                }}
               />
             </div>
             <ReadingSummary can={can} />
@@ -649,7 +674,53 @@ function ReadingSummary({ can }) {
     }}>
       <span>x̄ = {mean ? mean.toFixed(4) : '—'}</span>
       <span>CV {cv != null ? cv.toFixed(2) : '—'}%</span>
-      <span style={{ color: 'var(--tx-4)' }}>{can.readings_count ?? can.readings.filter(v => v).length}/3 readings</span>
+      <span>Len {can.sample_length ?? 6} yds</span>
+      <span style={{ color: 'var(--tx-4)' }}>{can.readings_count ?? can.readings.filter(v => v).length}/{RSB_READING_COUNT} readings</span>
+    </div>
+  )
+}
+
+function HankCalculator({ sampleLength, onApply }) {
+  const [weight, setWeight] = useState('')
+  const num = parseFloat(weight)
+  const hank = !Number.isNaN(num) && num > 0 ? weightToHank(num, sampleLength || 6) : null
+  return (
+    <div style={{
+      flex: 1, display: 'flex', alignItems: 'center', gap: 6,
+      fontSize: 11, border: '1px dashed var(--bd)', borderRadius: 'var(--r)', padding: '4px 8px',
+      background: 'var(--bg)',
+    }}>
+      <span style={{ color: 'var(--tx-3)' }}>Hank calc:</span>
+      <input
+        type="number" step="any" placeholder="Weight (g)"
+        value={weight}
+        onChange={e => setWeight(e.target.value)}
+        style={{ ...inputStyle, flex: 1 }}
+      />
+      <span style={{ fontFamily: 'var(--mono)', color: 'var(--tx-2)' }}>
+        {hank ? hank.toFixed(4) : '—'}
+      </span>
+      <SmBtn onClick={() => { if (hank) { onApply(hank); setWeight('') } }} disabled={!hank}>Use</SmBtn>
+    </div>
+  )
+}
+
+function MiniSummary({ readings, savedMean, savedCv, expected }) {
+  const preview = calcReadingPreview(readings)
+  if (!preview && !savedMean) return null
+  const mean = preview?.mean ?? savedMean
+  const cv = preview?.cv ?? savedCv
+  return (
+    <div style={{
+      display: 'flex', gap: 8, fontSize: 11,
+      border: '1px dashed var(--bd)', borderRadius: 'var(--r)',
+      padding: '6px 8px', background: 'var(--bg-2)',
+    }}>
+      <span> x̄ = {mean ? mean.toFixed(4) : '—'} </span>
+      <span> CV {cv != null ? cv.toFixed(2) : '—'}% </span>
+      <span style={{ color: 'var(--tx-4)' }}>
+        {(readings?.filter(v => v !== '').length ?? 0)}/{expected} readings
+      </span>
     </div>
   )
 }
@@ -728,6 +799,7 @@ function SimplexCard({ bobbin, busy, onUpdate, onDelete }) {
     notes: bobbin.notes ?? '',
     doff: bobbin.doff_minutes ?? 180,
     verified: bobbin.verified_same_hank,
+    readings: buildReadings(bobbin.readings, SIMPLEX_READING_COUNT),
   })
 
   useEffect(() => {
@@ -736,16 +808,23 @@ function SimplexCard({ bobbin, busy, onUpdate, onDelete }) {
       notes: bobbin.notes ?? '',
       doff: bobbin.doff_minutes ?? 180,
       verified: bobbin.verified_same_hank,
+      readings: buildReadings(bobbin.readings, SIMPLEX_READING_COUNT),
     })
   }, [bobbin])
 
   const handleSave = async () => {
-    const hankVal = parseFloat(form.hank)
+    const readings = form.readings
+      .map(v => parseFloat(v))
+      .filter(v => !Number.isNaN(v) && v > 0)
+    const mean = readings.length > 0
+      ? readings.reduce((a, b) => a + b, 0) / readings.length
+      : null
     await onUpdate(bobbin.id, {
-      hank_value: form.hank === '' || Number.isNaN(hankVal) ? null : hankVal,
+      hank_value: mean,
       notes: form.notes ? form.notes.trim() : null,
       doff_minutes: form.doff,
       verified_same_hank: form.verified,
+      readings,
     })
   }
 
@@ -786,26 +865,39 @@ function SimplexCard({ bobbin, busy, onUpdate, onDelete }) {
           <SmBtn onClick={() => onDelete(bobbin.id)} disabled={busy}>✕</SmBtn>
         </div>
       </div>
-      <div style={{ display: 'flex', gap: 6 }}>
-        <input type="number" step="any" placeholder="Hank"
-          value={form.hank}
-          onChange={e => setForm(f => ({ ...f, hank: e.target.value }))}
-          style={{ ...inputStyle, flex: 1 }}
-        />
-        <input
-          type="number" step="30" min="30" max="360" placeholder="Doff (min)"
-          value={form.doff}
-          onChange={e => {
-            const raw = parseInt(e.target.value, 10)
-            const next = Number.isNaN(raw) ? 180 : Math.min(360, Math.max(30, raw))
-            setForm(f => ({ ...f, doff: next }))
-          }}
-          style={{ ...inputStyle, width: 90 }}
-        />
+      <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
+          <span style={{ fontSize: 11, color: 'var(--tx-3)' }}>Doff minutes (default 180)</span>
+          <input
+            type="number" step="30" min="30" max="360"
+            value={form.doff}
+            onChange={e => {
+              const raw = parseInt(e.target.value, 10)
+              const next = Number.isNaN(raw) ? 180 : Math.min(360, Math.max(30, raw))
+              setForm(f => ({ ...f, doff: next }))
+            }}
+            style={{ ...inputStyle, width: 120 }}
+          />
+        </div>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
+        {form.readings.map((v, idx) => (
+          <input
+            key={idx}
+            type="number" step="any" placeholder={`Reading ${idx + 1}`}
+            value={v}
+            onChange={e => setForm(f => {
+              const arr = f.readings.slice()
+              arr[idx] = e.target.value
+              return { ...f, readings: arr }
+            })}
+            style={{ ...inputStyle }}
+          />
+        ))}
       </div>
       <textarea
         rows={2}
-        placeholder="Notes"
+        placeholder="Internal notes"
         value={form.notes}
         onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
         style={{ ...inputStyle, resize: 'none' }}
@@ -840,6 +932,7 @@ function SimplexCard({ bobbin, busy, onUpdate, onDelete }) {
           </span>
         ))}
       </div>
+      <MiniSummary readings={form.readings} savedMean={bobbin.mean_hank} savedCv={bobbin.cv_pct} expected={SIMPLEX_READING_COUNT} />
       <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
         <SmBtn primary onClick={handleSave} disabled={busy}>
           {busy ? 'Saving…' : 'Save Bobbin'}
@@ -922,6 +1015,7 @@ function RingFrameCard({ cop, busy, onUpdate, onDelete }) {
     label: cop.label,
     hank: cop.hank_value ?? '',
     notes: cop.notes ?? '',
+    readings: buildReadings(cop.readings, RING_READING_COUNT),
   })
 
   useEffect(() => {
@@ -929,15 +1023,23 @@ function RingFrameCard({ cop, busy, onUpdate, onDelete }) {
       label: cop.label,
       hank: cop.hank_value ?? '',
       notes: cop.notes ?? '',
+      readings: buildReadings(cop.readings, RING_READING_COUNT),
     })
   }, [cop])
 
   const handleSave = async () => {
     const hankVal = parseFloat(form.hank)
+    const readings = form.readings
+      .map(v => parseFloat(v))
+      .filter(v => !Number.isNaN(v) && v > 0)
+    const mean = readings.length > 0
+      ? readings.reduce((a, b) => a + b, 0) / readings.length
+      : null
     await onUpdate(cop.id, {
       label: form.label,
-      hank_value: form.hank === '' || Number.isNaN(hankVal) ? null : hankVal,
+      hank_value: form.hank === '' || Number.isNaN(hankVal) ? (mean ?? null) : hankVal,
       notes: form.notes ? form.notes.trim() : null,
+      readings,
     })
   }
 
@@ -976,6 +1078,21 @@ function RingFrameCard({ cop, busy, onUpdate, onDelete }) {
         onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
         style={{ ...inputStyle, resize: 'none' }}
       />
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 6 }}>
+        {form.readings.map((v, idx) => (
+          <input
+            key={idx}
+            type="number" step="any" placeholder={`Reading ${idx + 1}`}
+            value={v}
+            onChange={e => setForm(f => {
+              const arr = f.readings.slice()
+              arr[idx] = e.target.value
+              return { ...f, readings: arr }
+            })}
+            style={inputStyle}
+          />
+        ))}
+      </div>
       <div
         onDragOver={e => e.preventDefault()}
         onDrop={handleDrop}
@@ -1005,6 +1122,7 @@ function RingFrameCard({ cop, busy, onUpdate, onDelete }) {
           Upstream: {cop.rsb_cans.map(c => c.label).join(', ')}
         </div>
       )}
+      <MiniSummary readings={form.readings} savedMean={cop.mean_hank} savedCv={cop.cv_pct} expected={RING_READING_COUNT} />
       <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
         <SmBtn primary onClick={handleSave} disabled={busy}>
           {busy ? 'Saving…' : 'Save Cop'}

@@ -185,6 +185,7 @@ class RSBCanPayload(BaseModel):
     hank_value: Optional[float] = Field(None, gt=0)
     notes: Optional[str] = Field(None, max_length=200)
     is_perfect: bool = False
+    sample_length: float = Field(6.0, gt=0)
     readings: Optional[List[float]] = None
 
 
@@ -225,6 +226,16 @@ class SimplexBobbinCreate(BaseModel):
     verified_same_hank: bool = False
     doff_minutes: int = Field(180, ge=30, le=360)
     rsb_can_ids: List[int] = Field(default_factory=list)
+    readings: Optional[List[float]] = None
+
+    @model_validator(mode="after")
+    def validate_readings(self) -> "SimplexBobbinCreate":
+        if self.readings:
+            if len(self.readings) not in (0, 3):
+                raise ValueError("Provide exactly 3 readings for Simplex bobbins")
+            if any(r is not None and r <= 0 for r in self.readings):
+                raise ValueError("Simplex readings must be positive")
+        return self
 
 
 class SimplexBobbinUpdate(BaseModel):
@@ -234,6 +245,16 @@ class SimplexBobbinUpdate(BaseModel):
     verified_same_hank: Optional[bool] = None
     doff_minutes: Optional[int] = Field(None, ge=30, le=360)
     rsb_can_ids: Optional[List[int]] = None
+    readings: Optional[List[float]] = None
+
+    @model_validator(mode="after")
+    def validate_readings(self) -> "SimplexBobbinUpdate":
+        if self.readings is not None:
+            if len(self.readings) not in (0, 3):
+                raise ValueError("Provide exactly 3 readings for Simplex bobbins")
+            if any(r is not None and r <= 0 for r in self.readings):
+                raise ValueError("Simplex readings must be positive")
+        return self
 
 
 class SimplexBobbinOut(BaseModel):
@@ -246,6 +267,10 @@ class SimplexBobbinOut(BaseModel):
     rsb_can_ids: List[int]
     rsb_cans: List[RSBCanOut]
     created_at: datetime
+    readings: List[float]
+    readings_count: int
+    mean_hank: Optional[float]
+    cv_pct: Optional[float]
 
 
 class SimplexBobbinRef(BaseModel):
@@ -259,6 +284,16 @@ class RingframeCopCreate(BaseModel):
     hank_value: Optional[float] = Field(None, gt=0)
     notes: Optional[str] = Field(None, max_length=200)
     simplex_bobbin_ids: List[int] = Field(default_factory=list)
+    readings: Optional[List[float]] = None
+
+    @model_validator(mode="after")
+    def validate_readings(self) -> "RingframeCopCreate":
+        if self.readings:
+            if len(self.readings) not in (0, 2):
+                raise ValueError("Provide exactly 2 readings for ring frame cops")
+            if any(r is not None and r <= 0 for r in self.readings):
+                raise ValueError("Ring frame readings must be positive")
+        return self
 
 
 class RingframeCopUpdate(BaseModel):
@@ -266,6 +301,16 @@ class RingframeCopUpdate(BaseModel):
     hank_value: Optional[float] = Field(None, gt=0)
     notes: Optional[str] = Field(None, max_length=200)
     simplex_bobbin_ids: Optional[List[int]] = None
+    readings: Optional[List[float]] = None
+
+    @model_validator(mode="after")
+    def validate_readings(self) -> "RingframeCopUpdate":
+        if self.readings is not None:
+            if len(self.readings) not in (0, 2):
+                raise ValueError("Provide exactly 2 readings for ring frame cops")
+            if any(r is not None and r <= 0 for r in self.readings):
+                raise ValueError("Ring frame readings must be positive")
+        return self
 
 
 class RingframeCopOut(BaseModel):
@@ -277,6 +322,10 @@ class RingframeCopOut(BaseModel):
     simplex_bobbins: List[SimplexBobbinRef]
     rsb_cans: List[RSBCanOut]
     created_at: datetime
+    readings: List[float]
+    readings_count: int
+    mean_hank: Optional[float]
+    cv_pct: Optional[float]
 
 
 class RSBSection(BaseModel):

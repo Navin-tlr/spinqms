@@ -226,6 +226,25 @@ def _ensure_rsb_cans(trial_id: int, db: Session) -> List[LabRSBCan]:
     return cans
 
 
+def _set_reading_fields(
+    target,
+    readings: List[float],
+) -> None:
+    if readings:
+        stats = logic.calc_stats(readings) if len(readings) >= 2 else None
+        target.mean_hank = round(sum(readings) / len(readings), 6)
+        target.cv_pct = round(stats["cv"], 4) if stats else None
+        target.readings_json = json.dumps(readings)
+        target.readings_count = len(readings)
+        if hasattr(target, "hank_value") and target.hank_value is None:
+            target.hank_value = target.mean_hank
+    else:
+        target.readings_json = None
+        target.readings_count = 0
+        target.mean_hank = None
+        target.cv_pct = None
+
+
 def _rsb_can_payload(can: LabRSBCan) -> dict:
     readings = json.loads(can.readings_json) if can.readings_json else []
     return {
@@ -235,6 +254,7 @@ def _rsb_can_payload(can: LabRSBCan) -> dict:
         "hank_value": can.hank_value,
         "notes":      can.notes,
         "is_perfect": can.is_perfect,
+        "sample_length": can.sample_length,
         "readings":   readings,
         "readings_count": can.readings_count,
         "mean_hank":  can.mean_hank,
@@ -247,6 +267,7 @@ def _simplex_bobbin_payload(b: LabSimplexBobbin) -> dict:
         [inp for inp in b.inputs if inp.rsb_can is not None],
         key=lambda x: x.rsb_can.slot,
     )
+    readings = json.loads(b.readings_json) if b.readings_json else []
     return {
         "id":                 b.id,
         "label":              b.label,
@@ -257,6 +278,10 @@ def _simplex_bobbin_payload(b: LabSimplexBobbin) -> dict:
         "rsb_can_ids":        [inp.rsb_can_id for inp in links],
         "rsb_cans":           [_rsb_can_payload(inp.rsb_can) for inp in links],
         "created_at":         b.created_at,
+        "readings":           readings,
+        "readings_count":     b.readings_count,
+        "mean_hank":          b.mean_hank,
+        "cv_pct":             b.cv_pct,
     }
 
 
@@ -286,6 +311,7 @@ def _ringframe_cop_payload(c: LabRingframeCop) -> dict:
             seen_rsb.add(cid)
             rsb_refs.append(_rsb_can_payload(link.rsb_can))
 
+    readings = json.loads(c.readings_json) if c.readings_json else []
     return {
         "id":                 c.id,
         "label":              c.label,
@@ -295,6 +321,10 @@ def _ringframe_cop_payload(c: LabRingframeCop) -> dict:
         "simplex_bobbins":    simplex_refs,
         "rsb_cans":           rsb_refs,
         "created_at":         c.created_at,
+        "readings":           readings,
+        "readings_count":     c.readings_count,
+        "mean_hank":          c.mean_hank,
+        "cv_pct":             c.cv_pct,
     }
 
 
@@ -1057,7 +1087,7 @@ def create_lab_trial(body: LabTrialCreate, db: Session = Depends(get_db)):
         db.add(bench)
 
     for slot in range(1, 6):
-        db.add(LabRSBCan(trial_id=trial.id, slot=slot, is_perfect=False))
+        db.add(LabRSBCan(trial_id=trial.id, slot=slot, is_perfect=False, sample_length=6.0))
 
     db.commit()
     db.refresh(trial)
@@ -1299,22 +1329,13 @@ def save_rsb_cans(trial_id: int, body: RSBCanBulkSave, db: Session = Depends(get
     slot_map = {c.slot: c for c in cans}
     for item in body.cans:
         row = slot_map[item.slot]
-        row.hank_value = item.hank_value
         row.notes = item.notes
         row.is_perfect = item.is_perfect
+        row.sample_length = item.sample_length
         readings = [round(r, 6) for r in (item.readings or []) if r is not None]
-        if readings:
-            stats = logic.calc_stats(readings) if len(readings) >= 2 else None
-            row.readings_json = json.dumps(readings)
-            row.readings_count = len(readings)
-            row.mean_hank = round(sum(readings) / len(readings), 6)
-            row.cv_pct = round(stats["cv"], 4) if stats else None
-            row.hank_value = row.mean_hank
-        else:
-            row.readings_json = None
-            row.readings_count = 0
-            row.mean_hank = None
-            row.cv_pct = None
+        if item.hank_value is not None:
+            row.hank_value = item.hank_value
+        _set_reading_fields(row, readings)
     db.commit()
     refreshed = _ensure_rsb_cans(trial_id, db)
     return {"cans": [_rsb_can_payload(c) for c in refreshed]}
@@ -1347,6 +1368,8 @@ def create_simplex_bobbin(
     db.flush()
     if body.rsb_can_ids:
         _set_simplex_inputs(bobbin, body.rsb_can_ids, trial_id, db)
+    readings = [round(r, 6) for r in (body.readings or []) if r is not None]
+    _set_reading_fields(bobbin, readings)
     db.commit()
     db.refresh(bobbin)
     return _simplex_bobbin_payload(bobbin)
@@ -1379,6 +1402,9 @@ def update_simplex_bobbin(
         bobbin.doff_minutes = body.doff_minutes
     if body.rsb_can_ids is not None:
         _set_simplex_inputs(bobbin, body.rsb_can_ids, bobbin.trial_id, db)
+    if body.readings is not None:
+        readings = [round(r, 6) for r in body.readings if r is not None]
+        _set_reading_fields(bobbin, readings)
 
     db.commit()
     db.refresh(bobbin)
@@ -1418,6 +1444,8 @@ def create_ringframe_cop(
     db.flush()
     if body.simplex_bobbin_ids:
         _set_ringframe_inputs(cop, body.simplex_bobbin_ids, trial_id, db)
+    readings = [round(r, 6) for r in (body.readings or []) if r is not None]
+    _set_reading_fields(cop, readings)
     db.commit()
     db.refresh(cop)
     return _ringframe_cop_payload(cop)
@@ -1451,6 +1479,9 @@ def update_ringframe_cop(
         cop.notes = body.notes
     if body.simplex_bobbin_ids is not None:
         _set_ringframe_inputs(cop, body.simplex_bobbin_ids, cop.trial_id, db)
+    if body.readings is not None:
+        readings = [round(r, 6) for r in body.readings if r is not None]
+        _set_reading_fields(cop, readings)
 
     db.commit()
     db.refresh(cop)
