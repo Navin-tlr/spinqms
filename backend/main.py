@@ -159,7 +159,7 @@ def _get_trial_or_404(trial_id: int, db: Session) -> LabTrial:
 
 def _ordered_depts(db: Session) -> List[Department]:
     """All departments in canonical pipeline order."""
-    order = ["rsb", "simplex", "ringframe"]
+    order = ["carding", "drawing", "breaker", "rsb", "simplex", "ringframe", "autoconer"]
     rows  = {d.dept_id: d for d in db.query(Department).all()}
     return [rows[did] for did in order if did in rows]
 
@@ -229,23 +229,49 @@ def _ensure_rsb_cans(trial_id: int, db: Session) -> List[LabRSBCan]:
 def _set_reading_fields(
     target,
     readings: List[float],
+    sample_length: float,
 ) -> None:
-    if readings:
-        stats = logic.calc_stats(readings) if len(readings) >= 2 else None
-        target.mean_hank = round(sum(readings) / len(readings), 6)
+    weights = [round(r, 6) for r in readings if r is not None and r > 0]
+    if weights:
+        sample_len = sample_length if sample_length and sample_length > 0 else 6.0
+        hank_values = [(sample_len * 0.54) / w for w in weights if w > 0]
+        stats = logic.calc_stats(hank_values) if len(hank_values) >= 2 else None
+        target.mean_hank = round(sum(hank_values) / len(hank_values), 6) if hank_values else None
         target.cv_pct = round(stats["cv"], 4) if stats else None
-        target.readings_json = json.dumps(readings)
-        target.readings_count = len(readings)
-        if hasattr(target, "hank_value") and target.hank_value is None:
+        target.readings_json = json.dumps(weights)
+        target.readings_count = len(weights)
+        if hasattr(target, "hank_value"):
             target.hank_value = target.mean_hank
     else:
         target.readings_json = None
         target.readings_count = 0
         target.mean_hank = None
         target.cv_pct = None
+        if hasattr(target, "hank_value"):
+            target.hank_value = None
 
 
-def _rsb_can_payload(can: LabRSBCan) -> dict:
+def _benchmark_payload(dept: Optional[Department]) -> dict:
+    if not dept:
+        return {"target": 0.0, "tolerance": 0.0, "cv_limit": 0.0}
+    return {
+        "target": dept.target,
+        "tolerance": dept.tolerance,
+        "cv_limit": dept.uster_p50,
+    }
+
+
+def _unit_status(mean: Optional[float], cv: Optional[float], dept: Optional[Department]) -> str:
+    if dept is None or mean is None or cv is None:
+        return "pending"
+    in_hank = (dept.target - dept.tolerance) <= mean <= (dept.target + dept.tolerance)
+    in_cv = cv <= dept.uster_p50
+    if in_hank and in_cv:
+        return "perfect"
+    return "faulty"
+
+
+def _rsb_can_payload(can: LabRSBCan, dept: Optional[Department]) -> dict:
     readings = json.loads(can.readings_json) if can.readings_json else []
     return {
         "id":         can.id,
@@ -259,10 +285,15 @@ def _rsb_can_payload(can: LabRSBCan) -> dict:
         "readings_count": can.readings_count,
         "mean_hank":  can.mean_hank,
         "cv_pct":     can.cv_pct,
+        "status":     _unit_status(can.mean_hank, can.cv_pct, dept),
     }
 
 
-def _simplex_bobbin_payload(b: LabSimplexBobbin) -> dict:
+def _simplex_bobbin_payload(
+    b: LabSimplexBobbin,
+    simplex_dept: Optional[Department],
+    rsb_dept: Optional[Department],
+) -> dict:
     links = sorted(
         [inp for inp in b.inputs if inp.rsb_can is not None],
         key=lambda x: x.rsb_can.slot,
@@ -275,17 +306,24 @@ def _simplex_bobbin_payload(b: LabSimplexBobbin) -> dict:
         "notes":              b.notes,
         "verified_same_hank": b.verified_same_hank,
         "doff_minutes":       b.doff_minutes,
+        "sample_length":      b.sample_length,
         "rsb_can_ids":        [inp.rsb_can_id for inp in links],
-        "rsb_cans":           [_rsb_can_payload(inp.rsb_can) for inp in links],
+        "rsb_cans":           [_rsb_can_payload(inp.rsb_can, rsb_dept) for inp in links],
         "created_at":         b.created_at,
         "readings":           readings,
         "readings_count":     b.readings_count,
         "mean_hank":          b.mean_hank,
         "cv_pct":             b.cv_pct,
+        "status":             _unit_status(b.mean_hank, b.cv_pct, simplex_dept),
     }
 
 
-def _ringframe_cop_payload(c: LabRingframeCop) -> dict:
+def _ringframe_cop_payload(
+    c: LabRingframeCop,
+    ring_dept: Optional[Department],
+    simplex_dept: Optional[Department],
+    rsb_dept: Optional[Department],
+) -> dict:
     inputs = sorted(
         [inp for inp in c.inputs if inp.simplex_bobbin is not None],
         key=lambda x: (x.simplex_bobbin.order_index, x.simplex_bobbin_id),
@@ -309,7 +347,7 @@ def _ringframe_cop_payload(c: LabRingframeCop) -> dict:
             if cid in seen_rsb:
                 continue
             seen_rsb.add(cid)
-            rsb_refs.append(_rsb_can_payload(link.rsb_can))
+            rsb_refs.append(_rsb_can_payload(link.rsb_can, rsb_dept))
 
     readings = json.loads(c.readings_json) if c.readings_json else []
     return {
@@ -317,6 +355,7 @@ def _ringframe_cop_payload(c: LabRingframeCop) -> dict:
         "label":              c.label,
         "hank_value":         c.hank_value,
         "notes":              c.notes,
+        "sample_length":      c.sample_length,
         "simplex_bobbin_ids": [inp.simplex_bobbin_id for inp in inputs],
         "simplex_bobbins":    simplex_refs,
         "rsb_cans":           rsb_refs,
@@ -325,11 +364,18 @@ def _ringframe_cop_payload(c: LabRingframeCop) -> dict:
         "readings_count":     c.readings_count,
         "mean_hank":          c.mean_hank,
         "cv_pct":             c.cv_pct,
+        "status":             _unit_status(c.mean_hank, c.cv_pct, ring_dept),
     }
 
 
 def _build_lab_flow(trial_id: int, db: Session) -> LabFlowResponse:
-    cans = [_rsb_can_payload(c) for c in _ensure_rsb_cans(trial_id, db)]
+    dept_meta = {
+        d.dept_id: d for d in db.query(Department).filter(Department.dept_id.in_(["rsb", "simplex", "ringframe"])).all()
+    }
+    rsb_dept = dept_meta.get("rsb")
+    simplex_dept = dept_meta.get("simplex")
+    ring_dept = dept_meta.get("ringframe")
+    cans = [_rsb_can_payload(c, rsb_dept) for c in _ensure_rsb_cans(trial_id, db)]
     bobbins = (
         db.query(LabSimplexBobbin)
         .options(joinedload(LabSimplexBobbin.inputs).joinedload(LabSimplexInput.rsb_can))
@@ -351,9 +397,9 @@ def _build_lab_flow(trial_id: int, db: Session) -> LabFlowResponse:
     )
 
     return LabFlowResponse(
-        rsb={"cans": cans},
-        simplex={"bobbins": [_simplex_bobbin_payload(b) for b in bobbins]},
-        ringframe={"cops": [_ringframe_cop_payload(c) for c in cops]},
+        rsb={"cans": cans, "benchmark": _benchmark_payload(rsb_dept)},
+        simplex={"bobbins": [_simplex_bobbin_payload(b, simplex_dept, rsb_dept) for b in bobbins], "benchmark": _benchmark_payload(simplex_dept)},
+        ringframe={"cops": [_ringframe_cop_payload(c, ring_dept, simplex_dept, rsb_dept) for c in cops], "benchmark": _benchmark_payload(ring_dept)},
     )
 
 
@@ -1332,10 +1378,8 @@ def save_rsb_cans(trial_id: int, body: RSBCanBulkSave, db: Session = Depends(get
         row.notes = item.notes
         row.is_perfect = item.is_perfect
         row.sample_length = item.sample_length
-        readings = [round(r, 6) for r in (item.readings or []) if r is not None]
-        if item.hank_value is not None:
-            row.hank_value = item.hank_value
-        _set_reading_fields(row, readings)
+        weights = [round(r, 6) for r in (item.readings or []) if r is not None]
+        _set_reading_fields(row, weights, row.sample_length)
     db.commit()
     refreshed = _ensure_rsb_cans(trial_id, db)
     return {"cans": [_rsb_can_payload(c) for c in refreshed]}
@@ -1363,13 +1407,14 @@ def create_simplex_bobbin(
         verified_same_hank=body.verified_same_hank,
         doff_minutes=body.doff_minutes,
         order_index=count or 0,
+        sample_length=body.sample_length,
     )
     db.add(bobbin)
     db.flush()
     if body.rsb_can_ids:
         _set_simplex_inputs(bobbin, body.rsb_can_ids, trial_id, db)
     readings = [round(r, 6) for r in (body.readings or []) if r is not None]
-    _set_reading_fields(bobbin, readings)
+    _set_reading_fields(bobbin, readings, bobbin.sample_length)
     db.commit()
     db.refresh(bobbin)
     return _simplex_bobbin_payload(bobbin)
@@ -1400,11 +1445,13 @@ def update_simplex_bobbin(
         bobbin.verified_same_hank = body.verified_same_hank
     if body.doff_minutes is not None:
         bobbin.doff_minutes = body.doff_minutes
+    if body.sample_length is not None:
+        bobbin.sample_length = body.sample_length
     if body.rsb_can_ids is not None:
         _set_simplex_inputs(bobbin, body.rsb_can_ids, bobbin.trial_id, db)
     if body.readings is not None:
         readings = [round(r, 6) for r in body.readings if r is not None]
-        _set_reading_fields(bobbin, readings)
+        _set_reading_fields(bobbin, readings, bobbin.sample_length)
 
     db.commit()
     db.refresh(bobbin)
@@ -1439,13 +1486,14 @@ def create_ringframe_cop(
         label=label,
         hank_value=body.hank_value,
         notes=body.notes,
+        sample_length=body.sample_length,
     )
     db.add(cop)
     db.flush()
     if body.simplex_bobbin_ids:
         _set_ringframe_inputs(cop, body.simplex_bobbin_ids, trial_id, db)
     readings = [round(r, 6) for r in (body.readings or []) if r is not None]
-    _set_reading_fields(cop, readings)
+    _set_reading_fields(cop, readings, cop.sample_length)
     db.commit()
     db.refresh(cop)
     return _ringframe_cop_payload(cop)
@@ -1479,9 +1527,11 @@ def update_ringframe_cop(
         cop.notes = body.notes
     if body.simplex_bobbin_ids is not None:
         _set_ringframe_inputs(cop, body.simplex_bobbin_ids, cop.trial_id, db)
+    if body.sample_length is not None:
+        cop.sample_length = body.sample_length
     if body.readings is not None:
         readings = [round(r, 6) for r in body.readings if r is not None]
-        _set_reading_fields(cop, readings)
+        _set_reading_fields(cop, readings, cop.sample_length)
 
     db.commit()
     db.refresh(cop)

@@ -155,7 +155,7 @@ export default function App() {
       )}
       {view === 'settings' && <Settings depts={depts} onSettingsChanged={handleSettingsChanged} />}
       {view === 'guide' && <OperatorGuide />}
-      {view === 'lab'   && <YarnLab depts={depts} />}
+      {view === 'lab'   && <YarnLab depts={depts.filter(d => ['rsb', 'simplex', 'ringframe'].includes(d.id))} />}
     </Layout>
   )
 }

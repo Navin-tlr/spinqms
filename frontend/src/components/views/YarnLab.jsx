@@ -10,14 +10,14 @@ import { Spinner, Badge } from '../Primitives.jsx'
 import { decimalPlaces, weightToHank, hankToWeight } from '../../api.js'
 
 /* ── Colour maps ──────────────────────────────────────────────────────────── */
-const V_COLOR  = { pass:'var(--ok)',    warn:'var(--warn)',    fail:'var(--bad)',    pending:'var(--tx-4)'  }
-const V_BG     = { pass:'var(--ok-bg)', warn:'var(--warn-bg)', fail:'var(--bad-bg)', pending:'var(--bg-3)'  }
-const V_BD     = { pass:'var(--ok-bd)', warn:'var(--warn-bd)', fail:'var(--bad-bd)', pending:'var(--bd)'    }
-const V_LABEL  = { pass:'PASS',         warn:'MARGINAL',       fail:'FAIL',          pending:'PENDING'      }
-const V_ICON   = { pass:'✓',            warn:'▲',              fail:'✕',             pending:'…'            }
+const V_COLOR = { pass: 'var(--ok)', warn: 'var(--warn)', fail: 'var(--bad)', pending: 'var(--tx-4)' }
+const V_BG = { pass: 'var(--ok-bg)', warn: 'var(--warn-bg)', fail: 'var(--bad-bg)', pending: 'var(--bg-3)' }
+const V_BD = { pass: 'var(--ok-bd)', warn: 'var(--warn-bd)', fail: 'var(--bad-bd)', pending: 'var(--bd)' }
+const V_LABEL = { pass: 'PASS', warn: 'MARGINAL', fail: 'FAIL', pending: 'PENDING' }
+const V_ICON = { pass: '✓', warn: '▲', fail: '✕', pending: '…' }
 
 /* ── Ordered dept list ───────────────────────────────────────────────────── */
-const DEPT_ORDER = ['rsb','simplex','ringframe']
+const DEPT_ORDER = ['rsb', 'simplex', 'ringframe']
 const RSB_READING_COUNT = 3
 const SIMPLEX_READING_COUNT = 3
 const RING_READING_COUNT = 2
@@ -38,7 +38,7 @@ const STATUS_BORDER = {
 }
 const STATUS_META = {
   perfect: { label: 'Perfect', color: 'var(--ok)' },
-  faulty:  { label: 'Faulty',  color: 'var(--bad)' },
+  faulty: { label: 'Faulty', color: 'var(--bad)' },
   pending: { label: 'Pending', color: 'var(--tx-3)' },
 }
 const STAGE_LABEL = {
@@ -63,7 +63,7 @@ function fmtTarget(v, target) {
 function TrialCard({ trial, onOpen, onDelete }) {
   const [confirming, setConfirming] = useState(false)
   const created = new Date(trial.created_at).toLocaleDateString('en-GB', {
-    day:'2-digit', month:'short', year:'numeric',
+    day: '2-digit', month: 'short', year: 'numeric',
   })
   return (
     <div style={{
@@ -74,7 +74,7 @@ function TrialCard({ trial, onOpen, onDelete }) {
     }}
       onClick={() => onOpen(trial.id)}
       onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--bd-hv)'; e.currentTarget.style.boxShadow = 'var(--shadow-sm)' }}
-      onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--bd)';    e.currentTarget.style.boxShadow = 'none' }}
+      onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--bd)'; e.currentTarget.style.boxShadow = 'none' }}
     >
       {/* Flask icon */}
       <div style={{
@@ -99,8 +99,8 @@ function TrialCard({ trial, onOpen, onDelete }) {
           <span style={{
             fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 5, lineHeight: 1.6,
             background: trial.status === 'complete' ? 'var(--ok-bg)' : 'var(--info-bg, var(--bg-3))',
-            color:      trial.status === 'complete' ? 'var(--ok)'    : 'var(--tx-3)',
-            border:     `1px solid ${trial.status === 'complete' ? 'var(--ok-bd)' : 'var(--bd)'}`,
+            color: trial.status === 'complete' ? 'var(--ok)' : 'var(--tx-3)',
+            border: `1px solid ${trial.status === 'complete' ? 'var(--ok-bd)' : 'var(--bd)'}`,
           }}>{trial.status.toUpperCase()}</span>
         </div>
       </div>
@@ -109,9 +109,9 @@ function TrialCard({ trial, onOpen, onDelete }) {
         <SmBtn onClick={() => onOpen(trial.id)}>Open →</SmBtn>
         {confirming
           ? <>
-              <SmBtn danger onClick={() => onDelete(trial.id)}>Confirm</SmBtn>
-              <SmBtn onClick={() => setConfirming(false)}>Cancel</SmBtn>
-            </>
+            <SmBtn danger onClick={() => onDelete(trial.id)}>Confirm</SmBtn>
+            <SmBtn onClick={() => setConfirming(false)}>Cancel</SmBtn>
+          </>
           : <SmBtn danger onClick={() => setConfirming(true)}>Delete</SmBtn>
         }
       </div>
@@ -125,14 +125,14 @@ function TrialCard({ trial, onOpen, onDelete }) {
 function BenchmarkEditor({ dashboard, onSave, onCancel }) {
   const [rows, setRows] = useState(() =>
     dashboard.departments.map(d => ({
-      dept_id:   d.dept_id,
+      dept_id: d.dept_id,
       dept_name: d.dept_name,
-      target:    String(d.benchmark.target),
+      target: String(d.benchmark.target),
       tolerance: String(d.benchmark.tolerance),
     }))
   )
   const [saving, setSaving] = useState(false)
-  const [err,    setErr]    = useState('')
+  const [err, setErr] = useState('')
 
   const update = (i, field, val) =>
     setRows(r => r.map((row, idx) => idx === i ? { ...row, [field]: val } : row))
@@ -146,8 +146,8 @@ function BenchmarkEditor({ dashboard, onSave, onCancel }) {
     setSaving(true)
     try {
       await onSave(rows.map(r => ({
-        dept_id:   r.dept_id,
-        target:    parseFloat(r.target),
+        dept_id: r.dept_id,
+        target: parseFloat(r.target),
         tolerance: parseFloat(r.tolerance),
       })))
     } catch (e) {
@@ -207,27 +207,27 @@ function BenchmarkEditor({ dashboard, onSave, onCancel }) {
 ══════════════════════════════════════════════════════════════════════════════ */
 function SampleLogger({ dashboard, onSaved, onCancel }) {
   const depts = dashboard.departments
-  const [deptId,     setDeptId]     = useState(depts[0]?.dept_id ?? '')
-  const [readings,   setReadings]   = useState(Array(9).fill(''))
-  const [mode,       setMode]       = useState('direct')
-  const [sampleLen,  setSampleLen]  = useState(6)
-  const [notes,      setNotes]      = useState('')
-  const [saving,     setSaving]     = useState(false)
-  const [err,        setErr]        = useState('')
+  const [deptId, setDeptId] = useState(depts[0]?.dept_id ?? '')
+  const [readings, setReadings] = useState(Array(9).fill(''))
+  const [mode, setMode] = useState('direct')
+  const [sampleLen, setSampleLen] = useState(6)
+  const [notes, setNotes] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [err, setErr] = useState('')
 
-  const dept    = depts.find(d => d.dept_id === deptId)
-  const target  = dept?.benchmark?.target ?? 1
-  const p       = decimalPlaces(target)
-  const usl     = dept?.benchmark?.usl ?? (target + 0.1)
-  const lsl     = dept?.benchmark?.lsl ?? (target - 0.1)
+  const dept = depts.find(d => d.dept_id === deptId)
+  const target = dept?.benchmark?.target ?? 1
+  const p = decimalPlaces(target)
+  const usl = dept?.benchmark?.usl ?? (target + 0.1)
+  const lsl = dept?.benchmark?.lsl ?? (target - 0.1)
 
   const liveHanks = readings
     .map(v => parseFloat(v)).filter(v => !isNaN(v) && v > 0)
     .map(v => mode === 'weight' ? weightToHank(v, sampleLen) : v)
 
-  const liveN    = liveHanks.length
+  const liveN = liveHanks.length
   const liveMean = liveN >= 1 ? liveHanks.reduce((a, b) => a + b, 0) / liveN : null
-  const inSpec   = liveMean != null ? liveMean >= lsl && liveMean <= usl : null
+  const inSpec = liveMean != null ? liveMean >= lsl && liveMean <= usl : null
 
   const handleSave = async () => {
     const raw = readings.map(v => parseFloat(v)).filter(v => !isNaN(v) && v > 0)
@@ -257,8 +257,8 @@ function SampleLogger({ dashboard, onSaved, onCancel }) {
             style={{
               padding: '5px 12px', fontSize: 12, borderRadius: 20,
               border: '1.5px solid', cursor: 'pointer', fontFamily: 'var(--font)', fontWeight: deptId === d.dept_id ? 600 : 400, lineHeight: 1,
-              background:  deptId === d.dept_id ? 'var(--claude)' : 'transparent',
-              color:       deptId === d.dept_id ? '#fff' : 'var(--tx-2)',
+              background: deptId === d.dept_id ? 'var(--claude)' : 'transparent',
+              color: deptId === d.dept_id ? '#fff' : 'var(--tx-2)',
               borderColor: deptId === d.dept_id ? 'var(--claude)' : 'var(--bd-md)',
             }}>{d.dept_name}</button>
         ))}
@@ -267,7 +267,7 @@ function SampleLogger({ dashboard, onSaved, onCancel }) {
       {/* Mode + length */}
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
         <SegCtrl
-          opts={[['direct','Direct Hank'],['weight','By Weight']]}
+          opts={[['direct', 'Direct Hank'], ['weight', 'By Weight']]}
           value={mode} onChange={setMode}
         />
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -283,7 +283,7 @@ function SampleLogger({ dashboard, onSaved, onCancel }) {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
         {readings.map((v, i) => {
           const num = parseFloat(v)
-          const h   = !isNaN(num) && num > 0 ? (mode === 'weight' ? weightToHank(num, sampleLen) : num) : null
+          const h = !isNaN(num) && num > 0 ? (mode === 'weight' ? weightToHank(num, sampleLen) : num) : null
           const bad = h != null && (h > usl || h < lsl)
           return (
             <div key={i}>
@@ -294,7 +294,7 @@ function SampleLogger({ dashboard, onSaved, onCancel }) {
                 style={{
                   ...inputStyle,
                   borderColor: bad ? 'var(--bad-bd)' : h != null ? 'var(--ok-bd)' : 'var(--bd)',
-                  background:  bad ? 'var(--bad-bg)' : h != null ? 'var(--ok-bg)' : 'var(--bg)',
+                  background: bad ? 'var(--bad-bg)' : h != null ? 'var(--ok-bg)' : 'var(--bg)',
                 }}
               />
             </div>
@@ -346,10 +346,10 @@ function SampleLogger({ dashboard, onSaved, onCancel }) {
    DeptVerdictCard — one department row in the validation dashboard
 ══════════════════════════════════════════════════════════════════════════════ */
 function DeptVerdictCard({ dept, onDeleteSample }) {
-  const v       = dept.verdict
-  const bench   = dept.benchmark
-  const result  = dept.result
-  const p       = decimalPlaces(bench.target)
+  const v = dept.verdict
+  const bench = dept.benchmark
+  const result = dept.result
+  const p = decimalPlaces(bench.target)
   const [expanded, setExpanded] = useState(false)
 
   return (
@@ -402,14 +402,14 @@ function DeptVerdictCard({ dept, onDeleteSample }) {
           {result.n === 0
             ? <span style={{ fontSize: 12, color: 'var(--tx-4)', fontStyle: 'italic' }}>No data yet</span>
             : <>
-                <div style={{ fontSize: 12, fontFamily: 'var(--mono)', fontWeight: 600, color: V_COLOR[v] }}>
-                  x̄ = {fmtTarget(result.mean, bench.target)}
-                </div>
-                <div style={{ fontSize: 11, color: 'var(--tx-3)' }}>
-                  CV {fmt(result.cv, 2)}%
-                  {result.cpk != null && <> · Cpk {fmt(result.cpk, 3)}</>}
-                </div>
-              </>
+              <div style={{ fontSize: 12, fontFamily: 'var(--mono)', fontWeight: 600, color: V_COLOR[v] }}>
+                x̄ = {fmtTarget(result.mean, bench.target)}
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--tx-3)' }}>
+                CV {fmt(result.cv, 2)}%
+                {result.cpk != null && <> · Cpk {fmt(result.cpk, 3)}</>}
+              </div>
+            </>
           }
         </div>
 
@@ -442,7 +442,7 @@ function DeptVerdictCard({ dept, onDeleteSample }) {
               </span>
               <span style={{ color: 'var(--tx-3)' }}>CV {s.cv_pct?.toFixed(2) ?? '—'}%</span>
               <span style={{ color: 'var(--tx-4)', fontSize: 11 }}>
-                {new Date(s.timestamp).toLocaleString('en-GB', { hour:'2-digit', minute:'2-digit', day:'2-digit', month:'short' })}
+                {new Date(s.timestamp).toLocaleString('en-GB', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short' })}
               </span>
               {s.notes && <span style={{ color: 'var(--tx-3)', fontStyle: 'italic', flex: 1 }}>{s.notes}</span>}
               <button onClick={() => onDeleteSample(s.id)}
@@ -461,6 +461,19 @@ function DeptVerdictCard({ dept, onDeleteSample }) {
    FlowBoard — interactive RSB → Simplex → Ring Frame mapper
 ══════════════════════════════════════════════════════════════════════════════ */
 function FlowBoard({ trialId, flow, loading, refreshFlow }) {
+  useEffect(() => {
+    const handleDragOver = (e) => {
+      const edge = 100;
+      if (e.clientY < edge) {
+        window.scrollBy(0, -15);
+      } else if (window.innerHeight - e.clientY < edge) {
+        window.scrollBy(0, 15);
+      }
+    };
+    window.addEventListener('dragover', handleDragOver);
+    return () => window.removeEventListener('dragover', handleDragOver);
+  }, []);
+
   if (loading || !flow) {
     return (
       <div style={{
@@ -509,32 +522,59 @@ function findRootCause(flow) {
   for (const cop of flow.ringframe.cops) {
     if (cop.status !== 'faulty') continue
     const linkedBobbins = cop.simplex_bobbin_ids.map(id => simplexMap.get(id)).filter(Boolean)
+    const incomingBobbinsCv = linkedBobbins.length ?
+      linkedBobbins.reduce((a, b) => a + (b.cv_pct || 0), 0) / linkedBobbins.length : 0
+
     const upstreamCans = linkedBobbins.flatMap(b => b?.rsb_cans ?? [])
-    const faultyCan = upstreamCans.find(can => can.status === 'faulty')
-    if (faultyCan) {
-      return {
-        stage: 'rsb',
-        message: `Variation originated at RSB. ${faultyCan.label} drifted before building ${cop.label}.`,
-        context: `${cop.label} inherits sliver from ${linkedBobbins.map(b => b.label).join(', ') || 'Simplex'}.`,
-      }
-    }
-    const faultyBobbin = linkedBobbins.find(b => b.status === 'faulty')
-    if (faultyBobbin) {
+    const incomingCansCv = upstreamCans.length ?
+      upstreamCans.reduce((a, b) => a + (b.cv_pct || 0), 0) / upstreamCans.length : 0
+
+    const addedSimplex = Math.sqrt(Math.max(0, Math.pow(incomingBobbinsCv, 2) - Math.pow(incomingCansCv, 2)))
+    const addedRingFrame = Math.sqrt(Math.max(0, Math.pow(cop.cv_pct || 0, 2) - Math.pow(incomingBobbinsCv, 2)))
+
+    if (addedSimplex > addedRingFrame && addedSimplex > 1.5) {
       return {
         stage: 'simplex',
-        message: `Variation originated at Simplex. ${faultyBobbin.label} is out of tolerance even though incoming sliver was perfect.`,
-        context: `Impacts final cop ${cop.label}.`,
+        message: `Variation originated at Simplex. It added a massive variation of ${addedSimplex.toFixed(2)}%.`,
+        context: `Calculated Added Irregularity: sqrt(${incomingBobbinsCv.toFixed(2)}^2 - ${incomingCansCv.toFixed(2)}^2) = ${addedSimplex.toFixed(2)}%. Fix simplex settings.`,
       }
-    }
-    return {
-      stage: 'ringframe',
-      message: `Variation originated at Ring Frame. ${cop.label} deviated even though upstream roving was perfect.`,
-      context: linkedBobbins.length ? `Linked bobbins: ${linkedBobbins.map(b => b.label).join(', ')}` : null,
+    } else if (addedRingFrame >= addedSimplex && addedRingFrame > 1.5) {
+      return {
+        stage: 'ringframe',
+        message: `Variation originated at Ring Frame. It added a massive variation of ${addedRingFrame.toFixed(2)}%.`,
+        context: `Calculated Added Irregularity: sqrt(${(cop.cv_pct || 0).toFixed(2)}^2 - ${incomingBobbinsCv.toFixed(2)}^2) = ${addedRingFrame.toFixed(2)}%. Check ring frame components.`,
+      }
+    } else {
+      const faultyCan = upstreamCans.find(can => can.status === 'faulty')
+      if (faultyCan) {
+        return {
+          stage: 'rsb',
+          message: `Variation drifted down from RSB. ${faultyCan.label} caused downstream failures.`,
+          context: `${cop.label} inherited bad sliver directly from ${faultyCan.label}.`,
+        }
+      }
+      return {
+        stage: 'ringframe',
+        message: `Variation originated at Ring Frame. ${cop.label} deviated without massive single-stage drift.`,
+        context: linkedBobbins.length ? `Linked bobbins: ${linkedBobbins.map(b => b.label).join(', ')}` : null,
+      }
     }
   }
 
   const faultyBobbin = flow.simplex.bobbins.find(b => b.status === 'faulty')
   if (faultyBobbin) {
+    const incomingCansCv = faultyBobbin.rsb_cans?.length ?
+      faultyBobbin.rsb_cans.reduce((a, b) => a + (b.cv_pct || 0), 0) / faultyBobbin.rsb_cans.length : 0
+    const addedSimplex = Math.sqrt(Math.max(0, Math.pow(faultyBobbin.cv_pct || 0, 2) - Math.pow(incomingCansCv, 2)))
+
+    if (addedSimplex > 1.5) {
+      return {
+        stage: 'simplex',
+        message: `Variation originated at Simplex. Added variation of ${addedSimplex.toFixed(2)}%.`,
+        context: `Calculated Added Irregularity vs RSB is massive. Check drafting settings.`,
+      }
+    }
+
     const faultyCan = faultyBobbin.rsb_cans?.find(c => c.status === 'faulty')
     if (faultyCan) {
       return {
@@ -611,14 +651,16 @@ function normalizeCan(can) {
 }
 
 function calcReadingPreview(weights, sampleLength) {
+  const weightNums = weights.map(v => parseFloat(v)).filter(v => !Number.isNaN(v) && v > 0)
   const nums = toHanks(weights, sampleLength)
-  if (nums.length < 2) return null
+  if (nums.length < 1) return null
+  const avgWeight = weightNums.length > 0 ? weightNums.reduce((a, b) => a + b, 0) / weightNums.length : 0
   const mean = nums.reduce((a, b) => a + b, 0) / nums.length
   if (mean <= 0) return null
-  const variance = nums.reduce((acc, v) => acc + (v - mean) ** 2, 0) / (nums.length - 1 || 1)
+  const variance = nums.length >= 2 ? nums.reduce((acc, v) => acc + (v - mean) ** 2, 0) / (nums.length - 1) : 0
   const sd = Math.sqrt(variance)
   const cv = (sd / mean) * 100
-  return { mean, cv }
+  return { mean, cv, avgWeight }
 }
 
 function RSBPanel({ trialId, cans, refreshFlow }) {
@@ -701,87 +743,78 @@ function RSBPanel({ trialId, cans, refreshFlow }) {
         {draft.map(can => {
           const status = can.status ?? 'pending'
           return (
-          <div key={can.id}
-            style={{
-              border: `1px solid ${STATUS_BORDER[status] ?? 'var(--bd)'}`,
-              borderRadius: 'var(--r)',
-              padding: 10,
-              background: STATUS_BG[status] ?? 'var(--bg-2)',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 6,
-            }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--tx)' }}>Can {can.slot}</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--tx-3)' }}>
-                  <input type="checkbox" checked={!!can.is_perfect}
-                    onChange={e => update(can.slot, 'is_perfect', e.target.checked)}
-                  />
-                  Perfect
-                </label>
-                <span
-                  draggable
-                  onDragStart={e => handleDrag(e, can.id)}
-                  style={{ cursor: 'grab', fontSize: 12, color: 'var(--tx-4)' }}
-                  title="Drag to Simplex"
-                >
-                  ⇄
-                </span>
-              </div>
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
-              {can.readings.map((val, idx) => {
-                const weight = parseFloat(val)
-                const hank = !Number.isNaN(weight) && weight > 0
-                  ? weightToHank(weight, can.sample_length || DEFAULT_LENGTHS.rsb)
-                  : null
-                return (
-                  <div key={idx} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                    <input
-                      type="number" step="any" placeholder={`Weight ${idx + 1} (g)`}
-                      value={val}
-                      onChange={e => updateReading(can.slot, idx, e.target.value)}
-                      style={{ ...inputStyle, background: 'var(--bg)' }}
+            <div key={can.id}
+              style={{
+                border: `1px solid ${STATUS_BORDER[status] ?? 'var(--bd)'}`,
+                borderRadius: 'var(--r)',
+                padding: 10,
+                background: STATUS_BG[status] ?? 'var(--bg-2)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 6,
+              }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--tx)' }}>Can {can.slot}</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--tx-3)' }}>
+                    <input type="checkbox" checked={!!can.is_perfect}
+                      onChange={e => update(can.slot, 'is_perfect', e.target.checked)}
                     />
-                    <span style={{ fontSize: 10, color: 'var(--tx-3)' }}>
-                      → Hank {hank ? hank.toFixed(4) : '—'}
-                    </span>
-                  </div>
-                )
-              })}
+                    Perfect
+                  </label>
+                  <span
+                    draggable
+                    onDragStart={e => handleDrag(e, can.id)}
+                    style={{ cursor: 'grab', fontSize: 12, color: 'var(--tx-4)' }}
+                    title="Drag to Simplex"
+                  >
+                    ⇄
+                  </span>
+                </div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
+                {can.readings.map((val, idx) => {
+                  const weight = parseFloat(val)
+                  const hank = !Number.isNaN(weight) && weight > 0
+                    ? weightToHank(weight, can.sample_length || DEFAULT_LENGTHS.rsb)
+                    : null
+                  return (
+                    <div key={idx} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                      <input
+                        type="number" step="any" placeholder={`Weight ${idx + 1} (g)`}
+                        value={val}
+                        onChange={e => updateReading(can.slot, idx, e.target.value)}
+                        style={{ ...inputStyle, background: 'var(--bg)' }}
+                      />
+                      <span style={{ fontSize: 10, color: 'var(--tx-3)' }}>
+                        → Hank {hank ? hank.toFixed(4) : '—'}
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                <input
+                  type="number" step="any" placeholder="Sample length (yds)"
+                  value={can.sample_length ?? 6}
+                  onChange={e => {
+                    const val = parseFloat(e.target.value)
+                    update(can.slot, 'sample_length', Number.isNaN(val) ? 6 : val)
+                  }}
+                  style={{ ...inputStyle, width: 130 }}
+                />
+                <input
+                  type="text" placeholder="Notes"
+                  value={can.notes ?? ''}
+                  onChange={e => update(can.slot, 'notes', e.target.value)}
+                  style={{ ...inputStyle, background: 'var(--bg)', flex: 1 }}
+                />
+              </div>
+              <ReadingSummary can={can} />
+              <span style={{ fontSize: 10, color: 'var(--tx-4)' }}>Drag to Simplex once readings are saved</span>
             </div>
-            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-              <input
-                type="number" step="any" placeholder="Sample length (yds)"
-                value={can.sample_length ?? 6}
-                onChange={e => {
-                  const val = parseFloat(e.target.value)
-                  update(can.slot, 'sample_length', Number.isNaN(val) ? 6 : val)
-                }}
-                style={{ ...inputStyle, width: 130 }}
-              />
-              <input
-                type="text" placeholder="Notes"
-                value={can.notes ?? ''}
-                onChange={e => update(can.slot, 'notes', e.target.value)}
-                style={{ ...inputStyle, background: 'var(--bg)', flex: 1 }}
-              />
-            </div>
-            <div style={{ display: 'flex', gap: 6 }}>
-              <HankCalculator
-                sampleLength={can.sample_length ?? 6}
-                onApply={(val) => {
-                  const idx = can.readings.findIndex(v => v === '' || Number.isNaN(parseFloat(v)))
-                  const targetIdx = idx === -1 ? 0 : idx
-                  updateReading(can.slot, targetIdx, val.toFixed(4))
-                }}
-              />
-            </div>
-            <ReadingSummary can={can} />
-            <span style={{ fontSize: 10, color: 'var(--tx-4)' }}>Drag to Simplex once readings are saved</span>
-          </div>
-        )})}
+          )
+        })}
         {err && <div style={{ fontSize: 12, color: 'var(--bad)' }}>{err}</div>}
       </div>
     </div>
@@ -793,62 +826,45 @@ function ReadingSummary({ can }) {
   if (!preview && !can.mean_hank) return null
   const mean = preview?.mean ?? can.mean_hank
   const cv = preview?.cv ?? can.cv_pct
+  const avgW = preview?.avgWeight
   return (
     <div style={{
-      display: 'flex', justifyContent: 'space-between', gap: 8,
+      display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap',
       fontSize: 11, padding: '6px 8px', borderRadius: 'var(--r)',
-      background: 'var(--bg)', border: '1px dashed var(--bd)',
+      background: 'var(--ok-bg)', border: '1px solid var(--ok-bd)', color: 'var(--ok)'
     }}>
-      <span>x̄ = {mean ? mean.toFixed(4) : '—'}</span>
-      <span>CV {cv != null ? cv.toFixed(2) : '—'}%</span>
-      <span>Len {can.sample_length ?? 6} yds</span>
-      <span style={{ color: 'var(--tx-4)' }}>{can.readings_count ?? can.readings.filter(v => v).length}/{RSB_READING_COUNT} readings</span>
+      <span style={{ fontWeight: 600 }}>Live Hank (x̄): {mean ? mean.toFixed(4) : '—'}</span>
+      {avgW ? <span style={{ fontWeight: 600 }}>Avg Weight: {avgW.toFixed(3)}g</span> : null}
+      <span>CV: {cv != null ? cv.toFixed(2) : '—'}%</span>
+      <span>Len: {can.sample_length ?? 6} yds</span>
+      <span style={{ color: 'var(--ok-bg)', padding: '0 4px', background: 'var(--ok)', borderRadius: 12 }}>
+        {can.readings_count ?? can.readings.filter(v => v).length}/{RSB_READING_COUNT}
+      </span>
     </div>
   )
 }
 
-function HankCalculator({ sampleLength, onApply }) {
-  const [weight, setWeight] = useState('')
-  const num = parseFloat(weight)
-  const hank = !Number.isNaN(num) && num > 0 ? weightToHank(num, sampleLength || 6) : null
-  return (
-    <div style={{
-      flex: 1, display: 'flex', alignItems: 'center', gap: 6,
-      fontSize: 11, border: '1px dashed var(--bd)', borderRadius: 'var(--r)', padding: '4px 8px',
-      background: 'var(--bg)',
-    }}>
-      <span style={{ color: 'var(--tx-3)' }}>Hank calc:</span>
-      <input
-        type="number" step="any" placeholder="Weight (g)"
-        value={weight}
-        onChange={e => setWeight(e.target.value)}
-        style={{ ...inputStyle, flex: 1 }}
-      />
-      <span style={{ fontFamily: 'var(--mono)', color: 'var(--tx-2)' }}>
-        {hank ? hank.toFixed(4) : '—'}
-      </span>
-      <SmBtn onClick={() => { if (!Number.isNaN(num) && num > 0) { onApply(num); setWeight('') } }} disabled={Number.isNaN(num) || num <= 0}>Use</SmBtn>
-    </div>
-  )
-}
+
 
 function MiniSummary({ readings, savedMean, savedCv, expected, sampleLength }) {
   const preview = calcReadingPreview(readings, sampleLength ?? DEFAULT_LENGTHS.rsb)
   if (!preview && !savedMean) return null
   const mean = preview?.mean ?? savedMean
   const cv = preview?.cv ?? savedCv
+  const avgW = preview?.avgWeight
   const len = sampleLength ? parseFloat(sampleLength) : null
   return (
     <div style={{
-      display: 'flex', gap: 8, fontSize: 11,
-      border: '1px dashed var(--bd)', borderRadius: 'var(--r)',
-      padding: '6px 8px', background: 'var(--bg-2)',
+      display: 'flex', gap: 8, fontSize: 11, flexWrap: 'wrap',
+      border: '1px solid var(--ok-bd)', borderRadius: 'var(--r)',
+      padding: '6px 8px', background: 'var(--ok-bg)', color: 'var(--ok)'
     }}>
-      <span> x̄ = {mean ? mean.toFixed(4) : '—'} </span>
-      <span> CV {cv != null ? cv.toFixed(2) : '—'}% </span>
-      {len ? <span> Len {len} yds </span> : null}
-      <span style={{ color: 'var(--tx-4)' }}>
-        {(readings?.filter(v => v !== '').length ?? 0)}/{expected} readings
+      <span style={{ fontWeight: 600 }}> Live Hank (x̄): {mean ? mean.toFixed(4) : '—'} </span>
+      {avgW ? <span style={{ fontWeight: 600 }}> Avg Weight: {avgW.toFixed(3)}g </span> : null}
+      <span> CV: {cv != null ? cv.toFixed(2) : '—'}% </span>
+      {len ? <span> Len: {len} yds </span> : null}
+      <span style={{ color: 'var(--ok-bg)', padding: '0 4px', background: 'var(--ok)', borderRadius: 12 }}>
+        {(readings?.filter(v => v !== '').length ?? 0)}/{expected}
       </span>
     </div>
   )
@@ -1060,18 +1076,6 @@ function SimplexCard({ bobbin, busy, onUpdate, onDelete }) {
           </div>
           <span style={{ fontSize: 11, color: 'var(--tx-4)' }}>Ne = (L × 0.54) / W</span>
         </div>
-        <HankCalculator
-          sampleLength={form.sampleLength || DEFAULT_LENGTHS.simplex}
-          onApply={(weight) => {
-            setForm(f => {
-              const arr = f.readings.slice()
-              const idx = arr.findIndex(val => val === '' || Number.isNaN(parseFloat(val)))
-              const targetIdx = idx === -1 ? 0 : idx
-              arr[targetIdx] = weight.toFixed(4)
-              return { ...f, readings: arr }
-            })
-          }}
-        />
       </div>
       <textarea
         rows={2}
@@ -1310,18 +1314,6 @@ function RingFrameCard({ cop, busy, onUpdate, onDelete }) {
           </div>
           <span style={{ fontSize: 11, color: 'var(--tx-4)' }}>Ne = (L × 0.54) / W</span>
         </div>
-        <HankCalculator
-          sampleLength={form.sampleLength || DEFAULT_LENGTHS.ringframe}
-          onApply={(weight) => {
-            setForm(f => {
-              const arr = f.readings.slice()
-              const idx = arr.findIndex(val => val === '' || Number.isNaN(parseFloat(val)))
-              const targetIdx = idx === -1 ? 0 : idx
-              arr[targetIdx] = weight.toFixed(4)
-              return { ...f, readings: arr }
-            })
-          }}
-        />
       </div>
       <div
         onDragOver={e => e.preventDefault()}
@@ -1373,10 +1365,10 @@ function RingFrameCard({ cop, busy, onUpdate, onDelete }) {
 ══════════════════════════════════════════════════════════════════════════════ */
 function TrialDashboard({ trialId, depts, onBack }) {
   const [dashboard, setDashboard] = useState(null)
-  const [loading,   setLoading]   = useState(true)
-  const [panel,     setPanel]     = useState(null)   // 'benchmarks' | 'log'
-  const [saving,    setSaving]    = useState(false)
-  const [flow,      setFlow]      = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [panel, setPanel] = useState(null)   // 'benchmarks' | 'log'
+  const [saving, setSaving] = useState(false)
+  const [flow, setFlow] = useState(null)
   const [flowLoading, setFlowLoading] = useState(true)
 
   const reload = useCallback(async () => {
@@ -1600,10 +1592,10 @@ function NewTrialModal({ onCreated, onCancel }) {
    YarnLab — root component
 ══════════════════════════════════════════════════════════════════════════════ */
 export default function YarnLab({ depts }) {
-  const [trials,     setTrials]     = useState([])
-  const [loading,    setLoading]    = useState(true)
-  const [openTrial,  setOpenTrial]  = useState(null)   // trial id currently open
-  const [showNew,    setShowNew]    = useState(false)
+  const [trials, setTrials] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [openTrial, setOpenTrial] = useState(null)   // trial id currently open
+  const [showNew, setShowNew] = useState(false)
 
   const loadTrials = useCallback(async () => {
     setLoading(true)
@@ -1729,7 +1721,7 @@ function SegCtrl({ opts, value, onChange }) {
             padding: '5px 12px', fontSize: 12, border: 'none', cursor: 'pointer',
             fontFamily: 'var(--font)', fontWeight: value === v ? 600 : 400, lineHeight: 1,
             background: value === v ? 'var(--bg-active)' : 'var(--bg)',
-            color:      value === v ? 'var(--tx)' : 'var(--tx-3)',
+            color: value === v ? 'var(--tx)' : 'var(--tx-3)',
             transition: 'all .1s',
           }}>{label}</button>
       ))}
@@ -1746,8 +1738,8 @@ function SmBtn({ children, onClick, primary, danger, disabled }) {
         borderRadius: 'var(--r)', cursor: disabled ? 'default' : 'pointer',
         fontFamily: 'var(--font)', lineHeight: 1, whiteSpace: 'nowrap',
         background: primary ? 'var(--claude)' : danger ? 'var(--bad-bg)' : 'var(--bg)',
-        color:      primary ? '#fff'          : danger ? 'var(--bad)'   : 'var(--tx-2)',
-        opacity:    disabled ? .5 : 1,
+        color: primary ? '#fff' : danger ? 'var(--bad)' : 'var(--tx-2)',
+        opacity: disabled ? .5 : 1,
         transition: 'all .1s',
       }}>
       {children}
