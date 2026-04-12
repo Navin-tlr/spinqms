@@ -1175,7 +1175,7 @@ function SimplexCard({ bobbin, busy, onUpdate, onDelete, bobbinFeedsTo }) {
             padding: '2px 6px', borderRadius: 12, background: 'var(--bg-2)',
             border: '1px solid var(--bd)', fontSize: 11,
           }}>
-            {can.label}
+            {can.slot ? `Can ${can.slot}` : can.label}
             <button onClick={() => removeCan(can.id)}
               style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--tx-4)' }}>
               ×
@@ -1190,7 +1190,7 @@ function SimplexCard({ bobbin, busy, onUpdate, onDelete, bobbinFeedsTo }) {
         expected={SIMPLEX_READING_COUNT}
         sampleLength={form.sampleLength || DEFAULT_LENGTHS.simplex}
       />
-      <ConnectionTag direction="Fed by ←" items={(bobbin.rsb_cans || []).map(c => c.label)} color="var(--tx-3)" />
+      <ConnectionTag direction="Fed by ←" items={(bobbin.rsb_cans || []).map(c => c.slot ? `Can ${c.slot}` : c.label)} color="var(--tx-3)" />
       <ConnectionTag direction="Feeds →" items={bobbinFeedsTo?.get(bobbin.id)} color="var(--ok)" />
       <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
         <SmBtn primary onClick={handleSave} disabled={busy}>
@@ -1428,7 +1428,7 @@ function RingFrameCard({ cop, busy, onUpdate, onDelete }) {
       </div>
       <ConnectionTag direction="Fed by ←" items={(cop.simplex_bobbins || []).map(b => b.label)} color="var(--tx-3)" />
       {cop.rsb_cans.length > 0 && (
-        <ConnectionTag direction="Upstream RSB ←" items={cop.rsb_cans.map(c => c.label)} color="var(--tx-4)" />
+        <ConnectionTag direction="Upstream RSB ←" items={cop.rsb_cans.map(c => c.slot ? `Can ${c.slot}` : c.label)} color="var(--tx-4)" />
       )}
       <MiniSummary
         readings={form.readings}
