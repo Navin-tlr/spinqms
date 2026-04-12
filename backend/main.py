@@ -29,7 +29,19 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
 from database import get_db
-from models import Department, LabBenchmark, LabSample, LabTrial, Sample, SettingsVersion
+from models import (
+    Department,
+    LabBenchmark,
+    LabRSBCan,
+    LabRingframeCop,
+    LabRingframeInput,
+    LabSample,
+    LabSimplexBobbin,
+    LabSimplexInput,
+    LabTrial,
+    Sample,
+    SettingsVersion,
+)
 from schemas import (
     Alert,
     DeptKPI,
@@ -37,9 +49,18 @@ from schemas import (
     IIRequest,
     IIResponse,
     LabBenchmarkItem,
+    LabFlowResponse,
+    RingframeCopCreate,
+    RingframeCopUpdate,
+    RingframeCopOut,
+    RSBCanBulkSave,
     LabSampleCreate,
+    RSBSection,
     LabTrialCreate,
     LabTrialUpdate,
+    SimplexBobbinCreate,
+    SimplexBobbinOut,
+    SimplexBobbinUpdate,
     PredictRequest,
     SampleCreate,
     SampleOut,
@@ -129,9 +150,16 @@ def _get_dept_or_404(dept_id: str, db: Session) -> Department:
     return d
 
 
+def _get_trial_or_404(trial_id: int, db: Session) -> LabTrial:
+    t = db.query(LabTrial).filter_by(id=trial_id).first()
+    if not t:
+        raise HTTPException(404, "Trial not found")
+    return t
+
+
 def _ordered_depts(db: Session) -> List[Department]:
     """All departments in canonical pipeline order."""
-    order = ["carding", "breaker", "rsb", "simplex", "ringframe", "autoconer"]
+    order = ["rsb", "simplex", "ringframe"]
     rows  = {d.dept_id: d for d in db.query(Department).all()}
     return [rows[did] for did in order if did in rows]
 
@@ -172,6 +200,190 @@ def _utc_iso(dt: datetime) -> str:
     if not s.endswith("Z") and "+" not in s:
         s += "Z"
     return s
+
+
+def _ensure_rsb_cans(trial_id: int, db: Session) -> List[LabRSBCan]:
+    cans = (
+        db.query(LabRSBCan)
+        .filter_by(trial_id=trial_id)
+        .order_by(LabRSBCan.slot.asc())
+        .all()
+    )
+    slots = {c.slot for c in cans}
+    created = False
+    for slot in range(1, 6):
+        if slot not in slots:
+            db.add(LabRSBCan(trial_id=trial_id, slot=slot, is_perfect=False))
+            created = True
+    if created:
+        db.commit()
+        cans = (
+            db.query(LabRSBCan)
+            .filter_by(trial_id=trial_id)
+            .order_by(LabRSBCan.slot.asc())
+            .all()
+        )
+    return cans
+
+
+def _rsb_can_payload(can: LabRSBCan) -> dict:
+    return {
+        "id":         can.id,
+        "slot":       can.slot,
+        "label":      f"Can {can.slot}",
+        "hank_value": can.hank_value,
+        "notes":      can.notes,
+        "is_perfect": can.is_perfect,
+    }
+
+
+def _simplex_bobbin_payload(b: LabSimplexBobbin) -> dict:
+    links = sorted(
+        [inp for inp in b.inputs if inp.rsb_can is not None],
+        key=lambda x: x.rsb_can.slot,
+    )
+    return {
+        "id":                 b.id,
+        "label":              b.label,
+        "hank_value":         b.hank_value,
+        "notes":              b.notes,
+        "verified_same_hank": b.verified_same_hank,
+        "doff_minutes":       b.doff_minutes,
+        "rsb_can_ids":        [inp.rsb_can_id for inp in links],
+        "rsb_cans":           [_rsb_can_payload(inp.rsb_can) for inp in links],
+        "created_at":         b.created_at,
+    }
+
+
+def _ringframe_cop_payload(c: LabRingframeCop) -> dict:
+    inputs = sorted(
+        [inp for inp in c.inputs if inp.simplex_bobbin is not None],
+        key=lambda x: (x.simplex_bobbin.order_index, x.simplex_bobbin_id),
+    )
+    simplex_refs = []
+    rsb_refs: list[dict] = []
+    seen_rsb: set[int] = set()
+    for inp in inputs:
+        bob = inp.simplex_bobbin
+        simplex_refs.append({
+            "id":         bob.id,
+            "label":      bob.label,
+            "hank_value": bob.hank_value,
+        })
+        sorted_links = sorted(
+            [link for link in bob.inputs if link.rsb_can is not None],
+            key=lambda x: x.rsb_can.slot,
+        )
+        for link in sorted_links:
+            cid = link.rsb_can.id
+            if cid in seen_rsb:
+                continue
+            seen_rsb.add(cid)
+            rsb_refs.append(_rsb_can_payload(link.rsb_can))
+
+    return {
+        "id":                 c.id,
+        "label":              c.label,
+        "hank_value":         c.hank_value,
+        "notes":              c.notes,
+        "simplex_bobbin_ids": [inp.simplex_bobbin_id for inp in inputs],
+        "simplex_bobbins":    simplex_refs,
+        "rsb_cans":           rsb_refs,
+        "created_at":         c.created_at,
+    }
+
+
+def _build_lab_flow(trial_id: int, db: Session) -> LabFlowResponse:
+    cans = [_rsb_can_payload(c) for c in _ensure_rsb_cans(trial_id, db)]
+    bobbins = (
+        db.query(LabSimplexBobbin)
+        .options(joinedload(LabSimplexBobbin.inputs).joinedload(LabSimplexInput.rsb_can))
+        .filter_by(trial_id=trial_id)
+        .order_by(LabSimplexBobbin.order_index.asc(), LabSimplexBobbin.id.asc())
+        .all()
+    )
+    cops = (
+        db.query(LabRingframeCop)
+        .options(
+            joinedload(LabRingframeCop.inputs)
+            .joinedload(LabRingframeInput.simplex_bobbin)
+            .joinedload(LabSimplexBobbin.inputs)
+            .joinedload(LabSimplexInput.rsb_can)
+        )
+        .filter_by(trial_id=trial_id)
+        .order_by(LabRingframeCop.id.asc())
+        .all()
+    )
+
+    return LabFlowResponse(
+        rsb={"cans": cans},
+        simplex={"bobbins": [_simplex_bobbin_payload(b) for b in bobbins]},
+        ringframe={"cops": [_ringframe_cop_payload(c) for c in cops]},
+    )
+
+
+def _set_simplex_inputs(
+    bobbin: LabSimplexBobbin,
+    rsb_can_ids: List[int],
+    trial_id: int,
+    db: Session,
+) -> None:
+    unique_ids: list[int] = []
+    seen: set[int] = set()
+    for cid in rsb_can_ids:
+        if cid in seen:
+            continue
+        unique_ids.append(cid)
+        seen.add(cid)
+    if not unique_ids:
+        db.query(LabSimplexInput).filter_by(bobbin_id=bobbin.id).delete()
+        return
+
+    rows = (
+        db.query(LabRSBCan.id)
+        .filter(LabRSBCan.trial_id == trial_id, LabRSBCan.id.in_(unique_ids))
+        .all()
+    )
+    found = {row.id for row in rows}
+    missing = [cid for cid in unique_ids if cid not in found]
+    if missing:
+        raise HTTPException(400, f"RSB can(s) {missing} not found in this trial")
+
+    db.query(LabSimplexInput).filter_by(bobbin_id=bobbin.id).delete()
+    for cid in unique_ids:
+        db.add(LabSimplexInput(bobbin_id=bobbin.id, rsb_can_id=cid))
+
+
+def _set_ringframe_inputs(
+    cop: LabRingframeCop,
+    simplex_bobbin_ids: List[int],
+    trial_id: int,
+    db: Session,
+) -> None:
+    unique_ids: list[int] = []
+    seen: set[int] = set()
+    for bid in simplex_bobbin_ids:
+        if bid in seen:
+            continue
+        unique_ids.append(bid)
+        seen.add(bid)
+    if not unique_ids:
+        db.query(LabRingframeInput).filter_by(cop_id=cop.id).delete()
+        return
+
+    rows = (
+        db.query(LabSimplexBobbin.id)
+        .filter(LabSimplexBobbin.trial_id == trial_id, LabSimplexBobbin.id.in_(unique_ids))
+        .all()
+    )
+    found = {row.id for row in rows}
+    missing = [bid for bid in unique_ids if bid not in found]
+    if missing:
+        raise HTTPException(400, f"Simplex bobbin(s) {missing} not found in this trial")
+
+    db.query(LabRingframeInput).filter_by(cop_id=cop.id).delete()
+    for bid in unique_ids:
+        db.add(LabRingframeInput(cop_id=cop.id, simplex_bobbin_id=bid))
 
 
 def _batch_means(
@@ -839,6 +1051,9 @@ def create_lab_trial(body: LabTrialCreate, db: Session = Depends(get_db)):
         )
         db.add(bench)
 
+    for slot in range(1, 6):
+        db.add(LabRSBCan(trial_id=trial.id, slot=slot, is_perfect=False))
+
     db.commit()
     db.refresh(trial)
     return {
@@ -976,7 +1191,7 @@ def get_lab_dashboard(trial_id: int, db: Session = Depends(get_db)):
         samples_by_dept.setdefault(s.dept_id, []).append(s)
 
     # Canonical dept order — only include depts that have a benchmark
-    order    = ["carding", "breaker", "rsb", "simplex", "ringframe", "autoconer"]
+    order    = ["rsb", "simplex", "ringframe"]
     dept_rows = []
 
     for dept_id in order:
@@ -1064,3 +1279,170 @@ def get_lab_dashboard(trial_id: int, db: Session = Depends(get_db)):
         "counts":      {"pass": n_pass, "warn": n_warn, "fail": n_fail, "pending": n_pending},
         "departments": dept_rows,
     }
+
+
+@app.get("/api/lab/trials/{trial_id}/flow", response_model=LabFlowResponse)
+def get_lab_flow(trial_id: int, db: Session = Depends(get_db)):
+    _get_trial_or_404(trial_id, db)
+    return _build_lab_flow(trial_id, db)
+
+
+@app.put("/api/lab/trials/{trial_id}/flow/rsb", response_model=RSBSection)
+def save_rsb_cans(trial_id: int, body: RSBCanBulkSave, db: Session = Depends(get_db)):
+    _get_trial_or_404(trial_id, db)
+    cans = _ensure_rsb_cans(trial_id, db)
+    slot_map = {c.slot: c for c in cans}
+    for item in body.cans:
+        row = slot_map[item.slot]
+        row.hank_value = item.hank_value
+        row.notes = item.notes
+        row.is_perfect = item.is_perfect
+    db.commit()
+    refreshed = _ensure_rsb_cans(trial_id, db)
+    return {"cans": [_rsb_can_payload(c) for c in refreshed]}
+
+
+@app.post("/api/lab/trials/{trial_id}/flow/simplex", status_code=201, response_model=SimplexBobbinOut)
+def create_simplex_bobbin(
+    trial_id: int,
+    body: SimplexBobbinCreate,
+    db: Session = Depends(get_db),
+):
+    _get_trial_or_404(trial_id, db)
+    count = (
+        db.query(func.count(LabSimplexBobbin.id))
+        .filter(LabSimplexBobbin.trial_id == trial_id)
+        .scalar()
+    )
+    provided_label = (body.label or "").strip()
+    label = provided_label or f"Bobbin {count + 1}"
+    bobbin = LabSimplexBobbin(
+        trial_id=trial_id,
+        label=label,
+        hank_value=body.hank_value,
+        notes=body.notes,
+        verified_same_hank=body.verified_same_hank,
+        doff_minutes=body.doff_minutes,
+        order_index=count or 0,
+    )
+    db.add(bobbin)
+    db.flush()
+    if body.rsb_can_ids:
+        _set_simplex_inputs(bobbin, body.rsb_can_ids, trial_id, db)
+    db.commit()
+    db.refresh(bobbin)
+    return _simplex_bobbin_payload(bobbin)
+
+
+@app.put("/api/lab/simplex/{bobbin_id}", response_model=SimplexBobbinOut)
+def update_simplex_bobbin(
+    bobbin_id: int,
+    body: SimplexBobbinUpdate,
+    db: Session = Depends(get_db),
+):
+    bobbin = (
+        db.query(LabSimplexBobbin)
+        .options(joinedload(LabSimplexBobbin.inputs).joinedload(LabSimplexInput.rsb_can))
+        .filter_by(id=bobbin_id)
+        .first()
+    )
+    if not bobbin:
+        raise HTTPException(404, "Simplex bobbin not found")
+
+    if body.label is not None:
+        bobbin.label = body.label.strip() or bobbin.label
+    if body.hank_value is not None:
+        bobbin.hank_value = body.hank_value
+    if body.notes is not None:
+        bobbin.notes = body.notes
+    if body.verified_same_hank is not None:
+        bobbin.verified_same_hank = body.verified_same_hank
+    if body.doff_minutes is not None:
+        bobbin.doff_minutes = body.doff_minutes
+    if body.rsb_can_ids is not None:
+        _set_simplex_inputs(bobbin, body.rsb_can_ids, bobbin.trial_id, db)
+
+    db.commit()
+    db.refresh(bobbin)
+    return _simplex_bobbin_payload(bobbin)
+
+
+@app.delete("/api/lab/simplex/{bobbin_id}", status_code=204)
+def delete_simplex_bobbin(bobbin_id: int, db: Session = Depends(get_db)):
+    bobbin = db.query(LabSimplexBobbin).filter_by(id=bobbin_id).first()
+    if not bobbin:
+        raise HTTPException(404, "Simplex bobbin not found")
+    db.delete(bobbin)
+    db.commit()
+
+
+@app.post("/api/lab/trials/{trial_id}/flow/ringframe", status_code=201, response_model=RingframeCopOut)
+def create_ringframe_cop(
+    trial_id: int,
+    body: RingframeCopCreate,
+    db: Session = Depends(get_db),
+):
+    _get_trial_or_404(trial_id, db)
+    count = (
+        db.query(func.count(LabRingframeCop.id))
+        .filter(LabRingframeCop.trial_id == trial_id)
+        .scalar()
+    )
+    provided_label = (body.label or "").strip()
+    label = provided_label or f"Cop {count + 1}"
+    cop = LabRingframeCop(
+        trial_id=trial_id,
+        label=label,
+        hank_value=body.hank_value,
+        notes=body.notes,
+    )
+    db.add(cop)
+    db.flush()
+    if body.simplex_bobbin_ids:
+        _set_ringframe_inputs(cop, body.simplex_bobbin_ids, trial_id, db)
+    db.commit()
+    db.refresh(cop)
+    return _ringframe_cop_payload(cop)
+
+
+@app.put("/api/lab/ringframe/{cop_id}", response_model=RingframeCopOut)
+def update_ringframe_cop(
+    cop_id: int,
+    body: RingframeCopUpdate,
+    db: Session = Depends(get_db),
+):
+    cop = (
+        db.query(LabRingframeCop)
+        .options(
+            joinedload(LabRingframeCop.inputs)
+            .joinedload(LabRingframeInput.simplex_bobbin)
+            .joinedload(LabSimplexBobbin.inputs)
+            .joinedload(LabSimplexInput.rsb_can)
+        )
+        .filter_by(id=cop_id)
+        .first()
+    )
+    if not cop:
+        raise HTTPException(404, "Ring frame cop not found")
+
+    if body.label is not None:
+        cop.label = body.label.strip() or cop.label
+    if body.hank_value is not None:
+        cop.hank_value = body.hank_value
+    if body.notes is not None:
+        cop.notes = body.notes
+    if body.simplex_bobbin_ids is not None:
+        _set_ringframe_inputs(cop, body.simplex_bobbin_ids, cop.trial_id, db)
+
+    db.commit()
+    db.refresh(cop)
+    return _ringframe_cop_payload(cop)
+
+
+@app.delete("/api/lab/ringframe/{cop_id}", status_code=204)
+def delete_ringframe_cop(cop_id: int, db: Session = Depends(get_db)):
+    cop = db.query(LabRingframeCop).filter_by(id=cop_id).first()
+    if not cop:
+        raise HTTPException(404, "Ring frame cop not found")
+    db.delete(cop)
+    db.commit()

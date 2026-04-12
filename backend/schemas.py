@@ -180,6 +180,112 @@ class LabSampleCreate(BaseModel):
         return self
 
 
+class RSBCanPayload(BaseModel):
+    slot: int = Field(..., ge=1, le=5)
+    hank_value: Optional[float] = Field(None, gt=0)
+    notes: Optional[str] = Field(None, max_length=200)
+    is_perfect: bool = False
+
+
+class RSBCanBulkSave(BaseModel):
+    cans: List[RSBCanPayload]
+
+    @model_validator(mode="after")
+    def validate_slots(self) -> "RSBCanBulkSave":
+        slots = [c.slot for c in self.cans]
+        if len(slots) != len(set(slots)):
+            raise ValueError("Duplicate RSB can slots are not allowed")
+        if any(slot < 1 or slot > 5 for slot in slots):
+            raise ValueError("RSB slots must be between 1 and 5")
+        if len(slots) != 5:
+            raise ValueError("Provide exactly 5 cans (slots 1–5)")
+        return self
+
+
+class RSBCanOut(RSBCanPayload):
+    id: int
+    label: str
+
+
+class SimplexBobbinCreate(BaseModel):
+    label: Optional[str] = Field(None, min_length=1, max_length=60)
+    hank_value: Optional[float] = Field(None, gt=0)
+    notes: Optional[str] = Field(None, max_length=200)
+    verified_same_hank: bool = False
+    doff_minutes: int = Field(180, ge=30, le=360)
+    rsb_can_ids: List[int] = Field(default_factory=list)
+
+
+class SimplexBobbinUpdate(BaseModel):
+    label: Optional[str] = Field(None, min_length=1, max_length=60)
+    hank_value: Optional[float] = Field(None, gt=0)
+    notes: Optional[str] = Field(None, max_length=200)
+    verified_same_hank: Optional[bool] = None
+    doff_minutes: Optional[int] = Field(None, ge=30, le=360)
+    rsb_can_ids: Optional[List[int]] = None
+
+
+class SimplexBobbinOut(BaseModel):
+    id: int
+    label: str
+    hank_value: Optional[float]
+    notes: Optional[str]
+    verified_same_hank: bool
+    doff_minutes: int
+    rsb_can_ids: List[int]
+    rsb_cans: List[RSBCanOut]
+    created_at: datetime
+
+
+class SimplexBobbinRef(BaseModel):
+    id: int
+    label: str
+    hank_value: Optional[float]
+
+
+class RingframeCopCreate(BaseModel):
+    label: Optional[str] = Field(None, min_length=1, max_length=60)
+    hank_value: Optional[float] = Field(None, gt=0)
+    notes: Optional[str] = Field(None, max_length=200)
+    simplex_bobbin_ids: List[int] = Field(default_factory=list)
+
+
+class RingframeCopUpdate(BaseModel):
+    label: Optional[str] = Field(None, min_length=1, max_length=60)
+    hank_value: Optional[float] = Field(None, gt=0)
+    notes: Optional[str] = Field(None, max_length=200)
+    simplex_bobbin_ids: Optional[List[int]] = None
+
+
+class RingframeCopOut(BaseModel):
+    id: int
+    label: str
+    hank_value: Optional[float]
+    notes: Optional[str]
+    simplex_bobbin_ids: List[int]
+    simplex_bobbins: List[SimplexBobbinRef]
+    rsb_cans: List[RSBCanOut]
+    created_at: datetime
+
+
+class RSBSection(BaseModel):
+    cans: List[RSBCanOut]
+
+
+class SimplexSection(BaseModel):
+    bobbins: List[SimplexBobbinOut]
+
+
+class RingframeSection(BaseModel):
+    cops: List[RingframeCopOut]
+
+
+class LabFlowResponse(BaseModel):
+    rsb: RSBSection
+    simplex: SimplexSection
+    ringframe: RingframeSection
+
+
 # ── Error response (used by global exception handler) ────────────────────────
 class ErrorResponse(BaseModel):
     detail:    str

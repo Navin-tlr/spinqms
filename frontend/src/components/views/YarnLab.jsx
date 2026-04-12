@@ -2,8 +2,11 @@ import { useState, useEffect, useCallback } from 'react'
 import {
   getLabTrials, createLabTrial, updateLabTrial, deleteLabTrial,
   setLabBenchmarks, addLabSample, deleteLabSample, getLabDashboard,
+  getLabFlow, saveLabRSB,
+  createSimplexBobbin, updateSimplexBobbin, deleteSimplexBobbin,
+  createRingframeCop, updateRingframeCop, deleteRingframeCop,
 } from '../../api.js'
-import { Spinner, Btn, Badge } from '../Primitives.jsx'
+import { Spinner, Badge } from '../Primitives.jsx'
 import { decimalPlaces, weightToHank, hankToWeight } from '../../api.js'
 
 /* ── Colour maps ──────────────────────────────────────────────────────────── */
@@ -14,7 +17,7 @@ const V_LABEL  = { pass:'PASS',         warn:'MARGINAL',       fail:'FAIL',     
 const V_ICON   = { pass:'✓',            warn:'▲',              fail:'✕',             pending:'…'            }
 
 /* ── Ordered dept list ───────────────────────────────────────────────────── */
-const DEPT_ORDER = ['carding','breaker','rsb','simplex','ringframe','autoconer']
+const DEPT_ORDER = ['rsb','simplex','ringframe']
 
 /* ── Small helpers ───────────────────────────────────────────────────────── */
 function fmt(v, dp = 4) {
@@ -427,6 +430,511 @@ function DeptVerdictCard({ dept, onDeleteSample }) {
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
+   FlowBoard — interactive RSB → Simplex → Ring Frame mapper
+══════════════════════════════════════════════════════════════════════════════ */
+function FlowBoard({ trialId, flow, loading, refreshFlow }) {
+  if (loading || !flow) {
+    return (
+      <div style={{
+        border: '1px solid var(--bd)', borderRadius: 'var(--r-lg)',
+        padding: 24, background: 'var(--bg-2)', display: 'flex', justifyContent: 'center',
+      }}>
+        <Spinner />
+      </div>
+    )
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <SectionHead>RSB → Simplex → Ring Frame Traceability</SectionHead>
+      <p style={{ margin: 0, fontSize: 12, color: 'var(--tx-3)' }}>
+        Complete the full flow within a shift by sampling five cans, verifying simplex bobbins (3 hr doff),
+        and linking ring frame cops. Drag cans onto bobbins, then bobbins onto cops for full lineage.
+      </p>
+      <div style={{
+        display: 'grid', gap: 12,
+        gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+      }}>
+        <RSBPanel trialId={trialId} cans={flow.rsb.cans} refreshFlow={refreshFlow} />
+        <SimplexPanel
+          trialId={trialId}
+          bobbins={flow.simplex.bobbins}
+          refreshFlow={refreshFlow}
+        />
+        <RingFramePanel
+          trialId={trialId}
+          cops={flow.ringframe.cops}
+          refreshFlow={refreshFlow}
+        />
+      </div>
+    </div>
+  )
+}
+
+function RSBPanel({ trialId, cans, refreshFlow }) {
+  const [draft, setDraft] = useState(() =>
+    cans.map(c => ({ ...c, hank_value: c.hank_value ?? '' }))
+  )
+  const [saving, setSaving] = useState(false)
+  const [dirty, setDirty] = useState(false)
+
+  useEffect(() => {
+    setDraft(cans.map(c => ({ ...c, hank_value: c.hank_value ?? '' })))
+    setDirty(false)
+  }, [cans])
+
+  const update = (slot, field, value) => {
+    setDraft(rows => rows.map(r => (r.slot === slot ? { ...r, [field]: value } : r)))
+    setDirty(true)
+  }
+
+  const handleSave = async () => {
+    setSaving(true)
+    try {
+      const payload = draft.map(c => ({
+        slot: c.slot,
+        hank_value: c.hank_value === '' || Number.isNaN(parseFloat(c.hank_value)) ? null : parseFloat(c.hank_value),
+        notes: c.notes ? c.notes.trim() : null,
+        is_perfect: Boolean(c.is_perfect),
+      }))
+      await saveLabRSB(trialId, payload)
+      await refreshFlow()
+      setDirty(false)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleDrag = (e, id) => {
+    e.dataTransfer.setData('application/x-rsb-can', String(id))
+    e.dataTransfer.effectAllowed = 'copy'
+  }
+
+  return (
+    <div style={{ border: '1.5px solid var(--bd)', borderRadius: 'var(--r-lg)', padding: 16, background: 'var(--bg)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+        <div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--tx)' }}>RSB Sampling</div>
+          <div style={{ fontSize: 11, color: 'var(--tx-4)' }}>5 cans · ~35 minutes total</div>
+        </div>
+        <SmBtn primary onClick={handleSave} disabled={saving || !dirty}>
+          {saving ? 'Saving…' : 'Save'}
+        </SmBtn>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {draft.map(can => (
+          <div key={can.id}
+            style={{
+              border: `1px solid ${can.is_perfect ? 'var(--ok-bd)' : 'var(--bd)'}`,
+              borderRadius: 'var(--r)',
+              padding: 10,
+              background: can.is_perfect ? 'var(--ok-bg)' : 'var(--bg-2)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 6,
+            }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--tx)' }}>Can {can.slot}</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--tx-3)' }}>
+                  <input type="checkbox" checked={!!can.is_perfect}
+                    onChange={e => update(can.slot, 'is_perfect', e.target.checked)}
+                  />
+                  Perfect
+                </label>
+                <span
+                  draggable
+                  onDragStart={e => handleDrag(e, can.id)}
+                  style={{ cursor: 'grab', fontSize: 12, color: 'var(--tx-4)' }}
+                  title="Drag to Simplex"
+                >
+                  ⇄
+                </span>
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <input
+                type="number" step="any" placeholder="Hank"
+                value={can.hank_value}
+                onChange={e => update(can.slot, 'hank_value', e.target.value)}
+                style={{ ...inputStyle, background: 'var(--bg)', flex: 1 }}
+              />
+              <input
+                type="text" placeholder="Notes"
+                value={can.notes ?? ''}
+                onChange={e => update(can.slot, 'notes', e.target.value)}
+                style={{ ...inputStyle, background: 'var(--bg)', flex: 1 }}
+              />
+            </div>
+            <span style={{ fontSize: 10, color: 'var(--tx-4)' }}>Drag to Simplex to link</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function SimplexPanel({ trialId, bobbins, refreshFlow }) {
+  const [busyId, setBusyId] = useState(null)
+
+  const handleAdd = async () => {
+    setBusyId('new')
+    try {
+      await createSimplexBobbin(trialId, { rsb_can_ids: [] })
+      await refreshFlow()
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  const handleUpdate = async (id, body) => {
+    setBusyId(id)
+    try {
+      await updateSimplexBobbin(id, body)
+      await refreshFlow()
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  const handleDelete = async (id) => {
+    setBusyId(id)
+    try {
+      await deleteSimplexBobbin(id)
+      await refreshFlow()
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  return (
+    <div style={{ border: '1.5px solid var(--bd)', borderRadius: 'var(--r-lg)', padding: 16, background: 'var(--bg)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+        <div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--tx)' }}>Simplex</div>
+          <div style={{ fontSize: 11, color: 'var(--tx-4)' }}>Verify hank parity · 3 hr doff</div>
+        </div>
+        <SmBtn primary onClick={handleAdd} disabled={busyId === 'new'}>
+          {busyId === 'new' ? 'Adding…' : '+ Add Bobbin'}
+        </SmBtn>
+      </div>
+      {bobbins.length === 0 ? (
+        <div style={{
+          border: '1px dashed var(--bd)', borderRadius: 'var(--r)', padding: 16,
+          fontSize: 12, color: 'var(--tx-3)', textAlign: 'center',
+        }}>
+          Drag perfect cans here to start the simplex run.
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {bobbins.map(b => (
+            <SimplexCard
+              key={b.id}
+              bobbin={b}
+              busy={busyId === b.id}
+              onUpdate={handleUpdate}
+              onDelete={handleDelete}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function SimplexCard({ bobbin, busy, onUpdate, onDelete }) {
+  const [form, setForm] = useState({
+    hank: bobbin.hank_value ?? '',
+    notes: bobbin.notes ?? '',
+    doff: bobbin.doff_minutes ?? 180,
+    verified: bobbin.verified_same_hank,
+  })
+
+  useEffect(() => {
+    setForm({
+      hank: bobbin.hank_value ?? '',
+      notes: bobbin.notes ?? '',
+      doff: bobbin.doff_minutes ?? 180,
+      verified: bobbin.verified_same_hank,
+    })
+  }, [bobbin])
+
+  const handleSave = async () => {
+    const hankVal = parseFloat(form.hank)
+    await onUpdate(bobbin.id, {
+      hank_value: form.hank === '' || Number.isNaN(hankVal) ? null : hankVal,
+      notes: form.notes ? form.notes.trim() : null,
+      doff_minutes: form.doff,
+      verified_same_hank: form.verified,
+    })
+  }
+
+  const handleDrop = async (e) => {
+    e.preventDefault()
+    const id = parseInt(e.dataTransfer.getData('application/x-rsb-can'), 10)
+    if (!id || bobbin.rsb_can_ids.includes(id)) return
+    await onUpdate(bobbin.id, { rsb_can_ids: [...bobbin.rsb_can_ids, id] })
+  }
+
+  const removeCan = async (id) => {
+    await onUpdate(bobbin.id, { rsb_can_ids: bobbin.rsb_can_ids.filter(cid => cid !== id) })
+  }
+
+  const handleDragStart = (e) => {
+    e.dataTransfer.setData('application/x-simplex-bobbin', String(bobbin.id))
+    e.dataTransfer.effectAllowed = 'copy'
+  }
+
+  return (
+    <div
+      style={{
+        border: '1px solid var(--bd)', borderRadius: 'var(--r)', padding: 12,
+        background: 'var(--bg-2)', display: 'flex', flexDirection: 'column', gap: 8,
+      }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span
+          draggable
+          onDragStart={handleDragStart}
+          style={{ cursor: 'grab', fontSize: 12, color: 'var(--tx-4)' }}
+          title="Drag to Ring Frame"
+        >
+          ⇄
+        </span>
+        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--tx)' }}>{bobbin.label}</div>
+        {bobbin.verified_same_hank && <Badge variant="ok">Hank ok</Badge>}
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+          <SmBtn onClick={() => onDelete(bobbin.id)} disabled={busy}>✕</SmBtn>
+        </div>
+      </div>
+      <div style={{ display: 'flex', gap: 6 }}>
+        <input type="number" step="any" placeholder="Hank"
+          value={form.hank}
+          onChange={e => setForm(f => ({ ...f, hank: e.target.value }))}
+          style={{ ...inputStyle, flex: 1 }}
+        />
+        <input
+          type="number" step="30" min="30" max="360" placeholder="Doff (min)"
+          value={form.doff}
+          onChange={e => {
+            const raw = parseInt(e.target.value, 10)
+            const next = Number.isNaN(raw) ? 180 : Math.min(360, Math.max(30, raw))
+            setForm(f => ({ ...f, doff: next }))
+          }}
+          style={{ ...inputStyle, width: 90 }}
+        />
+      </div>
+      <textarea
+        rows={2}
+        placeholder="Notes"
+        value={form.notes}
+        onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
+        style={{ ...inputStyle, resize: 'none' }}
+      />
+      <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--tx-3)' }}>
+        <input type="checkbox" checked={form.verified}
+          onChange={e => setForm(f => ({ ...f, verified: e.target.checked }))}
+        />
+        Output matches RSB hank
+      </label>
+      <div
+        onDragOver={e => e.preventDefault()}
+        onDrop={handleDrop}
+        style={{
+          border: '1px dashed var(--bd)', borderRadius: 'var(--r)', padding: 8,
+          minHeight: 46, display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center',
+          background: 'var(--bg)',
+        }}>
+        {bobbin.rsb_cans.length === 0 ? (
+          <span style={{ fontSize: 11, color: 'var(--tx-4)' }}>Drop RSB cans here</span>
+        ) : bobbin.rsb_cans.map(can => (
+          <span key={can.id} style={{
+            display: 'inline-flex', alignItems: 'center', gap: 4,
+            padding: '2px 6px', borderRadius: 12, background: 'var(--bg-2)',
+            border: '1px solid var(--bd)', fontSize: 11,
+          }}>
+            {can.label}
+            <button onClick={() => removeCan(can.id)}
+              style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--tx-4)' }}>
+              ×
+            </button>
+          </span>
+        ))}
+      </div>
+      <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+        <SmBtn primary onClick={handleSave} disabled={busy}>
+          {busy ? 'Saving…' : 'Save Bobbin'}
+        </SmBtn>
+      </div>
+    </div>
+  )
+}
+
+function RingFramePanel({ trialId, cops, refreshFlow }) {
+  const [busyId, setBusyId] = useState(null)
+
+  const handleAdd = async () => {
+    setBusyId('new')
+    try {
+      await createRingframeCop(trialId, { simplex_bobbin_ids: [] })
+      await refreshFlow()
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  const handleUpdate = async (id, body) => {
+    setBusyId(id)
+    try {
+      await updateRingframeCop(id, body)
+      await refreshFlow()
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  const handleDelete = async (id) => {
+    setBusyId(id)
+    try {
+      await deleteRingframeCop(id)
+      await refreshFlow()
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  return (
+    <div style={{ border: '1.5px solid var(--bd)', borderRadius: 'var(--r-lg)', padding: 16, background: 'var(--bg)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+        <div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--tx)' }}>Ring Frame</div>
+          <div style={{ fontSize: 11, color: 'var(--tx-4)' }}>Map bobbins → cops</div>
+        </div>
+        <SmBtn primary onClick={handleAdd} disabled={busyId === 'new'}>
+          {busyId === 'new' ? 'Adding…' : '+ Add Cop'}
+        </SmBtn>
+      </div>
+      {cops.length === 0 ? (
+        <div style={{
+          border: '1px dashed var(--bd)', borderRadius: 'var(--r)', padding: 16,
+          fontSize: 12, color: 'var(--tx-3)', textAlign: 'center',
+        }}>
+          Drag simplex bobbins to build cops.
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {cops.map(c => (
+            <RingFrameCard
+              key={c.id}
+              cop={c}
+              busy={busyId === c.id}
+              onUpdate={handleUpdate}
+              onDelete={handleDelete}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function RingFrameCard({ cop, busy, onUpdate, onDelete }) {
+  const [form, setForm] = useState({
+    label: cop.label,
+    hank: cop.hank_value ?? '',
+    notes: cop.notes ?? '',
+  })
+
+  useEffect(() => {
+    setForm({
+      label: cop.label,
+      hank: cop.hank_value ?? '',
+      notes: cop.notes ?? '',
+    })
+  }, [cop])
+
+  const handleSave = async () => {
+    const hankVal = parseFloat(form.hank)
+    await onUpdate(cop.id, {
+      label: form.label,
+      hank_value: form.hank === '' || Number.isNaN(hankVal) ? null : hankVal,
+      notes: form.notes ? form.notes.trim() : null,
+    })
+  }
+
+  const handleDrop = async (e) => {
+    e.preventDefault()
+    const id = parseInt(e.dataTransfer.getData('application/x-simplex-bobbin'), 10)
+    if (!id || cop.simplex_bobbin_ids.includes(id)) return
+    await onUpdate(cop.id, { simplex_bobbin_ids: [...cop.simplex_bobbin_ids, id] })
+  }
+
+  const removeBobbin = async (id) => {
+    await onUpdate(cop.id, { simplex_bobbin_ids: cop.simplex_bobbin_ids.filter(bid => bid !== id) })
+  }
+
+  return (
+    <div style={{
+      border: '1px solid var(--bd)', borderRadius: 'var(--r)', padding: 12,
+      background: 'var(--bg-2)', display: 'flex', flexDirection: 'column', gap: 8,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <input type="text" value={form.label}
+          onChange={e => setForm(f => ({ ...f, label: e.target.value }))}
+          style={{ ...inputStyle, flex: 1 }}
+        />
+        <SmBtn onClick={() => onDelete(cop.id)} disabled={busy}>✕</SmBtn>
+      </div>
+      <input type="number" step="any" placeholder="Hank"
+        value={form.hank}
+        onChange={e => setForm(f => ({ ...f, hank: e.target.value }))}
+        style={inputStyle}
+      />
+      <textarea
+        rows={2}
+        placeholder="Notes"
+        value={form.notes}
+        onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
+        style={{ ...inputStyle, resize: 'none' }}
+      />
+      <div
+        onDragOver={e => e.preventDefault()}
+        onDrop={handleDrop}
+        style={{
+          border: '1px dashed var(--bd)', borderRadius: 'var(--r)', padding: 8,
+          minHeight: 46, display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center',
+          background: 'var(--bg)',
+        }}>
+        {cop.simplex_bobbins.length === 0 ? (
+          <span style={{ fontSize: 11, color: 'var(--tx-4)' }}>Drop simplex bobbins here</span>
+        ) : cop.simplex_bobbins.map(b => (
+          <span key={b.id} style={{
+            display: 'inline-flex', alignItems: 'center', gap: 4,
+            padding: '2px 6px', borderRadius: 12, background: 'var(--bg-2)',
+            border: '1px solid var(--bd)', fontSize: 11,
+          }}>
+            {b.label}
+            <button onClick={() => removeBobbin(b.id)}
+              style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--tx-4)' }}>
+              ×
+            </button>
+          </span>
+        ))}
+      </div>
+      {cop.rsb_cans.length > 0 && (
+        <div style={{ fontSize: 11, color: 'var(--tx-3)' }}>
+          Upstream: {cop.rsb_cans.map(c => c.label).join(', ')}
+        </div>
+      )}
+      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+        <SmBtn primary onClick={handleSave} disabled={busy}>
+          {busy ? 'Saving…' : 'Save Cop'}
+        </SmBtn>
+      </div>
+    </div>
+  )
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
    TrialDashboard — full view of a single trial
 ══════════════════════════════════════════════════════════════════════════════ */
 function TrialDashboard({ trialId, depts, onBack }) {
@@ -434,6 +942,8 @@ function TrialDashboard({ trialId, depts, onBack }) {
   const [loading,   setLoading]   = useState(true)
   const [panel,     setPanel]     = useState(null)   // 'benchmarks' | 'log'
   const [saving,    setSaving]    = useState(false)
+  const [flow,      setFlow]      = useState(null)
+  const [flowLoading, setFlowLoading] = useState(true)
 
   const reload = useCallback(async () => {
     setLoading(true)
@@ -445,7 +955,17 @@ function TrialDashboard({ trialId, depts, onBack }) {
     }
   }, [trialId])
 
-  useEffect(() => { reload() }, [reload])
+  const loadFlow = useCallback(async () => {
+    setFlowLoading(true)
+    try {
+      const data = await getLabFlow(trialId)
+      setFlow(data)
+    } finally {
+      setFlowLoading(false)
+    }
+  }, [trialId])
+
+  useEffect(() => { reload(); loadFlow() }, [reload, loadFlow])
 
   const handleSaveBenchmarks = async (items) => {
     await setLabBenchmarks(trialId, items)
@@ -538,6 +1058,13 @@ function TrialDashboard({ trialId, depts, onBack }) {
           </div>
         )}
       </div>
+
+      <FlowBoard
+        trialId={trialId}
+        flow={flow}
+        loading={flowLoading}
+        refreshFlow={loadFlow}
+      />
 
       {/* Panel */}
       {panel === 'benchmarks' && (

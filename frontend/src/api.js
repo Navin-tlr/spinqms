@@ -59,6 +59,14 @@ export const setLabBenchmarks      = (id, items)           => http.post(`/lab/tr
 export const addLabSample          = (id, body)            => http.post(`/lab/trials/${id}/samples`, body).then(r => r.data)
 export const deleteLabSample       = (trialId, sampleId)   => http.delete(`/lab/trials/${trialId}/samples/${sampleId}`)
 export const getLabDashboard       = (id)                  => http.get(`/lab/trials/${id}/dashboard`).then(r => r.data)
+export const getLabFlow            = (id)                  => http.get(`/lab/trials/${id}/flow`).then(r => r.data)
+export const saveLabRSB            = (trialId, cans)       => http.put(`/lab/trials/${trialId}/flow/rsb`, { cans }).then(r => r.data)
+export const createSimplexBobbin   = (trialId, body)       => http.post(`/lab/trials/${trialId}/flow/simplex`, body).then(r => r.data)
+export const updateSimplexBobbin   = (id, body)            => http.put(`/lab/simplex/${id}`, body).then(r => r.data)
+export const deleteSimplexBobbin   = (id)                  => http.delete(`/lab/simplex/${id}`)
+export const createRingframeCop    = (trialId, body)       => http.post(`/lab/trials/${trialId}/flow/ringframe`, body).then(r => r.data)
+export const updateRingframeCop    = (id, body)            => http.put(`/lab/ringframe/${id}`, body).then(r => r.data)
+export const deleteRingframeCop    = (id)                  => http.delete(`/lab/ringframe/${id}`)
 
 // ── Hank formula helpers (client-side mirror of logic.py) ────────────────────
 export const weightToHank = (weightGrams, lengthYards) =>

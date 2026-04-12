@@ -35,7 +35,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from sqlalchemy import (
-    Column, Integer, String, Float, Text, DateTime,
+    Column, Integer, String, Float, Text, DateTime, Boolean,
     ForeignKey, Index, UniqueConstraint,
 )
 from sqlalchemy.orm import relationship
@@ -216,6 +216,12 @@ class LabTrial(Base):
                               cascade="all, delete-orphan")
     samples    = relationship("LabSample",    back_populates="trial",
                               cascade="all, delete-orphan")
+    rsb_cans   = relationship("LabRSBCan",       back_populates="trial",
+                              cascade="all, delete-orphan", order_by="LabRSBCan.slot")
+    simplex_bobbins = relationship("LabSimplexBobbin", back_populates="trial",
+                                   cascade="all, delete-orphan", order_by="LabSimplexBobbin.order_index")
+    ringframe_cops  = relationship("LabRingframeCop",  back_populates="trial",
+                                   cascade="all, delete-orphan", order_by="LabRingframeCop.id")
 
 
 # ── 5. YarnLAB — Gold Standard Benchmark ───────────────────────────────────
@@ -265,3 +271,97 @@ class LabSample(Base):
                             index=True)
 
     trial = relationship("LabTrial", back_populates="samples")
+
+
+# ── 7. YarnLAB — Flow tracking entities ───────────────────────────────────────
+class LabRSBCan(Base):
+    __tablename__ = "lab_rsb_cans"
+
+    id          = Column(Integer, primary_key=True)
+    trial_id    = Column(Integer, ForeignKey("lab_trials.id", ondelete="CASCADE"),
+                         nullable=False, index=True)
+    slot        = Column(Integer, nullable=False)  # 1..5
+    hank_value  = Column(Float,   nullable=True)
+    notes       = Column(String,  nullable=True)
+    is_perfect  = Column(Boolean, nullable=False, default=False)
+    created_at  = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    updated_at  = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc),
+                         onupdate=lambda: datetime.now(timezone.utc))
+
+    trial = relationship("LabTrial", back_populates="rsb_cans")
+    simplex_links = relationship("LabSimplexInput", back_populates="rsb_can",
+                                 cascade="all, delete-orphan")
+
+    __table_args__ = (
+        UniqueConstraint("trial_id", "slot", name="uq_rsb_trial_slot"),
+    )
+
+
+class LabSimplexBobbin(Base):
+    __tablename__ = "lab_simplex_bobbins"
+
+    id                 = Column(Integer, primary_key=True)
+    trial_id           = Column(Integer, ForeignKey("lab_trials.id", ondelete="CASCADE"),
+                                nullable=False, index=True)
+    label              = Column(String,  nullable=False)
+    hank_value         = Column(Float,   nullable=True)
+    notes              = Column(String,  nullable=True)
+    verified_same_hank = Column(Boolean, nullable=False, default=False)
+    doff_minutes       = Column(Integer, nullable=False, default=180)
+    order_index        = Column(Integer, nullable=False, default=0)
+    created_at         = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+
+    trial   = relationship("LabTrial", back_populates="simplex_bobbins")
+    inputs  = relationship("LabSimplexInput", back_populates="bobbin",
+                           cascade="all, delete-orphan")
+    outputs = relationship("LabRingframeInput", back_populates="simplex_bobbin")
+
+
+class LabSimplexInput(Base):
+    __tablename__ = "lab_simplex_inputs"
+
+    id         = Column(Integer, primary_key=True)
+    bobbin_id  = Column(Integer, ForeignKey("lab_simplex_bobbins.id", ondelete="CASCADE"),
+                        nullable=False, index=True)
+    rsb_can_id = Column(Integer, ForeignKey("lab_rsb_cans.id", ondelete="CASCADE"),
+                        nullable=False, index=True)
+
+    bobbin  = relationship("LabSimplexBobbin", back_populates="inputs")
+    rsb_can = relationship("LabRSBCan",        back_populates="simplex_links")
+
+    __table_args__ = (
+        UniqueConstraint("bobbin_id", "rsb_can_id", name="uq_simplex_input"),
+    )
+
+
+class LabRingframeCop(Base):
+    __tablename__ = "lab_ringframe_cops"
+
+    id         = Column(Integer, primary_key=True)
+    trial_id   = Column(Integer, ForeignKey("lab_trials.id", ondelete="CASCADE"),
+                        nullable=False, index=True)
+    label      = Column(String,  nullable=False)
+    hank_value = Column(Float,   nullable=True)
+    notes      = Column(String,  nullable=True)
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+
+    trial  = relationship("LabTrial", back_populates="ringframe_cops")
+    inputs = relationship("LabRingframeInput", back_populates="cop",
+                          cascade="all, delete-orphan")
+
+
+class LabRingframeInput(Base):
+    __tablename__ = "lab_ringframe_inputs"
+
+    id                = Column(Integer, primary_key=True)
+    cop_id            = Column(Integer, ForeignKey("lab_ringframe_cops.id", ondelete="CASCADE"),
+                               nullable=False, index=True)
+    simplex_bobbin_id = Column(Integer, ForeignKey("lab_simplex_bobbins.id", ondelete="CASCADE"),
+                               nullable=False, index=True)
+
+    cop            = relationship("LabRingframeCop",    back_populates="inputs")
+    simplex_bobbin = relationship("LabSimplexBobbin",  back_populates="outputs")
+
+    __table_args__ = (
+        UniqueConstraint("cop_id", "simplex_bobbin_id", name="uq_ringframe_input"),
+    )
