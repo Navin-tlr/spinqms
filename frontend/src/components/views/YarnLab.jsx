@@ -460,7 +460,7 @@ function DeptVerdictCard({ dept, onDeleteSample }) {
 /* ════════════════════════════════════════════════════════════════════════════
    FlowBoard — interactive RSB → Simplex → Ring Frame mapper
 ══════════════════════════════════════════════════════════════════════════════ */
-function FlowBoard({ trialId, flow, loading, refreshFlow }) {
+function FlowBoard({ trialId, flow, setFlow, loading, refreshFlow }) {
   useEffect(() => {
     const handleDragOver = (e) => {
       const edge = 100;
@@ -503,11 +503,13 @@ function FlowBoard({ trialId, flow, loading, refreshFlow }) {
         <SimplexPanel
           trialId={trialId}
           bobbins={flow.simplex.bobbins}
+          setFlow={setFlow}
           refreshFlow={refreshFlow}
         />
         <RingFramePanel
           trialId={trialId}
           cops={flow.ringframe.cops}
+          setFlow={setFlow}
           refreshFlow={refreshFlow}
         />
       </div>
@@ -881,17 +883,31 @@ function FormulaNote({ length }) {
   )
 }
 
-function SimplexPanel({ trialId, bobbins, refreshFlow }) {
+function SimplexPanel({ trialId, bobbins, setFlow, refreshFlow }) {
   const [busyId, setBusyId] = useState(null)
 
-  const handleAdd = async () => {
-    setBusyId('new')
-    try {
-      await createSimplexBobbin(trialId, { rsb_can_ids: [] })
-      await refreshFlow()
-    } finally {
-      setBusyId(null)
-    }
+  const handleAdd = () => {
+    setFlow(prev => {
+      const newBobbin = {
+        id: Date.now(),
+        label: `Simplex ${prev.simplex.bobbins.length + 1}`,
+        weight: '',
+        length: 6,
+        sample_length: DEFAULT_LENGTHS.simplex,
+        rsb_cans: [],
+        status: 'pending',
+        readings: Array(3).fill(''),
+        verified: false,
+        verified_same_hank: false
+      }
+      return {
+        ...prev,
+        simplex: {
+          ...prev.simplex,
+          bobbins: [...prev.simplex.bobbins, newBobbin]
+        }
+      }
+    })
   }
 
   const handleUpdate = async (id, body) => {
@@ -1130,17 +1146,30 @@ function SimplexCard({ bobbin, busy, onUpdate, onDelete }) {
   )
 }
 
-function RingFramePanel({ trialId, cops, refreshFlow }) {
+function RingFramePanel({ trialId, cops, setFlow, refreshFlow }) {
   const [busyId, setBusyId] = useState(null)
 
-  const handleAdd = async () => {
-    setBusyId('new')
-    try {
-      await createRingframeCop(trialId, { simplex_bobbin_ids: [] })
-      await refreshFlow()
-    } finally {
-      setBusyId(null)
-    }
+  const handleAdd = () => {
+    setFlow(prev => {
+      const newCop = {
+        id: Date.now(),
+        label: `Cop ${prev.ringframe.cops.length + 1}`,
+        weight: '',
+        length: 120,
+        sample_length: DEFAULT_LENGTHS.ringframe,
+        status: 'pending',
+        simplex_bobbins: [],
+        simplex_bobbin_ids: [],
+        readings: Array(1).fill('')
+      }
+      return {
+        ...prev,
+        ringframe: {
+          ...prev.ringframe,
+          cops: [...prev.ringframe.cops, newCop]
+        }
+      }
+    })
   }
 
   const handleUpdate = async (id, body) => {
@@ -1488,6 +1517,7 @@ function TrialDashboard({ trialId, depts, onBack }) {
       <FlowBoard
         trialId={trialId}
         flow={flow}
+        setFlow={setFlow}
         loading={flowLoading}
         refreshFlow={loadFlow}
       />
