@@ -464,10 +464,11 @@ function FlowBoard({ trialId, flow, setFlow, loading, refreshFlow }) {
   useEffect(() => {
     const handleDragOver = (e) => {
       const edge = 100;
+      const container = document.getElementById('main-scroll-container') || window;
       if (e.clientY < edge) {
-        window.scrollBy(0, -15);
+        container.scrollBy(0, -15);
       } else if (window.innerHeight - e.clientY < edge) {
-        window.scrollBy(0, 15);
+        container.scrollBy(0, 15);
       }
     };
     window.addEventListener('dragover', handleDragOver);
@@ -1006,12 +1007,14 @@ function SimplexCard({ bobbin, busy, onUpdate, onDelete }) {
   const handleDrop = async (e) => {
     e.preventDefault()
     const id = parseInt(e.dataTransfer.getData('application/x-rsb-can'), 10)
-    if (!id || bobbin.rsb_can_ids.includes(id)) return
-    await onUpdate(bobbin.id, { rsb_can_ids: [...bobbin.rsb_can_ids, id] })
+    const existingIds = bobbin.rsb_can_ids || (bobbin.rsb_cans || []).map(c => c.id)
+    if (!id || existingIds.includes(id)) return
+    await onUpdate(bobbin.id, { rsb_can_ids: [...existingIds, id] })
   }
 
   const removeCan = async (id) => {
-    await onUpdate(bobbin.id, { rsb_can_ids: bobbin.rsb_can_ids.filter(cid => cid !== id) })
+    const existingIds = bobbin.rsb_can_ids || (bobbin.rsb_cans || []).map(c => c.id)
+    await onUpdate(bobbin.id, { rsb_can_ids: existingIds.filter(cid => cid !== id) })
   }
 
   const handleDragStart = (e) => {
@@ -1268,12 +1271,14 @@ function RingFrameCard({ cop, busy, onUpdate, onDelete }) {
   const handleDrop = async (e) => {
     e.preventDefault()
     const id = parseInt(e.dataTransfer.getData('application/x-simplex-bobbin'), 10)
-    if (!id || cop.simplex_bobbin_ids.includes(id)) return
-    await onUpdate(cop.id, { simplex_bobbin_ids: [...cop.simplex_bobbin_ids, id] })
+    const existingIds = cop.simplex_bobbin_ids || (cop.simplex_bobbins || []).map(b => b.id)
+    if (!id || existingIds.includes(id)) return
+    await onUpdate(cop.id, { simplex_bobbin_ids: [...existingIds, id] })
   }
 
   const removeBobbin = async (id) => {
-    await onUpdate(cop.id, { simplex_bobbin_ids: cop.simplex_bobbin_ids.filter(bid => bid !== id) })
+    const existingIds = cop.simplex_bobbin_ids || (cop.simplex_bobbins || []).map(b => b.id)
+    await onUpdate(cop.id, { simplex_bobbin_ids: existingIds.filter(bid => bid !== id) })
   }
 
   return (
