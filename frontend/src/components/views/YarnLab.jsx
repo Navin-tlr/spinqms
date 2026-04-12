@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import {
   getLabTrials, createLabTrial, updateLabTrial, deleteLabTrial,
   setLabBenchmarks, addLabSample, deleteLabSample, getLabDashboard,
@@ -25,6 +25,26 @@ const DEFAULT_LENGTHS = {
   rsb: 6,
   simplex: 6,
   ringframe: 120,
+}
+const STATUS_BG = {
+  perfect: 'var(--ok-bg)',
+  faulty: 'var(--bad-bg)',
+  pending: 'var(--bg-2)',
+}
+const STATUS_BORDER = {
+  perfect: 'var(--ok-bd)',
+  faulty: 'var(--bad-bd)',
+  pending: 'var(--bd)',
+}
+const STATUS_META = {
+  perfect: { label: 'Perfect', color: 'var(--ok)' },
+  faulty:  { label: 'Faulty',  color: 'var(--bad)' },
+  pending: { label: 'Pending', color: 'var(--tx-3)' },
+}
+const STAGE_LABEL = {
+  rsb: 'RSB',
+  simplex: 'Simplex',
+  ringframe: 'Ring Frame',
 }
 
 /* ── Small helpers ───────────────────────────────────────────────────────── */
@@ -452,13 +472,16 @@ function FlowBoard({ trialId, flow, loading, refreshFlow }) {
     )
   }
 
+  const rootCause = useMemo(() => findRootCause(flow), [flow])
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
       <SectionHead>RSB → Simplex → Ring Frame Traceability</SectionHead>
       <p style={{ margin: 0, fontSize: 12, color: 'var(--tx-3)' }}>
-        Complete the full flow within a shift by sampling five cans, verifying simplex bobbins (3 hr doff),
+        Complete the full flow within a shift by sampling five cans, verifying simplex bobbins (3-reading parity),
         and linking ring frame cops. Drag cans onto bobbins, then bobbins onto cops for full lineage.
       </p>
+      <RootCauseBanner alert={rootCause} />
       <div style={{
         display: 'grid', gap: 12,
         gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
@@ -479,6 +502,87 @@ function FlowBoard({ trialId, flow, loading, refreshFlow }) {
   )
 }
 
+function findRootCause(flow) {
+  if (!flow) return null
+  const simplexMap = new Map(flow.simplex.bobbins.map(b => [b.id, b]))
+
+  for (const cop of flow.ringframe.cops) {
+    if (cop.status !== 'faulty') continue
+    const linkedBobbins = cop.simplex_bobbin_ids.map(id => simplexMap.get(id)).filter(Boolean)
+    const upstreamCans = linkedBobbins.flatMap(b => b?.rsb_cans ?? [])
+    const faultyCan = upstreamCans.find(can => can.status === 'faulty')
+    if (faultyCan) {
+      return {
+        stage: 'rsb',
+        message: `Variation originated at RSB. ${faultyCan.label} drifted before building ${cop.label}.`,
+        context: `${cop.label} inherits sliver from ${linkedBobbins.map(b => b.label).join(', ') || 'Simplex'}.`,
+      }
+    }
+    const faultyBobbin = linkedBobbins.find(b => b.status === 'faulty')
+    if (faultyBobbin) {
+      return {
+        stage: 'simplex',
+        message: `Variation originated at Simplex. ${faultyBobbin.label} is out of tolerance even though incoming sliver was perfect.`,
+        context: `Impacts final cop ${cop.label}.`,
+      }
+    }
+    return {
+      stage: 'ringframe',
+      message: `Variation originated at Ring Frame. ${cop.label} deviated even though upstream roving was perfect.`,
+      context: linkedBobbins.length ? `Linked bobbins: ${linkedBobbins.map(b => b.label).join(', ')}` : null,
+    }
+  }
+
+  const faultyBobbin = flow.simplex.bobbins.find(b => b.status === 'faulty')
+  if (faultyBobbin) {
+    const faultyCan = faultyBobbin.rsb_cans?.find(c => c.status === 'faulty')
+    if (faultyCan) {
+      return {
+        stage: 'rsb',
+        message: `Variation originated at RSB. ${faultyCan.label} is red feeding ${faultyBobbin.label}.`,
+        context: 'Fix the sliver source before restarting the simplex run.',
+      }
+    }
+    return {
+      stage: 'simplex',
+      message: `Variation originated at Simplex. Incoming sliver is perfect but ${faultyBobbin.label} is red.`,
+      context: 'Check drafting settings / hank parity before moving to ring frame.',
+    }
+  }
+
+  const faultyCan = flow.rsb.cans.find(c => c.status === 'faulty')
+  if (faultyCan) {
+    return {
+      stage: 'rsb',
+      message: `Variation originated at RSB. ${faultyCan.label} is out of tolerance.`,
+      context: 'Downstream machines cannot start until all sampled cans are green.',
+    }
+  }
+
+  return null
+}
+
+function RootCauseBanner({ alert }) {
+  if (!alert) return null
+  return (
+    <div style={{
+      border: '1.5px solid var(--bad-bd)',
+      background: 'var(--bad-bg)',
+      borderRadius: 'var(--r)',
+      padding: '10px 14px',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: 4,
+    }}>
+      <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--bad)' }}>
+        Root Cause Alert · {STAGE_LABEL[alert.stage] ?? alert.stage?.toUpperCase()}
+      </div>
+      <div style={{ fontSize: 13, color: 'var(--tx)' }}>{alert.message}</div>
+      {alert.context && <div style={{ fontSize: 11, color: 'var(--tx-3)' }}>{alert.context}</div>}
+    </div>
+  )
+}
+
 const buildReadings = (source = [], count) => {
   const arr = Array(count).fill('')
   if (Array.isArray(source)) {
@@ -494,11 +598,12 @@ const toHanks = (weights, sampleLength) =>
     .map(weight => weightToHank(weight, sampleLength))
 
 function normalizeCan(can) {
-  const readings = buildReadings([], RSB_READING_COUNT)
+  const readings = buildReadings(can.readings, RSB_READING_COUNT)
   return {
     ...can,
     notes: can.notes ?? '',
     readings,
+    status: can.status ?? 'pending',
     readings_count: can.readings_count ?? can.readings?.length ?? 0,
     mean_hank: can.mean_hank ?? null,
     cv_pct: can.cv_pct ?? null,
@@ -559,15 +664,12 @@ function RSBPanel({ trialId, cans, refreshFlow }) {
         const weights = c.readings
           .map(v => parseFloat(v))
           .filter(v => !Number.isNaN(v) && v > 0)
-        const hankReadings = weights.length === RSB_READING_COUNT
-          ? toHanks(weights, c.sample_length || DEFAULT_LENGTHS.rsb)
-          : []
         return {
           slot: c.slot,
           notes: c.notes ? c.notes.trim() : null,
           is_perfect: Boolean(c.is_perfect),
           sample_length: c.sample_length || 6,
-          readings: hankReadings,
+          readings: weights.length === RSB_READING_COUNT ? weights : [],
         }
       })
       await saveLabRSB(trialId, payload)
@@ -596,13 +698,15 @@ function RSBPanel({ trialId, cans, refreshFlow }) {
       </div>
       <FormulaNote length={DEFAULT_LENGTHS.rsb} />
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {draft.map(can => (
+        {draft.map(can => {
+          const status = can.status ?? 'pending'
+          return (
           <div key={can.id}
             style={{
-              border: `1px solid ${can.is_perfect ? 'var(--ok-bd)' : 'var(--bd)'}`,
+              border: `1px solid ${STATUS_BORDER[status] ?? 'var(--bd)'}`,
               borderRadius: 'var(--r)',
               padding: 10,
-              background: can.is_perfect ? 'var(--ok-bg)' : 'var(--bg-2)',
+              background: STATUS_BG[status] ?? 'var(--bg-2)',
               display: 'flex',
               flexDirection: 'column',
               gap: 6,
@@ -677,7 +781,7 @@ function RSBPanel({ trialId, cans, refreshFlow }) {
             <ReadingSummary can={can} />
             <span style={{ fontSize: 10, color: 'var(--tx-4)' }}>Drag to Simplex once readings are saved</span>
           </div>
-        ))}
+        )})}
         {err && <div style={{ fontSize: 12, color: 'var(--bad)' }}>{err}</div>}
       </div>
     </div>
@@ -723,16 +827,17 @@ function HankCalculator({ sampleLength, onApply }) {
       <span style={{ fontFamily: 'var(--mono)', color: 'var(--tx-2)' }}>
         {hank ? hank.toFixed(4) : '—'}
       </span>
-      <SmBtn onClick={() => { if (hank) { onApply(hank); setWeight('') } }} disabled={!hank}>Use</SmBtn>
+      <SmBtn onClick={() => { if (!Number.isNaN(num) && num > 0) { onApply(num); setWeight('') } }} disabled={Number.isNaN(num) || num <= 0}>Use</SmBtn>
     </div>
   )
 }
 
 function MiniSummary({ readings, savedMean, savedCv, expected, sampleLength }) {
-  const preview = calcReadingPreview(readings, sampleLength)
+  const preview = calcReadingPreview(readings, sampleLength ?? DEFAULT_LENGTHS.rsb)
   if (!preview && !savedMean) return null
   const mean = preview?.mean ?? savedMean
   const cv = preview?.cv ?? savedCv
+  const len = sampleLength ? parseFloat(sampleLength) : null
   return (
     <div style={{
       display: 'flex', gap: 8, fontSize: 11,
@@ -741,6 +846,7 @@ function MiniSummary({ readings, savedMean, savedCv, expected, sampleLength }) {
     }}>
       <span> x̄ = {mean ? mean.toFixed(4) : '—'} </span>
       <span> CV {cv != null ? cv.toFixed(2) : '—'}% </span>
+      {len ? <span> Len {len} yds </span> : null}
       <span style={{ color: 'var(--tx-4)' }}>
         {(readings?.filter(v => v !== '').length ?? 0)}/{expected} readings
       </span>
@@ -797,7 +903,7 @@ function SimplexPanel({ trialId, bobbins, refreshFlow }) {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
         <div>
           <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--tx)' }}>Simplex</div>
-          <div style={{ fontSize: 11, color: 'var(--tx-4)' }}>Verify hank parity · 3 hr doff</div>
+          <div style={{ fontSize: 11, color: 'var(--tx-4)' }}>Verify hank parity · 3 readings</div>
         </div>
         <SmBtn primary onClick={handleAdd} disabled={busyId === 'new'}>
           {busyId === 'new' ? 'Adding…' : '+ Add Bobbin'}
@@ -829,33 +935,39 @@ function SimplexPanel({ trialId, bobbins, refreshFlow }) {
 }
 
 function SimplexCard({ bobbin, busy, onUpdate, onDelete }) {
-  const [form, setForm] = useState({
+  const [form, setForm] = useState(() => ({
     notes: bobbin.notes ?? '',
     verified: bobbin.verified_same_hank,
-    readings: buildReadings([], SIMPLEX_READING_COUNT),
-  })
+    sampleLength: bobbin.sample_length ?? DEFAULT_LENGTHS.simplex,
+    readings: buildReadings(bobbin.readings, SIMPLEX_READING_COUNT),
+  }))
 
   useEffect(() => {
     setForm({
       notes: bobbin.notes ?? '',
       verified: bobbin.verified_same_hank,
-      readings: buildReadings([], SIMPLEX_READING_COUNT),
+      sampleLength: bobbin.sample_length ?? DEFAULT_LENGTHS.simplex,
+      readings: buildReadings(bobbin.readings, SIMPLEX_READING_COUNT),
     })
   }, [bobbin])
+
+  const status = bobbin.status ?? 'pending'
+  const statusMeta = STATUS_META[status] ?? STATUS_META.pending
 
   const handleSave = async () => {
     const weights = form.readings
       .map(v => parseFloat(v))
       .filter(v => !Number.isNaN(v) && v > 0)
-    const hankReadings = weights.length === SIMPLEX_READING_COUNT
-      ? toHanks(weights, DEFAULT_LENGTHS.simplex)
+    const validWeights = weights.length === SIMPLEX_READING_COUNT ? weights : []
+    const hankReadings = validWeights.length
+      ? toHanks(validWeights, form.sampleLength || DEFAULT_LENGTHS.simplex)
       : []
     await onUpdate(bobbin.id, {
       hank_value: hankReadings.length ? hankReadings.reduce((a, b) => a + b, 0) / hankReadings.length : null,
       notes: form.notes ? form.notes.trim() : null,
-      doff_minutes: bobbin.doff_minutes ?? 180,
       verified_same_hank: form.verified,
-      readings: hankReadings,
+      sample_length: form.sampleLength || DEFAULT_LENGTHS.simplex,
+      readings: validWeights,
     })
   }
 
@@ -878,8 +990,13 @@ function SimplexCard({ bobbin, busy, onUpdate, onDelete }) {
   return (
     <div
       style={{
-        border: '1px solid var(--bd)', borderRadius: 'var(--r)', padding: 12,
-        background: 'var(--bg-2)', display: 'flex', flexDirection: 'column', gap: 8,
+        border: `1px solid ${STATUS_BORDER[status] ?? 'var(--bd)'}`,
+        borderRadius: 'var(--r)',
+        padding: 12,
+        background: STATUS_BG[status] ?? 'var(--bg-2)',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 8,
       }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <span
@@ -891,6 +1008,14 @@ function SimplexCard({ bobbin, busy, onUpdate, onDelete }) {
           ⇄
         </span>
         <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--tx)' }}>{bobbin.label}</div>
+        <span style={{
+          fontSize: 10, fontWeight: 600, color: statusMeta.color,
+          padding: '2px 6px', borderRadius: 12,
+          border: `1px solid ${STATUS_BORDER[status] ?? 'var(--bd)'}`,
+          background: 'var(--bg)',
+        }}>
+          {statusMeta.label}
+        </span>
         {bobbin.verified_same_hank && <Badge variant="ok">Hank ok</Badge>}
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
           <SmBtn onClick={() => onDelete(bobbin.id)} disabled={busy}>✕</SmBtn>
@@ -900,7 +1025,7 @@ function SimplexCard({ bobbin, busy, onUpdate, onDelete }) {
         {form.readings.map((v, idx) => {
           const weight = parseFloat(v)
           const hank = !Number.isNaN(weight) && weight > 0
-            ? weightToHank(weight, DEFAULT_LENGTHS.simplex)
+            ? weightToHank(weight, form.sampleLength || DEFAULT_LENGTHS.simplex)
             : null
           return (
             <div key={idx} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -918,6 +1043,35 @@ function SimplexCard({ bobbin, busy, onUpdate, onDelete }) {
             </div>
           )
         })}
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <span style={{ fontSize: 10, color: 'var(--tx-4)', fontWeight: 600 }}>Sample length (yds)</span>
+            <input
+              type="number" step="0.1" min="1"
+              value={form.sampleLength}
+              onChange={e => {
+                const val = parseFloat(e.target.value)
+                setForm(f => ({ ...f, sampleLength: Number.isNaN(val) || val <= 0 ? DEFAULT_LENGTHS.simplex : val }))
+              }}
+              style={{ ...inputStyle, width: 120 }}
+            />
+          </div>
+          <span style={{ fontSize: 11, color: 'var(--tx-4)' }}>Ne = (L × 0.54) / W</span>
+        </div>
+        <HankCalculator
+          sampleLength={form.sampleLength || DEFAULT_LENGTHS.simplex}
+          onApply={(weight) => {
+            setForm(f => {
+              const arr = f.readings.slice()
+              const idx = arr.findIndex(val => val === '' || Number.isNaN(parseFloat(val)))
+              const targetIdx = idx === -1 ? 0 : idx
+              arr[targetIdx] = weight.toFixed(4)
+              return { ...f, readings: arr }
+            })
+          }}
+        />
       </div>
       <textarea
         rows={2}
@@ -961,7 +1115,7 @@ function SimplexCard({ bobbin, busy, onUpdate, onDelete }) {
         savedMean={bobbin.mean_hank}
         savedCv={bobbin.cv_pct}
         expected={SIMPLEX_READING_COUNT}
-        sampleLength={DEFAULT_LENGTHS.simplex}
+        sampleLength={form.sampleLength || DEFAULT_LENGTHS.simplex}
       />
       <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
         <SmBtn primary onClick={handleSave} disabled={busy}>
@@ -1042,32 +1196,39 @@ function RingFramePanel({ trialId, cops, refreshFlow }) {
 }
 
 function RingFrameCard({ cop, busy, onUpdate, onDelete }) {
-  const [form, setForm] = useState({
+  const [form, setForm] = useState(() => ({
     label: cop.label,
     notes: cop.notes ?? '',
-    readings: buildReadings([], RING_READING_COUNT),
-  })
+    sampleLength: cop.sample_length ?? DEFAULT_LENGTHS.ringframe,
+    readings: buildReadings(cop.readings, RING_READING_COUNT),
+  }))
 
   useEffect(() => {
     setForm({
       label: cop.label,
       notes: cop.notes ?? '',
-      readings: buildReadings([], RING_READING_COUNT),
+      sampleLength: cop.sample_length ?? DEFAULT_LENGTHS.ringframe,
+      readings: buildReadings(cop.readings, RING_READING_COUNT),
     })
   }, [cop])
+
+  const status = cop.status ?? 'pending'
+  const statusMeta = STATUS_META[status] ?? STATUS_META.pending
 
   const handleSave = async () => {
     const weights = form.readings
       .map(v => parseFloat(v))
       .filter(v => !Number.isNaN(v) && v > 0)
-    const hankReadings = weights.length === RING_READING_COUNT
-      ? toHanks(weights, DEFAULT_LENGTHS.ringframe)
+    const validWeights = weights.length === RING_READING_COUNT ? weights : []
+    const hankReadings = validWeights.length
+      ? toHanks(validWeights, form.sampleLength || DEFAULT_LENGTHS.ringframe)
       : []
     await onUpdate(cop.id, {
       label: form.label,
       hank_value: hankReadings.length ? hankReadings.reduce((a, b) => a + b, 0) / hankReadings.length : null,
       notes: form.notes ? form.notes.trim() : null,
-      readings: hankReadings,
+      sample_length: form.sampleLength || DEFAULT_LENGTHS.ringframe,
+      readings: validWeights,
     })
   }
 
@@ -1084,14 +1245,23 @@ function RingFrameCard({ cop, busy, onUpdate, onDelete }) {
 
   return (
     <div style={{
-      border: '1px solid var(--bd)', borderRadius: 'var(--r)', padding: 12,
-      background: 'var(--bg-2)', display: 'flex', flexDirection: 'column', gap: 8,
+      border: `1px solid ${STATUS_BORDER[status] ?? 'var(--bd)'}`,
+      borderRadius: 'var(--r)', padding: 12,
+      background: STATUS_BG[status] ?? 'var(--bg-2)', display: 'flex', flexDirection: 'column', gap: 8,
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         <input type="text" value={form.label}
           onChange={e => setForm(f => ({ ...f, label: e.target.value }))}
           style={{ ...inputStyle, flex: 1 }}
         />
+        <span style={{
+          fontSize: 10, fontWeight: 600, color: statusMeta.color,
+          padding: '2px 6px', borderRadius: 12,
+          border: `1px solid ${STATUS_BORDER[status] ?? 'var(--bd)'}`,
+          background: 'var(--bg)',
+        }}>
+          {statusMeta.label}
+        </span>
         <SmBtn onClick={() => onDelete(cop.id)} disabled={busy}>✕</SmBtn>
       </div>
       <textarea
@@ -1105,7 +1275,7 @@ function RingFrameCard({ cop, busy, onUpdate, onDelete }) {
         {form.readings.map((v, idx) => {
           const weight = parseFloat(v)
           const hank = !Number.isNaN(weight) && weight > 0
-            ? weightToHank(weight, DEFAULT_LENGTHS.ringframe)
+            ? weightToHank(weight, form.sampleLength || DEFAULT_LENGTHS.ringframe)
             : null
           return (
             <div key={idx} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -1123,6 +1293,35 @@ function RingFrameCard({ cop, busy, onUpdate, onDelete }) {
             </div>
           )
         })}
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <span style={{ fontSize: 10, color: 'var(--tx-4)', fontWeight: 600 }}>Sample length (yds)</span>
+            <input
+              type="number" step="1" min="10"
+              value={form.sampleLength}
+              onChange={e => {
+                const val = parseFloat(e.target.value)
+                setForm(f => ({ ...f, sampleLength: Number.isNaN(val) || val <= 0 ? DEFAULT_LENGTHS.ringframe : val }))
+              }}
+              style={{ ...inputStyle, width: 140 }}
+            />
+          </div>
+          <span style={{ fontSize: 11, color: 'var(--tx-4)' }}>Ne = (L × 0.54) / W</span>
+        </div>
+        <HankCalculator
+          sampleLength={form.sampleLength || DEFAULT_LENGTHS.ringframe}
+          onApply={(weight) => {
+            setForm(f => {
+              const arr = f.readings.slice()
+              const idx = arr.findIndex(val => val === '' || Number.isNaN(parseFloat(val)))
+              const targetIdx = idx === -1 ? 0 : idx
+              arr[targetIdx] = weight.toFixed(4)
+              return { ...f, readings: arr }
+            })
+          }}
+        />
       </div>
       <div
         onDragOver={e => e.preventDefault()}
@@ -1158,7 +1357,7 @@ function RingFrameCard({ cop, busy, onUpdate, onDelete }) {
         savedMean={cop.mean_hank}
         savedCv={cop.cv_pct}
         expected={RING_READING_COUNT}
-        sampleLength={DEFAULT_LENGTHS.ringframe}
+        sampleLength={form.sampleLength || DEFAULT_LENGTHS.ringframe}
       />
       <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
         <SmBtn primary onClick={handleSave} disabled={busy}>
