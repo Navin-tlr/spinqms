@@ -474,7 +474,40 @@ function FlowBoard({ trialId, flow, loading, refreshFlow }) {
     return () => window.removeEventListener('dragover', handleDragOver);
   }, []);
 
-  if (loading || !flow) {
+  // Hooks must run every render — never place these after a conditional return.
+  // refreshFlow() toggles loading; skipping useMemo on the loading frame used to
+  // change hook order and crash React ("Rendered more hooks than previous render").
+  const rootCause = useMemo(
+    () => (flow ? findRootCause(flow) : null),
+    [flow],
+  )
+
+  const { canFeedsTo, bobbinFeedsTo } = useMemo(() => {
+    const canMap = new Map()
+    const bobbinMap = new Map()
+    const bobbins = flow?.simplex?.bobbins
+    const cops = flow?.ringframe?.cops
+    if (!Array.isArray(bobbins) || !Array.isArray(cops)) {
+      return { canFeedsTo: canMap, bobbinFeedsTo: bobbinMap }
+    }
+    for (const bobbin of bobbins) {
+      for (const can of (bobbin.rsb_cans || [])) {
+        if (!canMap.has(can.id)) canMap.set(can.id, [])
+        canMap.get(can.id).push(bobbin.label)
+      }
+    }
+    for (const cop of cops) {
+      for (const bobbin of (cop.simplex_bobbins || [])) {
+        if (!bobbinMap.has(bobbin.id)) bobbinMap.set(bobbin.id, [])
+        bobbinMap.get(bobbin.id).push(cop.label)
+      }
+    }
+    return { canFeedsTo: canMap, bobbinFeedsTo: bobbinMap }
+  }, [flow])
+
+  // Keep the board mounted during background refreshes.
+  // Unmounting here can destroy child component state mid-interaction.
+  if (!flow) {
     return (
       <div style={{
         border: '1px solid var(--bd)', borderRadius: 'var(--r-lg)',
@@ -485,24 +518,6 @@ function FlowBoard({ trialId, flow, loading, refreshFlow }) {
     )
   }
 
-  const rootCause = useMemo(() => findRootCause(flow), [flow])
-
-  // Build reverse-lookup maps for connection identifiers
-  const canFeedsTo = new Map()   // canId → [bobbinLabel, ...]
-  const bobbinFeedsTo = new Map() // bobbinId → [copLabel, ...]
-  for (const bobbin of flow.simplex.bobbins) {
-    for (const can of (bobbin.rsb_cans || [])) {
-      if (!canFeedsTo.has(can.id)) canFeedsTo.set(can.id, [])
-      canFeedsTo.get(can.id).push(bobbin.label)
-    }
-  }
-  for (const cop of flow.ringframe.cops) {
-    for (const bobbin of (cop.simplex_bobbins || [])) {
-      if (!bobbinFeedsTo.has(bobbin.id)) bobbinFeedsTo.set(bobbin.id, [])
-      bobbinFeedsTo.get(bobbin.id).push(cop.label)
-    }
-  }
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
       <SectionHead>RSB → Simplex → Ring Frame Traceability</SectionHead>
@@ -510,21 +525,33 @@ function FlowBoard({ trialId, flow, loading, refreshFlow }) {
         Complete the full flow within a shift by sampling five cans, verifying simplex bobbins (3-reading parity),
         and linking ring frame cops. Drag cans onto bobbins, then bobbins onto cops for full lineage.
       </p>
+      {loading && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 8,
+          fontSize: 11, color: 'var(--tx-4)',
+          padding: '6px 10px', borderRadius: 'var(--r)',
+          border: '1px solid var(--bd)', background: 'var(--bg-2)',
+          width: 'fit-content',
+        }}>
+          <span style={{ display: 'inline-flex' }}><Spinner /></span>
+          Refreshing…
+        </div>
+      )}
       <RootCauseBanner alert={rootCause} />
       <div style={{
         display: 'grid', gap: 12,
         gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
       }}>
-        <RSBPanel trialId={trialId} cans={flow.rsb.cans} refreshFlow={refreshFlow} canFeedsTo={canFeedsTo} />
+        <RSBPanel trialId={trialId} cans={flow.rsb?.cans ?? []} refreshFlow={refreshFlow} canFeedsTo={canFeedsTo} />
         <SimplexPanel
           trialId={trialId}
-          bobbins={flow.simplex.bobbins}
+          bobbins={flow.simplex?.bobbins ?? []}
           refreshFlow={refreshFlow}
           bobbinFeedsTo={bobbinFeedsTo}
         />
         <RingFramePanel
           trialId={trialId}
-          cops={flow.ringframe.cops}
+          cops={flow.ringframe?.cops ?? []}
           refreshFlow={refreshFlow}
         />
       </div>
@@ -562,7 +589,7 @@ function ConnectionTag({ direction, items, color }) {
 
 
 function findRootCause(flow) {
-  if (!flow) return null
+  if (!flow?.simplex?.bobbins || !flow?.ringframe?.cops || !flow?.rsb?.cans) return null
   const simplexMap = new Map(flow.simplex.bobbins.map(b => [b.id, b]))
 
   for (const cop of flow.ringframe.cops) {
@@ -1027,6 +1054,21 @@ function SimplexCard({ bobbin, busy, onUpdate, onDelete, bobbinFeedsTo }) {
   const status = bobbin.status ?? 'pending'
   const statusMeta = STATUS_META[status] ?? STATUS_META.pending
 
+  const buildCompletePayload = (overrides = {}) => {
+    const currentReadings = Array.isArray(bobbin.readings) ? bobbin.readings : []
+    return {
+      label: bobbin.label,
+      hank_value: bobbin.hank_value ?? bobbin.mean_hank ?? null,
+      notes: bobbin.notes ?? null,
+      verified_same_hank: Boolean(bobbin.verified_same_hank),
+      doff_minutes: bobbin.doff_minutes ?? 180,
+      sample_length: bobbin.sample_length ?? DEFAULT_LENGTHS.simplex,
+      readings: currentReadings,
+      rsb_can_ids: bobbin.rsb_can_ids || (bobbin.rsb_cans || []).map(c => c.id),
+      ...overrides,
+    }
+  }
+
   const handleSave = async () => {
     const weights = form.readings
       .map(v => parseFloat(v))
@@ -1035,13 +1077,14 @@ function SimplexCard({ bobbin, busy, onUpdate, onDelete, bobbinFeedsTo }) {
     const hankReadings = validWeights.length
       ? toHanks(validWeights, form.sampleLength || DEFAULT_LENGTHS.simplex)
       : []
-    await onUpdate(bobbin.id, {
+    await onUpdate(bobbin.id, buildCompletePayload({
+      // Save is the only place we intentionally apply the in-progress form edits.
       hank_value: hankReadings.length ? hankReadings.reduce((a, b) => a + b, 0) / hankReadings.length : null,
       notes: form.notes ? form.notes.trim() : null,
       verified_same_hank: form.verified,
       sample_length: form.sampleLength || DEFAULT_LENGTHS.simplex,
       readings: validWeights,
-    })
+    }))
   }
 
   const handleDrop = async (e) => {
@@ -1049,12 +1092,12 @@ function SimplexCard({ bobbin, busy, onUpdate, onDelete, bobbinFeedsTo }) {
     const id = parseInt(e.dataTransfer.getData('application/x-rsb-can'), 10)
     const existingIds = bobbin.rsb_can_ids || (bobbin.rsb_cans || []).map(c => c.id)
     if (!id || existingIds.includes(id)) return
-    await onUpdate(bobbin.id, { rsb_can_ids: [...existingIds, id] })
+    await onUpdate(bobbin.id, buildCompletePayload({ rsb_can_ids: [...existingIds, id] }))
   }
 
   const removeCan = async (id) => {
     const existingIds = bobbin.rsb_can_ids || (bobbin.rsb_cans || []).map(c => c.id)
-    await onUpdate(bobbin.id, { rsb_can_ids: existingIds.filter(cid => cid !== id) })
+    await onUpdate(bobbin.id, buildCompletePayload({ rsb_can_ids: existingIds.filter(cid => cid !== id) }))
   }
 
   const handleDragStart = (e) => {
@@ -1286,6 +1329,19 @@ function RingFrameCard({ cop, busy, onUpdate, onDelete }) {
   const status = cop.status ?? 'pending'
   const statusMeta = STATUS_META[status] ?? STATUS_META.pending
 
+  const buildCompletePayload = (overrides = {}) => {
+    const currentReadings = Array.isArray(cop.readings) ? cop.readings : []
+    return {
+      label: cop.label,
+      hank_value: cop.hank_value ?? cop.mean_hank ?? null,
+      notes: cop.notes ?? null,
+      sample_length: cop.sample_length ?? DEFAULT_LENGTHS.ringframe,
+      readings: currentReadings,
+      simplex_bobbin_ids: cop.simplex_bobbin_ids || (cop.simplex_bobbins || []).map(b => b.id),
+      ...overrides,
+    }
+  }
+
   const handleSave = async () => {
     const weights = form.readings
       .map(v => parseFloat(v))
@@ -1294,13 +1350,13 @@ function RingFrameCard({ cop, busy, onUpdate, onDelete }) {
     const hankReadings = validWeights.length
       ? toHanks(validWeights, form.sampleLength || DEFAULT_LENGTHS.ringframe)
       : []
-    await onUpdate(cop.id, {
+    await onUpdate(cop.id, buildCompletePayload({
       label: form.label,
       hank_value: hankReadings.length ? hankReadings.reduce((a, b) => a + b, 0) / hankReadings.length : null,
       notes: form.notes ? form.notes.trim() : null,
       sample_length: form.sampleLength || DEFAULT_LENGTHS.ringframe,
       readings: validWeights,
-    })
+    }))
   }
 
   const handleDrop = async (e) => {
@@ -1308,12 +1364,12 @@ function RingFrameCard({ cop, busy, onUpdate, onDelete }) {
     const id = parseInt(e.dataTransfer.getData('application/x-simplex-bobbin'), 10)
     const existingIds = cop.simplex_bobbin_ids || (cop.simplex_bobbins || []).map(b => b.id)
     if (!id || existingIds.includes(id)) return
-    await onUpdate(cop.id, { simplex_bobbin_ids: [...existingIds, id] })
+    await onUpdate(cop.id, buildCompletePayload({ simplex_bobbin_ids: [...existingIds, id] }))
   }
 
   const removeBobbin = async (id) => {
     const existingIds = cop.simplex_bobbin_ids || (cop.simplex_bobbins || []).map(b => b.id)
-    await onUpdate(cop.id, { simplex_bobbin_ids: existingIds.filter(bid => bid !== id) })
+    await onUpdate(cop.id, buildCompletePayload({ simplex_bobbin_ids: existingIds.filter(bid => bid !== id) }))
   }
 
 
