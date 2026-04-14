@@ -459,7 +459,7 @@ function DeptVerdictCard({ dept, onDeleteSample }) {
 /* ════════════════════════════════════════════════════════════════════════════
    FlowBoard — simple drag-and-drop with connection identifiers
 ══════════════════════════════════════════════════════════════════════════════ */
-function FlowBoard({ trialId, flow, setFlow, loading, refreshFlow }) {
+function FlowBoard({ trialId, flow, loading, refreshFlow }) {
   useEffect(() => {
     const handleDragOver = (e) => {
       const edge = 100;
@@ -519,14 +519,12 @@ function FlowBoard({ trialId, flow, setFlow, loading, refreshFlow }) {
         <SimplexPanel
           trialId={trialId}
           bobbins={flow.simplex.bobbins}
-          setFlow={setFlow}
           refreshFlow={refreshFlow}
           bobbinFeedsTo={bobbinFeedsTo}
         />
         <RingFramePanel
           trialId={trialId}
           cops={flow.ringframe.cops}
-          setFlow={setFlow}
           refreshFlow={refreshFlow}
         />
       </div>
@@ -569,7 +567,9 @@ function findRootCause(flow) {
 
   for (const cop of flow.ringframe.cops) {
     if (cop.status !== 'faulty') continue
-    const linkedBobbins = cop.simplex_bobbin_ids.map(id => simplexMap.get(id)).filter(Boolean)
+    const linkedBobbins = (cop.simplex_bobbin_ids || [])
+      .map(id => simplexMap.get(id))
+      .filter(Boolean)
     const incomingBobbinsCv = linkedBobbins.length ?
       linkedBobbins.reduce((a, b) => a + (b.cv_pct || 0), 0) / linkedBobbins.length : 0
 
@@ -932,31 +932,22 @@ function FormulaNote({ length }) {
   )
 }
 
-function SimplexPanel({ trialId, bobbins, setFlow, refreshFlow, bobbinFeedsTo }) {
+function SimplexPanel({ trialId, bobbins, refreshFlow, bobbinFeedsTo }) {
   const [busyId, setBusyId] = useState(null)
 
-  const handleAdd = () => {
-    setFlow(prev => {
-      const newBobbin = {
-        id: Date.now(),
-        label: `Simplex ${prev.simplex.bobbins.length + 1}`,
-        weight: '',
-        length: 6,
-        sample_length: DEFAULT_LENGTHS.simplex,
-        rsb_cans: [],
-        status: 'pending',
-        readings: Array(3).fill(''),
-        verified: false,
-        verified_same_hank: false
-      }
-      return {
-        ...prev,
-        simplex: {
-          ...prev.simplex,
-          bobbins: [...prev.simplex.bobbins, newBobbin]
-        }
-      }
-    })
+  const handleAdd = async () => {
+    setBusyId('new')
+    try {
+      await createSimplexBobbin(trialId, {
+        label: 'Simplex ' + (bobbins.length + 1),
+        sample_length: 6,
+        readings: [],
+        rsb_can_ids: [],
+      })
+      await refreshFlow()
+    } finally {
+      setBusyId(null)
+    }
   }
 
   const handleUpdate = async (id, body) => {
@@ -1167,9 +1158,9 @@ function SimplexCard({ bobbin, busy, onUpdate, onDelete, bobbinFeedsTo }) {
           minHeight: 46, display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center',
           background: 'var(--bg)',
         }}>
-        {bobbin.rsb_cans.length === 0 ? (
+        {(bobbin.rsb_cans || []).length === 0 ? (
           <span style={{ fontSize: 11, color: 'var(--tx-4)' }}>Drop RSB cans here</span>
-        ) : bobbin.rsb_cans.map(can => (
+        ) : (bobbin.rsb_cans || []).map(can => (
           <span key={can.id} style={{
             display: 'inline-flex', alignItems: 'center', gap: 4,
             padding: '2px 6px', borderRadius: 12, background: 'var(--bg-2)',
@@ -1201,30 +1192,22 @@ function SimplexCard({ bobbin, busy, onUpdate, onDelete, bobbinFeedsTo }) {
   )
 }
 
-function RingFramePanel({ trialId, cops, setFlow, refreshFlow }) {
+function RingFramePanel({ trialId, cops, refreshFlow }) {
   const [busyId, setBusyId] = useState(null)
 
-  const handleAdd = () => {
-    setFlow(prev => {
-      const newCop = {
-        id: Date.now(),
-        label: `Cop ${prev.ringframe.cops.length + 1}`,
-        weight: '',
-        length: 120,
-        sample_length: DEFAULT_LENGTHS.ringframe,
-        status: 'pending',
-        simplex_bobbins: [],
+  const handleAdd = async () => {
+    setBusyId('new')
+    try {
+      await createRingframeCop(trialId, {
+        label: 'Cop ' + (cops.length + 1),
+        sample_length: 120,
+        readings: [],
         simplex_bobbin_ids: [],
-        readings: Array(1).fill('')
-      }
-      return {
-        ...prev,
-        ringframe: {
-          ...prev.ringframe,
-          cops: [...prev.ringframe.cops, newCop]
-        }
-      }
-    })
+      })
+      await refreshFlow()
+    } finally {
+      setBusyId(null)
+    }
   }
 
   const handleUpdate = async (id, body) => {
@@ -1410,9 +1393,9 @@ function RingFrameCard({ cop, busy, onUpdate, onDelete }) {
           minHeight: 46, display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center',
           background: 'var(--bg)',
         }}>
-        {cop.simplex_bobbins.length === 0 ? (
+        {(cop.simplex_bobbins || []).length === 0 ? (
           <span style={{ fontSize: 11, color: 'var(--tx-4)' }}>Drop simplex bobbins here</span>
-        ) : cop.simplex_bobbins.map(b => (
+        ) : (cop.simplex_bobbins || []).map(b => (
           <span key={b.id} style={{
             display: 'inline-flex', alignItems: 'center', gap: 4,
             padding: '2px 6px', borderRadius: 12, background: 'var(--bg-2)',
@@ -1427,8 +1410,8 @@ function RingFrameCard({ cop, busy, onUpdate, onDelete }) {
         ))}
       </div>
       <ConnectionTag direction="Fed by ←" items={(cop.simplex_bobbins || []).map(b => b.label)} color="var(--tx-3)" />
-      {cop.rsb_cans.length > 0 && (
-        <ConnectionTag direction="Upstream RSB ←" items={cop.rsb_cans.map(c => c.slot ? `Can ${c.slot}` : c.label)} color="var(--tx-4)" />
+      {(cop.rsb_cans || []).length > 0 && (
+        <ConnectionTag direction="Upstream RSB ←" items={(cop.rsb_cans || []).map(c => c.slot ? `Can ${c.slot}` : c.label)} color="var(--tx-4)" />
       )}
       <MiniSummary
         readings={form.readings}
@@ -1574,7 +1557,6 @@ function TrialDashboard({ trialId, depts, onBack }) {
       <FlowBoard
         trialId={trialId}
         flow={flow}
-        setFlow={setFlow}
         loading={flowLoading}
         refreshFlow={loadFlow}
       />
