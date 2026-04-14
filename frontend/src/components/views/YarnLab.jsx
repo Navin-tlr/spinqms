@@ -765,6 +765,36 @@ function RSBPanel({ trialId, cans, refreshFlow, canFeedsTo }) {
     setDirty(true)
   }
 
+  const handleAddCan = () => {
+    // Backend currently auto-ensures slots 1..5 for each trial.
+    // So "Add" means re-introducing a removed slot (up to 5 total).
+    const used = new Set(draft.map(c => c.slot))
+    const nextSlot = [1, 2, 3, 4, 5].find(s => !used.has(s))
+    if (!nextSlot) return
+    setDraft(rows => ([
+      ...rows,
+      normalizeCan({
+        id: `new-slot-${nextSlot}`,
+        slot: nextSlot,
+        label: `Can ${nextSlot}`,
+        is_perfect: false,
+        sample_length: DEFAULT_LENGTHS.rsb,
+        readings: [],
+        readings_count: 0,
+        mean_hank: null,
+        cv_pct: null,
+        notes: '',
+        status: 'pending',
+      }),
+    ].sort((a, b) => (a.slot ?? 0) - (b.slot ?? 0))))
+    setDirty(true)
+  }
+
+  const handleDeleteCanLocal = (slot) => {
+    setDraft(rows => rows.filter(r => r.slot !== slot))
+    setDirty(true)
+  }
+
   const handleSave = async () => {
     const invalid = draft.some(can => {
       const filled = can.readings.filter(v => v !== '' && !Number.isNaN(parseFloat(v)))
@@ -807,11 +837,14 @@ function RSBPanel({ trialId, cans, refreshFlow, canFeedsTo }) {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
         <div>
           <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--tx)' }}>RSB Sampling</div>
-          <div style={{ fontSize: 11, color: 'var(--tx-4)' }}>5 cans · ~35 minutes total</div>
+          <div style={{ fontSize: 11, color: 'var(--tx-4)' }}>{draft.length} cans · ~{draft.length * 7} minutes total</div>
         </div>
-        <SmBtn primary onClick={handleSave} disabled={saving || !dirty}>
-          {saving ? 'Saving…' : 'Save'}
-        </SmBtn>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <SmBtn onClick={handleAddCan} disabled={saving || draft.length >= 5}>+ Add Can</SmBtn>
+          <SmBtn primary onClick={handleSave} disabled={saving || !dirty}>
+            {saving ? 'Saving…' : 'Save'}
+          </SmBtn>
+        </div>
       </div>
       <FormulaNote length={DEFAULT_LENGTHS.rsb} />
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -833,6 +866,21 @@ function RSBPanel({ trialId, cans, refreshFlow, canFeedsTo }) {
                   Can {can.slot}
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <button
+                    onClick={() => handleDeleteCanLocal(can.slot)}
+                    title="Remove this can from the batch (local only)"
+                    style={{
+                      border: 'none',
+                      background: 'transparent',
+                      cursor: 'pointer',
+                      color: 'var(--tx-4)',
+                      fontSize: 12,
+                      padding: '2px 6px',
+                      borderRadius: 6,
+                    }}
+                  >
+                    ✕
+                  </button>
                   <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--tx-3)' }}>
                     <input type="checkbox" checked={!!can.is_perfect}
                       onChange={e => update(can.slot, 'is_perfect', e.target.checked)}
@@ -1102,6 +1150,7 @@ function SimplexCard({ bobbin, busy, onUpdate, onDelete, bobbinFeedsTo }) {
 
   const handleDragStart = (e) => {
     e.dataTransfer.setData('application/x-simplex-bobbin', String(bobbin.id))
+    e.dataTransfer.setData('application/x-simplex-bobbin-label', String(bobbin.label || 'Bobbin'))
     e.dataTransfer.effectAllowed = 'copy'
   }
 
@@ -1314,6 +1363,7 @@ function RingFrameCard({ cop, busy, onUpdate, onDelete }) {
     label: cop.label,
     notes: cop.notes ?? '',
     sampleLength: cop.sample_length ?? DEFAULT_LENGTHS.ringframe,
+    frameNumber: cop.frame_number ?? '',
     readings: buildReadings(cop.readings, RING_READING_COUNT),
   }))
 
@@ -1322,6 +1372,7 @@ function RingFrameCard({ cop, busy, onUpdate, onDelete }) {
       label: cop.label,
       notes: cop.notes ?? '',
       sampleLength: cop.sample_length ?? DEFAULT_LENGTHS.ringframe,
+      frameNumber: cop.frame_number ?? '',
       readings: buildReadings(cop.readings, RING_READING_COUNT),
     })
   }, [cop])
@@ -1335,6 +1386,7 @@ function RingFrameCard({ cop, busy, onUpdate, onDelete }) {
       label: cop.label,
       hank_value: cop.hank_value ?? cop.mean_hank ?? null,
       notes: cop.notes ?? null,
+      frame_number: cop.frame_number ?? null,
       sample_length: cop.sample_length ?? DEFAULT_LENGTHS.ringframe,
       readings: currentReadings,
       simplex_bobbin_ids: cop.simplex_bobbin_ids || (cop.simplex_bobbins || []).map(b => b.id),
@@ -1354,6 +1406,7 @@ function RingFrameCard({ cop, busy, onUpdate, onDelete }) {
       label: form.label,
       hank_value: hankReadings.length ? hankReadings.reduce((a, b) => a + b, 0) / hankReadings.length : null,
       notes: form.notes ? form.notes.trim() : null,
+      frame_number: form.frameNumber === '' ? null : Number(form.frameNumber),
       sample_length: form.sampleLength || DEFAULT_LENGTHS.ringframe,
       readings: validWeights,
     }))
@@ -1362,9 +1415,15 @@ function RingFrameCard({ cop, busy, onUpdate, onDelete }) {
   const handleDrop = async (e) => {
     e.preventDefault()
     const id = parseInt(e.dataTransfer.getData('application/x-simplex-bobbin'), 10)
-    const existingIds = cop.simplex_bobbin_ids || (cop.simplex_bobbins || []).map(b => b.id)
-    if (!id || existingIds.includes(id)) return
-    await onUpdate(cop.id, buildCompletePayload({ simplex_bobbin_ids: [...existingIds, id] }))
+    if (!id) return
+    const bobbinLabel = e.dataTransfer.getData('application/x-simplex-bobbin-label') || 'Bobbin'
+    const nextLabel = `Cop from ${bobbinLabel}`
+    setForm(f => ({ ...f, label: nextLabel }))
+    // Strict 1-to-1: one bobbin per cop (replace any existing).
+    await onUpdate(cop.id, buildCompletePayload({
+      simplex_bobbin_ids: [id],
+      label: nextLabel,
+    }))
   }
 
   const removeBobbin = async (id) => {
@@ -1401,6 +1460,23 @@ function RingFrameCard({ cop, busy, onUpdate, onDelete }) {
         onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
         style={{ ...inputStyle, resize: 'none' }}
       />
+      <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <span style={{ fontSize: 10, color: 'var(--tx-4)', fontWeight: 600 }}>Frame Number (1–25)</span>
+          <input
+            type="number" min="1" max="25" step="1"
+            value={form.frameNumber}
+            onChange={e => {
+              const raw = e.target.value
+              if (raw === '') { setForm(f => ({ ...f, frameNumber: '' })); return }
+              const n = parseInt(raw, 10)
+              setForm(f => ({ ...f, frameNumber: Number.isNaN(n) ? '' : Math.max(1, Math.min(25, n)) }))
+            }}
+            style={{ ...inputStyle, width: 160 }}
+            placeholder="e.g. 7"
+          />
+        </div>
+      </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 6 }}>
         {form.readings.map((v, idx) => {
           const weight = parseFloat(v)
@@ -1410,7 +1486,7 @@ function RingFrameCard({ cop, busy, onUpdate, onDelete }) {
           return (
             <div key={idx} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
               <input
-                type="number" step="any" placeholder={`Weight ${idx + 1} (g)`}
+                type="number" step="any" placeholder={`Relay ${idx + 1} Weight (g)`}
                 value={v}
                 onChange={e => setForm(f => {
                   const arr = f.readings.slice()

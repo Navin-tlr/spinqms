@@ -351,6 +351,7 @@ class LabRingframeCop(Base):
     trial_id   = Column(Integer, ForeignKey("lab_trials.id", ondelete="CASCADE"),
                         nullable=False, index=True)
     label      = Column(String,  nullable=False)
+    frame_number = Column(Integer, nullable=True)
     hank_value = Column(Float,   nullable=True)
     notes      = Column(String,  nullable=True)
     readings_json  = Column(Text,    nullable=True)

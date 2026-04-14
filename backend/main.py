@@ -366,6 +366,7 @@ def _ringframe_cop_payload(
     return {
         "id":                 c.id,
         "label":              c.label,
+        "frame_number":       c.frame_number,
         "hank_value":         c.hank_value,
         "notes":              c.notes,
         "sample_length":      c.sample_length,
@@ -1503,6 +1504,7 @@ def create_ringframe_cop(
     cop = LabRingframeCop(
         trial_id=trial_id,
         label=label,
+        frame_number=body.frame_number,
         hank_value=body.hank_value,
         notes=body.notes,
         sample_length=body.sample_length,
@@ -1546,6 +1548,8 @@ def update_ringframe_cop(
 
     if body.label is not None:
         cop.label = body.label.strip() or cop.label
+    if body.frame_number is not None:
+        cop.frame_number = body.frame_number
     if body.hank_value is not None:
         cop.hank_value = body.hank_value
     if body.notes is not None:

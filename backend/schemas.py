@@ -286,6 +286,7 @@ class SimplexBobbinRef(BaseModel):
 
 class RingframeCopCreate(BaseModel):
     label: Optional[str] = Field(None, min_length=1, max_length=60)
+    frame_number: Optional[int] = Field(None, ge=1, le=25)
     hank_value: Optional[float] = Field(None, gt=0)
     notes: Optional[str] = Field(None, max_length=200)
     simplex_bobbin_ids: List[int] = Field(default_factory=list)
@@ -304,6 +305,7 @@ class RingframeCopCreate(BaseModel):
 
 class RingframeCopUpdate(BaseModel):
     label: Optional[str] = Field(None, min_length=1, max_length=60)
+    frame_number: Optional[int] = Field(None, ge=1, le=25)
     hank_value: Optional[float] = Field(None, gt=0)
     notes: Optional[str] = Field(None, max_length=200)
     simplex_bobbin_ids: Optional[List[int]] = None
@@ -323,6 +325,7 @@ class RingframeCopUpdate(BaseModel):
 class RingframeCopOut(BaseModel):
     id: int
     label: str
+    frame_number: Optional[int] = None
     hank_value: Optional[float]
     notes: Optional[str]
     sample_length: float
