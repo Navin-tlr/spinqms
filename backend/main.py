@@ -1578,4 +1578,69 @@ def delete_ringframe_cop(cop_id: int, db: Session = Depends(get_db)):
     if not cop:
         raise HTTPException(404, "Ring frame cop not found")
     db.delete(cop)
+
+
+# ── Analysis Matrix ────────────────────────────────────────────────────────────
+@app.get("/api/lab/trials/{trial_id}/matrix")
+def get_lab_matrix(trial_id: int, db: Session = Depends(get_db)):
+    """
+    Return raw data for the frontend Analysis Matrix Report.
+    Returns bobbins, frame numbers, cop↔bobbin cell mappings, and benchmarks.
+    All gate computation (count/draft/pattern/CV) happens client-side on demand.
+    """
+    from sqlalchemy import text as sa_text
+
+    # Verify trial exists
+    trial = db.query(LabTrial).filter_by(id=trial_id).first()
+    if not trial:
+        raise HTTPException(404, "Trial not found")
+
+    # Benchmarks
+    bm_rows = db.execute(
+        sa_text("SELECT dept_id, target, tolerance FROM lab_benchmarks WHERE trial_id = :tid"),
+        {"tid": trial_id},
+    ).fetchall()
+    benchmarks = {row.dept_id: {"target": row.target, "tolerance": row.tolerance} for row in bm_rows}
+
+    if "ringframe" not in benchmarks:
+        raise HTTPException(400, "Ring frame benchmark not set for this trial")
+    if "simplex" not in benchmarks:
+        raise HTTPException(400, "Simplex benchmark not set for this trial")
+
+    # Simplex bobbins
+    bobbin_rows = db.execute(
+        sa_text(
+            "SELECT id, label, mean_hank AS bobbin_hank, cv_pct AS bobbin_cv "
+            "FROM lab_simplex_bobbins WHERE trial_id = :tid ORDER BY id"
+        ),
+        {"tid": trial_id},
+    ).fetchall()
+
+    # Cops with their linked bobbin ids (one row per cop↔bobbin link)
+    cell_rows = db.execute(
+        sa_text(
+            """
+            SELECT c.id        AS cop_id,
+                   c.frame_number,
+                   c.mean_hank AS cop_hank,
+                   c.cv_pct    AS cop_cv,
+                   ri.simplex_bobbin_id AS bobbin_id
+            FROM   lab_ringframe_cops c
+            LEFT JOIN lab_ringframe_inputs ri ON ri.cop_id = c.id
+            WHERE  c.trial_id = :tid
+            ORDER  BY c.frame_number, c.id
+            """
+        ),
+        {"tid": trial_id},
+    ).fetchall()
+
+    cells = [dict(row._mapping) for row in cell_rows]
+    frames = sorted({c["frame_number"] for c in cells if c["frame_number"] is not None})
+
+    return {
+        "bobbins": [dict(r._mapping) for r in bobbin_rows],
+        "frames":  frames,
+        "cells":   cells,
+        "benchmarks": benchmarks,
+    }
     db.commit()
