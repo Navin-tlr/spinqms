@@ -20,7 +20,7 @@ const V_ICON = { pass: '✓', warn: '▲', fail: '✕', pending: '…' }
 const DEPT_ORDER = ['rsb', 'simplex', 'ringframe']
 const RSB_READING_COUNT = 3
 const SIMPLEX_READING_COUNT = 3
-const RING_READING_COUNT = 2
+const RING_READING_COUNT = 5
 const DEFAULT_LENGTHS = {
   rsb: 6,
   simplex: 6,
@@ -769,7 +769,7 @@ function RSBPanel({ trialId, cans, refreshFlow, canFeedsTo }) {
     // Backend currently auto-ensures slots 1..5 for each trial.
     // So "Add" means re-introducing a removed slot (up to 5 total).
     const used = new Set(draft.map(c => c.slot))
-    const nextSlot = [1, 2, 3, 4, 5].find(s => !used.has(s))
+    const nextSlot = Array.from({ length: 10 }, (_, i) => i + 1).find(s => !used.has(s))
     if (!nextSlot) return
     setDraft(rows => ([
       ...rows,
@@ -840,7 +840,7 @@ function RSBPanel({ trialId, cans, refreshFlow, canFeedsTo }) {
           <div style={{ fontSize: 11, color: 'var(--tx-4)' }}>{draft.length} cans · ~{draft.length * 7} minutes total</div>
         </div>
         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-          <SmBtn onClick={handleAddCan} disabled={saving || draft.length >= 5}>+ Add Can</SmBtn>
+          <SmBtn onClick={handleAddCan} disabled={saving || draft.length >= 10}>+ Add Can</SmBtn>
           <SmBtn primary onClick={handleSave} disabled={saving || !dirty}>
             {saving ? 'Saving…' : 'Save'}
           </SmBtn>
@@ -1284,42 +1284,72 @@ function SimplexCard({ bobbin, busy, onUpdate, onDelete, bobbinFeedsTo }) {
   )
 }
 
+/* ════════════════════════════════════════════════════════════════════════════
+   RingFramePanel — groups cops into collapsible FrameCards (one per machine)
+══════════════════════════════════════════════════════════════════════════════ */
 function RingFramePanel({ trialId, cops, refreshFlow }) {
   const [busyId, setBusyId] = useState(null)
+  // localFrames tracks freshly-added UI frames that have no cops yet
+  const [localFrames, setLocalFrames] = useState([])
 
-  const handleAdd = async () => {
+  // Group existing cops by frame_number key
+  const copsByFrame = useMemo(() => {
+    const groups = new Map()
+    for (const cop of cops) {
+      const key = cop.frame_number != null ? cop.frame_number : '__none__'
+      if (!groups.has(key)) groups.set(key, [])
+      groups.get(key).push(cop)
+    }
+    return groups
+  }, [cops])
+
+  // Merge backend groups with locally-added empty frames
+  const frames = useMemo(() => {
+    const result = []
+    for (const [key, frameCops] of copsByFrame.entries()) {
+      result.push({
+        key,
+        frameNumber: key === '__none__' ? null : Number(key),
+        cops: frameCops,
+        isLocal: false,
+      })
+    }
+    result.sort((a, b) => (a.frameNumber ?? 9999) - (b.frameNumber ?? 9999))
+    for (const lf of localFrames) {
+      const alreadyBacked = result.some(
+        f => lf.frameNumber !== '' && String(f.frameNumber) === String(lf.frameNumber)
+      )
+      if (!alreadyBacked) {
+        result.push({ key: `local-${lf.id}`, frameNumber: lf.frameNumber, cops: [], isLocal: true, localId: lf.id })
+      }
+    }
+    return result
+  }, [copsByFrame, localFrames])
+
+  const addFrame = () => setLocalFrames(lf => [...lf, { id: Date.now(), frameNumber: '', expanded: true }])
+
+  const handleCreateCop = async (frameNumber, body) => {
     setBusyId('new')
     try {
-      await createRingframeCop(trialId, {
-        label: 'Cop ' + (cops.length + 1),
-        sample_length: 120,
-        readings: [],
-        simplex_bobbin_ids: [],
-      })
+      await createRingframeCop(trialId, { ...body, frame_number: frameNumber != null ? frameNumber : null })
+      // Once a cop lands in this frame, drop the local placeholder
+      if (frameNumber != null) {
+        setLocalFrames(lf => lf.filter(f => String(f.frameNumber) !== String(frameNumber)))
+      }
       await refreshFlow()
-    } finally {
-      setBusyId(null)
-    }
+    } finally { setBusyId(null) }
   }
 
-  const handleUpdate = async (id, body) => {
+  const handleUpdateCop = async (id, body) => {
     setBusyId(id)
-    try {
-      await updateRingframeCop(id, body)
-      await refreshFlow()
-    } finally {
-      setBusyId(null)
-    }
+    try { await updateRingframeCop(id, body); await refreshFlow() }
+    finally { setBusyId(null) }
   }
 
-  const handleDelete = async (id) => {
+  const handleDeleteCop = async (id) => {
     setBusyId(id)
-    try {
-      await deleteRingframeCop(id)
-      await refreshFlow()
-    } finally {
-      setBusyId(null)
-    }
+    try { await deleteRingframeCop(id); await refreshFlow() }
+    finally { setBusyId(null) }
   }
 
   return (
@@ -1327,29 +1357,35 @@ function RingFramePanel({ trialId, cops, refreshFlow }) {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
         <div>
           <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--tx)' }}>Ring Frame</div>
-          <div style={{ fontSize: 11, color: 'var(--tx-4)' }}>Map bobbins → cops</div>
+          <div style={{ fontSize: 11, color: 'var(--tx-4)' }}>
+            {frames.length} frame{frames.length !== 1 ? 's' : ''} · drop bobbins → cops (up to 9 per frame, 5 relays each)
+          </div>
         </div>
-        <SmBtn primary onClick={handleAdd} disabled={busyId === 'new'}>
-          {busyId === 'new' ? 'Adding…' : '+ Add Cop'}
+        <SmBtn primary onClick={addFrame} disabled={busyId === 'new'}>
+          {busyId === 'new' ? 'Adding…' : '+ Add Frame'}
         </SmBtn>
       </div>
       <FormulaNote length={DEFAULT_LENGTHS.ringframe} />
-      {cops.length === 0 ? (
+      {frames.length === 0 ? (
         <div style={{
-          border: '1px dashed var(--bd)', borderRadius: 'var(--r)', padding: 16,
+          border: '1px dashed var(--bd)', borderRadius: 'var(--r)', padding: 20,
           fontSize: 12, color: 'var(--tx-3)', textAlign: 'center',
         }}>
-          Drag simplex bobbins to build cops.
+          Click "+ Add Frame" then drag simplex bobbins into it to start logging cops.
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {cops.map(c => (
-            <RingFrameCard
-              key={c.id}
-              cop={c}
-              busy={busyId === c.id}
-              onUpdate={handleUpdate}
-              onDelete={handleDelete}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {frames.map(frame => (
+            <FrameCard
+              key={frame.key}
+              initialFrameNumber={frame.frameNumber}
+              cops={frame.cops}
+              isLocal={frame.isLocal}
+              busy={busyId}
+              onCreateCop={handleCreateCop}
+              onUpdateCop={handleUpdateCop}
+              onDeleteCop={handleDeleteCop}
+              onRemoveLocal={() => setLocalFrames(lf => lf.filter(f => f.id !== frame.localId))}
             />
           ))}
         </div>
@@ -1358,204 +1394,381 @@ function RingFramePanel({ trialId, cops, refreshFlow }) {
   )
 }
 
-function RingFrameCard({ cop, busy, onUpdate, onDelete }) {
-  const [form, setForm] = useState(() => ({
-    label: cop.label,
-    notes: cop.notes ?? '',
-    sampleLength: cop.sample_length ?? DEFAULT_LENGTHS.ringframe,
-    frameNumber: cop.frame_number ?? '',
-    readings: buildReadings(cop.readings, RING_READING_COUNT),
-  }))
+/* ════════════════════════════════════════════════════════════════════════════
+   FrameCard — one ring-frame machine container
+   • Starts expanded; collapses on "Save Frame"
+   • Up to 9 cops per frame, each cop has 5 relay readings
+   • Bobbins from Simplex can be dropped onto the frame → creates a new cop
+   • A single bobbin can also be linked to multiple frames
+══════════════════════════════════════════════════════════════════════════════ */
+function FrameCard({ initialFrameNumber, cops, isLocal, busy, onCreateCop, onUpdateCop, onDeleteCop, onRemoveLocal }) {
+  const [isExpanded, setIsExpanded] = useState(true)
+  const [frameNum, setFrameNum] = useState(
+    initialFrameNumber != null ? String(initialFrameNumber) : ''
+  )
 
+  // Lifted cop form state — keyed by cop.id — so Save Frame can write all at once
+  const [copForms, setCopForms] = useState(() => {
+    const init = {}
+    for (const cop of cops) {
+      init[cop.id] = {
+        notes: cop.notes ?? '',
+        sampleLength: cop.sample_length ?? DEFAULT_LENGTHS.ringframe,
+        readings: buildReadings(cop.readings, RING_READING_COUNT),
+      }
+    }
+    return init
+  })
+
+  // Sync copForms when cops array changes (new cop added or deleted from backend)
   useEffect(() => {
-    setForm({
-      label: cop.label,
-      notes: cop.notes ?? '',
-      sampleLength: cop.sample_length ?? DEFAULT_LENGTHS.ringframe,
-      frameNumber: cop.frame_number ?? '',
-      readings: buildReadings(cop.readings, RING_READING_COUNT),
+    setCopForms(prev => {
+      const next = { ...prev }
+      for (const cop of cops) {
+        if (!next[cop.id]) {
+          next[cop.id] = {
+            notes: cop.notes ?? '',
+            sampleLength: cop.sample_length ?? DEFAULT_LENGTHS.ringframe,
+            readings: buildReadings(cop.readings, RING_READING_COUNT),
+          }
+        }
+      }
+      // Prune stale keys
+      for (const id of Object.keys(next)) {
+        if (!cops.find(c => String(c.id) === String(id))) delete next[id]
+      }
+      return next
     })
-  }, [cop])
+  }, [cops])
 
-  const status = cop.status ?? 'pending'
-  const statusMeta = STATUS_META[status] ?? STATUS_META.pending
+  // Compute overall frame verdict from cop statuses
+  const frameVerdict = useMemo(() => {
+    if (cops.length === 0) return 'pending'
+    const statuses = cops.map(c => c.status ?? 'pending')
+    if (statuses.some(s => s === 'faulty')) return 'fail'
+    if (statuses.every(s => s === 'perfect')) return 'pass'
+    if (statuses.some(s => s === 'perfect')) return 'warn'
+    return 'pending'
+  }, [cops])
 
-  const buildCompletePayload = (overrides = {}) => {
-    const currentReadings = Array.isArray(cop.readings) ? cop.readings : []
-    return {
+  // Drop a bobbin onto the frame → create a new cop associated with this frame
+  const handleFrameDrop = async (e) => {
+    e.preventDefault()
+    if (cops.length >= 9) return
+    const bobbinId = parseInt(e.dataTransfer.getData('application/x-simplex-bobbin'), 10)
+    const bobbinLabel = e.dataTransfer.getData('application/x-simplex-bobbin-label') || 'Bobbin'
+    if (!bobbinId) return
+    const fn = frameNum !== '' ? parseInt(frameNum, 10) : null
+    await onCreateCop(fn, {
+      label: `Cop from ${bobbinLabel}`,
+      sample_length: DEFAULT_LENGTHS.ringframe,
+      readings: [],
+      simplex_bobbin_ids: [bobbinId],
+    })
+  }
+
+  // Also allow dropping a bobbin onto an existing cop to link it (multi-frame bobbin support)
+  const handleCopDrop = async (e, cop) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const bobbinId = parseInt(e.dataTransfer.getData('application/x-simplex-bobbin'), 10)
+    if (!bobbinId) return
+    const existingIds = cop.simplex_bobbin_ids || (cop.simplex_bobbins || []).map(b => b.id)
+    if (existingIds.includes(bobbinId)) return
+    const fn = frameNum !== '' ? parseInt(frameNum, 10) : (cop.frame_number ?? null)
+    await onUpdateCop(cop.id, {
+      label: cop.label,
+      hank_value: cop.hank_value ?? cop.mean_hank ?? null,
+      notes: cop.notes ?? null,
+      frame_number: fn,
+      sample_length: cop.sample_length ?? DEFAULT_LENGTHS.ringframe,
+      readings: Array.isArray(cop.readings) ? cop.readings : [],
+      simplex_bobbin_ids: [...existingIds, bobbinId],
+    })
+  }
+
+  const removeBobbin = async (cop, bobbinId) => {
+    const existingIds = cop.simplex_bobbin_ids || (cop.simplex_bobbins || []).map(b => b.id)
+    await onUpdateCop(cop.id, {
       label: cop.label,
       hank_value: cop.hank_value ?? cop.mean_hank ?? null,
       notes: cop.notes ?? null,
       frame_number: cop.frame_number ?? null,
       sample_length: cop.sample_length ?? DEFAULT_LENGTHS.ringframe,
-      readings: currentReadings,
-      simplex_bobbin_ids: cop.simplex_bobbin_ids || (cop.simplex_bobbins || []).map(b => b.id),
-      ...overrides,
+      readings: Array.isArray(cop.readings) ? cop.readings : [],
+      simplex_bobbin_ids: existingIds.filter(id => id !== bobbinId),
+    })
+  }
+
+  // Save all cop forms at once, then collapse
+  const handleSaveFrame = async () => {
+    const fn = frameNum !== '' ? parseInt(frameNum, 10) : null
+    for (const cop of cops) {
+      const form = copForms[cop.id]
+      if (!form) continue
+      const weights = form.readings.map(v => parseFloat(v)).filter(v => !isNaN(v) && v > 0)
+      const validWeights = weights.length === RING_READING_COUNT ? weights : []
+      const hankReadings = validWeights.length ? toHanks(validWeights, form.sampleLength || DEFAULT_LENGTHS.ringframe) : []
+      await onUpdateCop(cop.id, {
+        label: cop.label,
+        hank_value: hankReadings.length
+          ? hankReadings.reduce((a, b) => a + b, 0) / hankReadings.length
+          : (cop.hank_value ?? cop.mean_hank ?? null),
+        notes: form.notes ? form.notes.trim() : null,
+        frame_number: fn,
+        sample_length: form.sampleLength || DEFAULT_LENGTHS.ringframe,
+        readings: validWeights,
+        simplex_bobbin_ids: cop.simplex_bobbin_ids || (cop.simplex_bobbins || []).map(b => b.id),
+      })
     }
+    setIsExpanded(false)
   }
 
-  const handleSave = async () => {
-    const weights = form.readings
-      .map(v => parseFloat(v))
-      .filter(v => !Number.isNaN(v) && v > 0)
-    const validWeights = weights.length === RING_READING_COUNT ? weights : []
-    const hankReadings = validWeights.length
-      ? toHanks(validWeights, form.sampleLength || DEFAULT_LENGTHS.ringframe)
-      : []
-    await onUpdate(cop.id, buildCompletePayload({
-      label: form.label,
-      hank_value: hankReadings.length ? hankReadings.reduce((a, b) => a + b, 0) / hankReadings.length : null,
-      notes: form.notes ? form.notes.trim() : null,
-      frame_number: form.frameNumber === '' ? null : Number(form.frameNumber),
-      sample_length: form.sampleLength || DEFAULT_LENGTHS.ringframe,
-      readings: validWeights,
-    }))
-  }
+  const vColor  = V_COLOR[frameVerdict]  ?? 'var(--tx-4)'
+  const vBg     = V_BG[frameVerdict]     ?? 'var(--bg-3)'
+  const vBd     = V_BD[frameVerdict]     ?? 'var(--bd)'
+  const vLabel  = V_LABEL[frameVerdict]  ?? 'PENDING'
 
-  const handleDrop = async (e) => {
-    e.preventDefault()
-    const id = parseInt(e.dataTransfer.getData('application/x-simplex-bobbin'), 10)
-    if (!id) return
-    const bobbinLabel = e.dataTransfer.getData('application/x-simplex-bobbin-label') || 'Bobbin'
-    const nextLabel = `Cop from ${bobbinLabel}`
-    setForm(f => ({ ...f, label: nextLabel }))
-    // Strict 1-to-1: one bobbin per cop (replace any existing).
-    await onUpdate(cop.id, buildCompletePayload({
-      simplex_bobbin_ids: [id],
-      label: nextLabel,
-    }))
-  }
-
-  const removeBobbin = async (id) => {
-    const existingIds = cop.simplex_bobbin_ids || (cop.simplex_bobbins || []).map(b => b.id)
-    await onUpdate(cop.id, buildCompletePayload({ simplex_bobbin_ids: existingIds.filter(bid => bid !== id) }))
-  }
-
-
-  return (
-    <div style={{
-      border: `1px solid ${STATUS_BORDER[status] ?? 'var(--bd)'}`,
-      borderRadius: 'var(--r)', padding: 12,
-      background: STATUS_BG[status] ?? 'var(--bg-2)', display: 'flex', flexDirection: 'column', gap: 8,
-    }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <input type="text" value={form.label}
-          onChange={e => setForm(f => ({ ...f, label: e.target.value }))}
-          style={{ ...inputStyle, flex: 1 }}
-        />
-        <span style={{
-          fontSize: 10, fontWeight: 600, color: statusMeta.color,
-          padding: '2px 6px', borderRadius: 12,
-          border: `1px solid ${STATUS_BORDER[status] ?? 'var(--bd)'}`,
-          background: 'var(--bg)',
-        }}>
-          {statusMeta.label}
+  /* ── Collapsed view ──────────────────────────────────────────────────── */
+  if (!isExpanded) {
+    return (
+      <div style={{
+        border: `1.5px solid ${vBd}`, borderRadius: 'var(--r)',
+        padding: '10px 16px', background: vBg,
+        display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
+      }}>
+        <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--tx)', minWidth: 90 }}>
+          Frame {frameNum || '?'}
         </span>
-        <SmBtn onClick={() => onDelete(cop.id)} disabled={busy}>✕</SmBtn>
+        <span style={{ fontSize: 12, color: 'var(--tx-3)' }}>{cops.length}/9 Cops Logged</span>
+        <span style={{
+          padding: '3px 10px', borderRadius: 12, fontSize: 11, fontWeight: 700,
+          background: vColor, color: '#fff', letterSpacing: '.04em',
+        }}>{vLabel}</span>
+        <button onClick={() => setIsExpanded(true)} style={{
+          marginLeft: 'auto', border: '1px solid var(--bd-md)', background: 'var(--bg)',
+          borderRadius: 'var(--r)', padding: '5px 12px', fontSize: 12, cursor: 'pointer',
+          color: 'var(--tx-2)', fontFamily: 'var(--font)', fontWeight: 500,
+        }}>▼ Expand</button>
       </div>
-      <textarea
-        rows={2}
-        placeholder="Notes"
-        value={form.notes}
-        onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
-        style={{ ...inputStyle, resize: 'none' }}
-      />
-      <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end', flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          <span style={{ fontSize: 10, color: 'var(--tx-4)', fontWeight: 600 }}>Frame Number (1–25)</span>
-          <input
-            type="number" min="1" max="25" step="1"
-            value={form.frameNumber}
-            onChange={e => {
-              const raw = e.target.value
-              if (raw === '') { setForm(f => ({ ...f, frameNumber: '' })); return }
-              const n = parseInt(raw, 10)
-              setForm(f => ({ ...f, frameNumber: Number.isNaN(n) ? '' : Math.max(1, Math.min(25, n)) }))
-            }}
-            style={{ ...inputStyle, width: 160 }}
-            placeholder="e.g. 7"
-          />
-        </div>
+    )
+  }
+
+  /* ── Expanded view ───────────────────────────────────────────────────── */
+  return (
+    <div style={{ border: '1.5px solid var(--bd-md)', borderRadius: 'var(--r)', background: 'var(--bg)', overflow: 'hidden' }}>
+
+      {/* Frame header bar */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+        padding: '10px 14px', borderBottom: '1px solid var(--bd)', background: 'var(--bg-2)',
+      }}>
+        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--tx-3)', flexShrink: 0 }}>Frame #</span>
+        <input
+          type="number" min="1" max="25" step="1"
+          value={frameNum} placeholder="1–25"
+          onChange={e => {
+            const raw = e.target.value
+            if (raw === '') { setFrameNum(''); return }
+            const n = parseInt(raw, 10)
+            setFrameNum(String(isNaN(n) ? '' : Math.max(1, Math.min(25, n))))
+          }}
+          style={{ ...inputStyle, width: 80 }}
+        />
+        <span style={{ fontSize: 11, color: 'var(--tx-4)' }}>{cops.length} / 9 Cops</span>
+        {isLocal && cops.length === 0 && (
+          <button onClick={onRemoveLocal} style={{
+            marginLeft: 'auto', border: 'none', background: 'transparent',
+            cursor: 'pointer', color: 'var(--tx-4)', fontSize: 11, padding: '2px 6px',
+          }}>✕ Remove</button>
+        )}
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 6 }}>
-        {form.readings.map((v, idx) => {
-          const weight = parseFloat(v)
-          const hank = !Number.isNaN(weight) && weight > 0
-            ? weightToHank(weight, form.sampleLength || DEFAULT_LENGTHS.ringframe)
-            : null
-          return (
-            <div key={idx} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-              <input
-                type="number" step="any" placeholder={`Relay ${idx + 1} Weight (g)`}
-                value={v}
-                onChange={e => setForm(f => {
-                  const arr = f.readings.slice()
-                  arr[idx] = e.target.value
-                  return { ...f, readings: arr }
-                })}
-                style={inputStyle}
-              />
-              <span style={{ fontSize: 10, color: 'var(--tx-3)' }}>→ Hank {hank ? hank.toFixed(4) : '—'}</span>
-            </div>
-          )
-        })}
-      </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <span style={{ fontSize: 10, color: 'var(--tx-4)', fontWeight: 600 }}>Sample length (yds)</span>
-            <input
-              type="number" step="1" min="10"
-              value={form.sampleLength}
-              onChange={e => {
-                const val = parseFloat(e.target.value)
-                setForm(f => ({ ...f, sampleLength: Number.isNaN(val) || val <= 0 ? DEFAULT_LENGTHS.ringframe : val }))
-              }}
-              style={{ ...inputStyle, width: 140 }}
-            />
-          </div>
-          <span style={{ fontSize: 11, color: 'var(--tx-4)' }}>Ne = (L × 0.54) / W</span>
-        </div>
-      </div>
-      <div
-        onDragOver={e => e.preventDefault()}
-        onDrop={handleDrop}
-        style={{
-          border: '1px dashed var(--bd)', borderRadius: 'var(--r)', padding: 8,
-          minHeight: 46, display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center',
-          background: 'var(--bg)',
-        }}>
-        {(cop.simplex_bobbins || []).length === 0 ? (
-          <span style={{ fontSize: 11, color: 'var(--tx-4)' }}>Drop simplex bobbins here</span>
-        ) : (cop.simplex_bobbins || []).map(b => (
-          <span key={b.id} style={{
-            display: 'inline-flex', alignItems: 'center', gap: 4,
-            padding: '2px 6px', borderRadius: 12, background: 'var(--bg-2)',
-            border: '1px solid var(--bd)', fontSize: 11,
+
+      <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
+
+        {/* Drop zone — accept bobbin drops to create new cops */}
+        <div
+          onDragOver={e => e.preventDefault()}
+          onDrop={handleFrameDrop}
+          style={{
+            border: `1.5px dashed ${cops.length >= 9 ? 'var(--bd)' : 'var(--bd-md)'}`,
+            borderRadius: 'var(--r)', background: 'var(--bg-2)',
+            padding: cops.length === 0 ? '18px 14px' : '8px 12px',
+            minHeight: 52, display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center',
+            opacity: cops.length >= 9 ? .5 : 1,
+            transition: 'opacity .15s',
           }}>
-            {b.label}
-            <button onClick={() => removeBobbin(b.id)}
-              style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--tx-4)' }}>
-              ×
-            </button>
-          </span>
-        ))}
-      </div>
-      <ConnectionTag direction="Fed by ←" items={(cop.simplex_bobbins || []).map(b => b.label)} color="var(--tx-3)" />
-      {(cop.rsb_cans || []).length > 0 && (
-        <ConnectionTag direction="Upstream RSB ←" items={(cop.rsb_cans || []).map(c => c.slot ? `Can ${c.slot}` : c.label)} color="var(--tx-4)" />
-      )}
-      <MiniSummary
-        readings={form.readings}
-        savedMean={cop.mean_hank}
-        savedCv={cop.cv_pct}
-        expected={RING_READING_COUNT}
-        sampleLength={form.sampleLength || DEFAULT_LENGTHS.ringframe}
-      />
-      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-        <SmBtn primary onClick={handleSave} disabled={busy}>
-          {busy ? 'Saving…' : 'Save Cop'}
-        </SmBtn>
+          {cops.length === 0 ? (
+            <span style={{ fontSize: 12, color: 'var(--tx-3)', width: '100%', textAlign: 'center' }}>
+              Drop simplex bobbins here — each bobbin creates one cop (up to 9)
+            </span>
+          ) : cops.length < 9 ? (
+            <span style={{ fontSize: 11, color: 'var(--tx-4)' }}>
+              + Drop another bobbin ({9 - cops.length} slot{9 - cops.length !== 1 ? 's' : ''} remaining)
+            </span>
+          ) : (
+            <span style={{ fontSize: 11, color: 'var(--tx-4)' }}>Frame full — 9/9 cops</span>
+          )}
+        </div>
+
+        {/* Individual cop entries */}
+        {cops.length > 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {cops.map((cop, idx) => {
+              const form = copForms[cop.id] ?? {
+                notes: cop.notes ?? '',
+                sampleLength: cop.sample_length ?? DEFAULT_LENGTHS.ringframe,
+                readings: buildReadings(cop.readings, RING_READING_COUNT),
+              }
+              const status = cop.status ?? 'pending'
+              const updateForm = (field, value) =>
+                setCopForms(f => ({ ...f, [cop.id]: { ...(f[cop.id] ?? form), [field]: value } }))
+
+              return (
+                <div key={cop.id} style={{
+                  border: `1px solid ${STATUS_BORDER[status] ?? 'var(--bd)'}`,
+                  borderRadius: 'var(--r)', padding: 10,
+                  background: STATUS_BG[status] ?? 'var(--bg-3)',
+                  display: 'flex', flexDirection: 'column', gap: 8,
+                }}>
+                  {/* Cop header */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--tx)' }}>Cop {idx + 1}</span>
+                    {(cop.simplex_bobbins || []).length > 0 && (
+                      <span style={{ fontSize: 10, color: 'var(--tx-3)' }}>
+                        ← {(cop.simplex_bobbins || []).map(b => b.label).join(', ')}
+                      </span>
+                    )}
+                    <span style={{
+                      fontSize: 10, fontWeight: 700, padding: '1px 7px', borderRadius: 8,
+                      border: `1px solid ${STATUS_BORDER[status] ?? 'var(--bd)'}`,
+                      background: 'var(--bg)', color: STATUS_META[status]?.color ?? 'var(--tx-4)',
+                    }}>{STATUS_META[status]?.label ?? 'Pending'}</span>
+                    <button onClick={() => onDeleteCop(cop.id)} style={{
+                      marginLeft: 'auto', border: 'none', background: 'transparent',
+                      cursor: 'pointer', color: 'var(--tx-4)', fontSize: 11, padding: '2px 6px',
+                    }}>✕</button>
+                  </div>
+
+                  {/* 5 relay readings in a 5-col grid */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 5 }}>
+                    {form.readings.map((v, ridx) => {
+                      const weight = parseFloat(v)
+                      const hank = !isNaN(weight) && weight > 0
+                        ? weightToHank(weight, form.sampleLength || DEFAULT_LENGTHS.ringframe)
+                        : null
+                      return (
+                        <div key={ridx} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                          <input
+                            type="number" step="any"
+                            placeholder={`Relay ${ridx + 1}`}
+                            value={v}
+                            onChange={e => {
+                              const arr = form.readings.slice()
+                              arr[ridx] = e.target.value
+                              updateForm('readings', arr)
+                            }}
+                            style={inputStyle}
+                          />
+                          <span style={{ fontSize: 9, color: 'var(--tx-3)', textAlign: 'center' }}>
+                            {hank ? hank.toFixed(2) : '—'}
+                          </span>
+                        </div>
+                      )
+                    })}
+                  </div>
+
+                  {/* Sample length + formula hint */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: 10, color: 'var(--tx-4)', fontWeight: 600 }}>Length</span>
+                    <input
+                      type="number" step="1" min="10"
+                      value={form.sampleLength}
+                      onChange={e => {
+                        const val = parseFloat(e.target.value)
+                        updateForm('sampleLength', isNaN(val) || val <= 0 ? DEFAULT_LENGTHS.ringframe : val)
+                      }}
+                      style={{ ...inputStyle, width: 90 }}
+                    />
+                    <span style={{ fontSize: 10, color: 'var(--tx-4)' }}>yds · Ne = (L × 0.54) / W</span>
+                  </div>
+
+                  {/* Live hank summary */}
+                  <MiniSummary
+                    readings={form.readings}
+                    savedMean={cop.mean_hank}
+                    savedCv={cop.cv_pct}
+                    expected={RING_READING_COUNT}
+                    sampleLength={form.sampleLength || DEFAULT_LENGTHS.ringframe}
+                  />
+
+                  {/* Notes */}
+                  <input
+                    type="text" placeholder="Notes (optional)"
+                    value={form.notes}
+                    onChange={e => updateForm('notes', e.target.value)}
+                    style={{ ...inputStyle }}
+                  />
+
+                  {/* Bobbin drop zone for linking additional bobbins (multi-frame support) */}
+                  <div
+                    onDragOver={e => e.preventDefault()}
+                    onDrop={e => handleCopDrop(e, cop)}
+                    style={{
+                      border: '1px dashed var(--bd)', borderRadius: 'var(--r)', padding: '5px 8px',
+                      minHeight: 34, display: 'flex', flexWrap: 'wrap', gap: 5, alignItems: 'center',
+                      background: 'var(--bg)',
+                    }}>
+                    {(cop.simplex_bobbins || []).length === 0 ? (
+                      <span style={{ fontSize: 10, color: 'var(--tx-4)' }}>Drop another bobbin to link it here</span>
+                    ) : (cop.simplex_bobbins || []).map(b => (
+                      <span key={b.id} style={{
+                        display: 'inline-flex', alignItems: 'center', gap: 3,
+                        padding: '1px 6px', borderRadius: 10, background: 'var(--claude-bg)',
+                        border: '1px solid var(--claude-bd)', fontSize: 10, color: 'var(--claude)',
+                      }}>
+                        {b.label}
+                        <button onClick={() => removeBobbin(cop, b.id)} style={{
+                          border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--claude)', fontSize: 10,
+                        }}>×</button>
+                      </span>
+                    ))}
+                  </div>
+
+                  {/* RSB upstream trace */}
+                  {(cop.rsb_cans || []).length > 0 && (
+                    <ConnectionTag
+                      direction="Upstream RSB ←"
+                      items={(cop.rsb_cans || []).map(c => c.slot ? `Can ${c.slot}` : c.label)}
+                      color="var(--tx-4)"
+                    />
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        {/* Frame footer actions */}
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', paddingTop: 4 }}>
+          <button onClick={() => setIsExpanded(false)} style={{
+            padding: '6px 14px', fontSize: 12, fontWeight: 500,
+            border: '1px solid var(--bd-md)', borderRadius: 'var(--r)',
+            background: 'var(--bg)', color: 'var(--tx-2)', cursor: 'pointer',
+            fontFamily: 'var(--font)',
+          }}>Collapse ▲</button>
+          <button
+            onClick={handleSaveFrame}
+            disabled={!!busy}
+            style={{
+              padding: '6px 16px', fontSize: 12, fontWeight: 600,
+              border: '1px solid var(--claude)', borderRadius: 'var(--r)',
+              background: 'var(--claude)', color: '#fff',
+              cursor: busy ? 'default' : 'pointer',
+              fontFamily: 'var(--font)', opacity: busy ? .6 : 1, transition: 'opacity .15s',
+            }}
+          >{busy ? 'Saving…' : 'Save Frame'}</button>
+        </div>
       </div>
     </div>
   )
