@@ -1421,8 +1421,18 @@ def create_simplex_bobbin(
         .filter(LabSimplexBobbin.trial_id == trial_id)
         .scalar()
     )
-    provided_label = (body.label or "").strip()
-    label = provided_label or f"Bobbin {count + 1}"
+    # Auto-derive label from the primary RSB can slot so bobbin names always
+    # match their source can (e.g. Can 3 → "Bobbin 3").
+    # Falls back to sequential numbering only when no can is linked yet.
+    label = f"Bobbin {count + 1}"
+    if body.rsb_can_ids:
+        first_can = (
+            db.query(LabRSBCan)
+            .filter(LabRSBCan.trial_id == trial_id, LabRSBCan.id == body.rsb_can_ids[0])
+            .first()
+        )
+        if first_can:
+            label = f"Bobbin {first_can.slot}"
     bobbin = LabSimplexBobbin(
         trial_id=trial_id,
         label=label,
@@ -1461,8 +1471,6 @@ def update_simplex_bobbin(
     if not bobbin:
         raise HTTPException(404, "Simplex bobbin not found")
 
-    if body.label is not None:
-        bobbin.label = body.label.strip() or bobbin.label
     if body.hank_value is not None:
         bobbin.hank_value = body.hank_value
     if body.notes is not None:
@@ -1475,6 +1483,19 @@ def update_simplex_bobbin(
         bobbin.sample_length = body.sample_length
     if body.rsb_can_ids is not None:
         _set_simplex_inputs(bobbin, body.rsb_can_ids, bobbin.trial_id, db)
+        # Auto-rename: label always tracks the primary (first) linked RSB can slot.
+        # This overrides any manually supplied body.label so naming stays consistent.
+        if body.rsb_can_ids:
+            first_can = (
+                db.query(LabRSBCan)
+                .filter(LabRSBCan.trial_id == bobbin.trial_id, LabRSBCan.id == body.rsb_can_ids[0])
+                .first()
+            )
+            if first_can:
+                bobbin.label = f"Bobbin {first_can.slot}"
+    elif body.label is not None:
+        # Only allow a manual label when no can linkage is being set in this request
+        bobbin.label = body.label.strip() or bobbin.label
     if body.readings is not None:
         readings = [round(r, 6) for r in body.readings if r is not None]
         _set_reading_fields(bobbin, readings, bobbin.sample_length)
