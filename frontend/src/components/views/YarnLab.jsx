@@ -1268,6 +1268,7 @@ function SimplexCard({ bobbin, machineNum, busy, onUpdate, onDelete, bobbinFeeds
   const handleDragStart = (e) => {
     e.dataTransfer.setData('application/x-simplex-bobbin', String(bobbin.id))
     e.dataTransfer.setData('application/x-simplex-bobbin-label', String(bobbin.label || 'Bobbin'))
+    e.dataTransfer.setData('application/x-simplex-bobbin-machine', String(machineNum ?? ''))
     e.dataTransfer.effectAllowed = 'copy'
   }
 
@@ -1753,7 +1754,11 @@ function FrameCard({ initialFrameNumber, cops, isLocal, busy, onCreateCop, onUpd
                     <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--tx)' }}>Cop {idx + 1}</span>
                     {(cop.simplex_bobbins || []).length > 0 && (
                       <span style={{ fontSize: 10, color: 'var(--tx-3)' }}>
-                        ← {(cop.simplex_bobbins || []).map(b => b.label).join(', ')}
+                        ← {(cop.simplex_bobbins || []).map(b =>
+                          b.machine_number != null
+                            ? `${b.label} (Sx ${b.machine_number})`
+                            : b.label
+                        ).join(', ')}
                       </span>
                     )}
                     <span style={{
@@ -1845,6 +1850,15 @@ function FrameCard({ initialFrameNumber, cops, isLocal, busy, onCreateCop, onUpd
                         border: '1px solid var(--claude-bd)', fontSize: 10, color: 'var(--claude)',
                       }}>
                         {b.label}
+                        {b.machine_number != null && (
+                          <span style={{
+                            fontSize: 9, fontWeight: 700, color: 'var(--tx-3)',
+                            background: 'var(--bg-3)', borderRadius: 6,
+                            padding: '0px 4px', marginLeft: 2, border: '1px solid var(--bd)',
+                          }}>
+                            Sx {b.machine_number}
+                          </span>
+                        )}
                         <button onClick={() => removeBobbin(cop, b.id)} style={{
                           border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--claude)', fontSize: 10,
                         }}>×</button>
@@ -1963,10 +1977,13 @@ function buildInteractionReport(raw) {
   // Table 3: Frame Summary
   const frameSummary = frames.map(f => {
     const rows = byFrame[f] ?? []
-    if (!rows.length) return { frame: f, count: 0, avgCopHank: null, avgCountDev: null, maxCountDev: null, avgDraftError: null, avgCvAdded: null }
+    if (!rows.length) return { frame: f, count: 0, machines: [], avgCopHank: null, avgCountDev: null, maxCountDev: null, avgDraftError: null, avgCvAdded: null }
+    // Collect unique Simplex machine numbers that fed this frame (sorted, nulls excluded)
+    const machines = [...new Set(rows.map(r => r.bobbinMachine).filter(m => m != null))].sort((a, b) => a - b)
     return {
       frame:         f,
       count:         rows.length,
+      machines,
       avgCopHank:    _avg(rows.map(r => r.copHank)),
       avgCountDev:   _avg(rows.map(r => r.countDev)),
       maxCountDev:   _maxAbs(rows.map(r => r.countDev)),
@@ -1978,11 +1995,13 @@ function buildInteractionReport(raw) {
   // Table 4: Bobbin Summary
   const bobbinSummary = bobbins.map(b => {
     const rows = byBobbin[b.id]?.rows ?? []
-    if (!rows.length) return { bobbinId: b.id, label: b.label, count: 0, avgOutputHank: null, spread: null, avgCopCv: null }
+    const machineNumber = b.machine_number ?? null
+    if (!rows.length) return { bobbinId: b.id, label: b.label, machineNumber, count: 0, avgOutputHank: null, spread: null, avgCopCv: null }
     const hanks = rows.map(r => r.copHank)
     return {
       bobbinId:      b.id,
       label:         b.label,
+      machineNumber,
       count:         rows.length,
       avgOutputHank: _avg(hanks),
       spread:        Math.max(...hanks) - Math.min(...hanks),
@@ -2169,6 +2188,7 @@ function FrameSummaryTable({ frameSummary, dp, rfTol, H_target }) {
         <thead>
           <tr>
             <IR_TH>Frame</IR_TH>
+            <IR_TH>Simplex Sources</IR_TH>
             <IR_TH right>Cops</IR_TH>
             <IR_TH right>Avg Cop Hank</IR_TH>
             <IR_TH right>Avg Count Dev</IR_TH>
@@ -2181,6 +2201,20 @@ function FrameSummaryTable({ frameSummary, dp, rfTol, H_target }) {
           {frameSummary.map((r, i) => (
             <tr key={i}>
               <IR_TD>Frame {r.frame}</IR_TD>
+              <IR_TD>
+                {(r.machines ?? []).length === 0
+                  ? <span style={{ color: 'var(--tx-4)' }}>—</span>
+                  : (r.machines ?? []).map(m => (
+                    <span key={m} style={{
+                      display: 'inline-block', marginRight: 4,
+                      fontSize: 10, fontWeight: 700,
+                      padding: '1px 6px', borderRadius: 8,
+                      background: 'var(--bg-3)', border: '1px solid var(--bd)',
+                      color: 'var(--tx-2)',
+                    }}>Sx {m}</span>
+                  ))
+                }
+              </IR_TD>
               <IR_TD right dim>{r.count}</IR_TD>
               <IR_TD right mono>{_fmt(r.avgCopHank, dp)}</IR_TD>
               <IR_TD right mono color={_devColor(r.avgCountDev, rfTol)}>{_signed(r.avgCountDev, dp)}</IR_TD>
@@ -2203,6 +2237,7 @@ function BobbinSummaryTable({ bobbinSummary, dp }) {
         <thead>
           <tr>
             <IR_TH>Bobbin</IR_TH>
+            <IR_TH>Simplex M/c</IR_TH>
             <IR_TH right>Cops Run</IR_TH>
             <IR_TH right>Avg Output Hank</IR_TH>
             <IR_TH right>Spread (Max − Min)</IR_TH>
@@ -2213,6 +2248,17 @@ function BobbinSummaryTable({ bobbinSummary, dp }) {
           {bobbinSummary.map((r, i) => (
             <tr key={i}>
               <IR_TD>{r.label}</IR_TD>
+              <IR_TD>
+                {r.machineNumber != null
+                  ? <span style={{
+                      fontSize: 10, fontWeight: 700,
+                      padding: '1px 6px', borderRadius: 8,
+                      background: 'var(--bg-3)', border: '1px solid var(--bd)',
+                      color: 'var(--tx-2)',
+                    }}>Sx {r.machineNumber}</span>
+                  : <span style={{ color: 'var(--tx-4)' }}>—</span>
+                }
+              </IR_TD>
               <IR_TD right dim>{r.count > 0 ? r.count : '—'}</IR_TD>
               <IR_TD right mono>{_fmt(r.avgOutputHank, dp)}</IR_TD>
               <IR_TD right mono color={r.spread != null && r.spread > 0.1 ? 'var(--warn)' : 'var(--tx)'}>{_fmt(r.spread, dp)}</IR_TD>
