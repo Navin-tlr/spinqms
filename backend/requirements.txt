@@ -6,6 +6,6 @@ python-multipart==0.0.24
 numpy==2.4.4
 alembic==1.18.4
 psycopg2-binary==2.9.10
-scipy==1.14.1
+scipy==1.15.2
 statsmodels==0.14.4
 pandas==2.2.3
