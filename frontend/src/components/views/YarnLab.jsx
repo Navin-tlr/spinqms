@@ -1776,254 +1776,382 @@ function FrameCard({ initialFrameNumber, cops, isLocal, busy, onCreateCop, onUpd
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
-   Analysis Matrix — 4-gate gated analysis
+   Bobbin–Frame Interaction Report
 ══════════════════════════════════════════════════════════════════════════════ */
 
 /**
- * runGatedAnalysis — pure function, runs all 4 gates on raw API data.
+ * buildInteractionReport — pure function. No side-effects, no React.
  *
- * Gate 1  Count deviation:  |H_c − H_target| ≤ tolerance  → PASS / FAIL
- * Gate 2  Draft deviation:  computed only on FAIL cells (diagnostic)
- * Gate 3  Pattern analysis: row ≥60% fail → upstream bobbin,
- *                           col ≥60% fail → frame calibration,
- *                           isolated      → interaction
- *                           (never mislabel interaction as frame fault)
- * Gate 4  CV added:         sqrt(max(0, cop_cv² − bobbin_cv²)) > 1.5% → WARN
- *                           only computed on PASS cells
+ * Variable naming mirrors the spec:
+ *   H_target   = ringframe target count
+ *   H_b_target = simplex target count
+ *   H_b_i      = bobbin hank (simplex output for bobbin i)
+ *   H_c_ij     = cop hank (ring frame output from bobbin i on frame j)
+ *   CV_b_i     = bobbin CV%
+ *   CV_c_ij    = cop CV%
  */
-function runGatedAnalysis(raw) {
+function buildInteractionReport(raw) {
   const { bobbins, frames, cells, benchmarks } = raw
-  const rfBm = benchmarks.ringframe
-  const sxBm = benchmarks.simplex
-  const H_target   = rfBm.target
-  const H_tol      = rfBm.tolerance
-  const H_b_target = sxBm.target
+  const H_target   = benchmarks.ringframe.target
+  const H_b_target = benchmarks.simplex.target
   const nominalDraft = H_target / H_b_target
 
-  // Build cell lookup: `${bobbin_id}_${frame_number}` → cell row
+  // Cell lookup: `${bobbin_id}_${frame_number}` → cell
   const cellMap = {}
   cells.forEach(c => {
-    if (c.bobbin_id != null && c.frame_number != null) {
+    if (c.bobbin_id != null && c.frame_number != null)
       cellMap[`${c.bobbin_id}_${c.frame_number}`] = c
-    }
   })
 
-  // Compute per-cell results
-  const results = {}
+  // Compute every bobbin × frame interaction that has data
+  const interactions = []
   bobbins.forEach(bobbin => {
+    const H_b_i  = bobbin.bobbin_hank
+    const CV_b_i = bobbin.bobbin_cv
     frames.forEach(frame => {
-      const key  = `${bobbin.id}_${frame}`
-      const cell = cellMap[key]
-
-      if (!cell) { results[key] = { status: 'missing' }; return }
-
-      const H_c = cell.cop_hank
-      if (H_c == null) { results[key] = { status: 'pending', cop_id: cell.cop_id }; return }
-
-      const countDevPct = (H_c - H_target) / H_target * 100
-      const gate1Pass   = Math.abs(H_c - H_target) <= H_tol
-
-      if (gate1Pass) {
-        // Gate 4: CV added
-        let gate4 = null
-        const cop_cv    = cell.cop_cv
-        const bobbin_cv = bobbin.bobbin_cv
-        if (cop_cv != null && bobbin_cv != null) {
-          const cvAdded = Math.sqrt(Math.max(0, cop_cv ** 2 - bobbin_cv ** 2))
-          gate4 = { cvAdded, flag: cvAdded > 1.5 }
-        }
-        results[key] = {
-          status:   gate4?.flag ? 'warn' : 'pass',
-          cop_id:   cell.cop_id,
-          cop_hank: H_c,
-          cop_cv:   cell.cop_cv,
-          gate1:    { devPct: countDevPct, pass: true },
-          gate4,
-        }
-      } else {
-        // Gate 2: Draft deviation (diagnostic, no hard pass/fail)
-        let gate2 = null
-        if (bobbin.bobbin_hank != null) {
-          const actualDraft  = H_c / bobbin.bobbin_hank
-          const draftDevPct  = (actualDraft - nominalDraft) / nominalDraft * 100
-          gate2 = { actualDraft, nominalDraft, draftDevPct }
-        }
-        results[key] = {
-          status:   'fail',
-          cop_id:   cell.cop_id,
-          cop_hank: H_c,
-          cop_cv:   cell.cop_cv,
-          gate1:    { devPct: countDevPct, pass: false },
-          gate2,
-          pattern:  null,  // filled by Gate 3 below
-        }
-      }
+      const cell   = cellMap[`${bobbin.id}_${frame}`]
+      if (!cell || cell.cop_hank == null) return
+      const H_c_ij  = cell.cop_hank
+      const CV_c_ij = cell.cop_cv
+      interactions.push({
+        bobbinId:    bobbin.id,
+        bobbinLabel: bobbin.label,
+        bobbinHank:  H_b_i,
+        frame,
+        copHank:     H_c_ij,
+        copCv:       CV_c_ij,
+        countDev:    H_c_ij - H_target,
+        countDevPct: ((H_c_ij - H_target) / H_target) * 100,
+        actualDraft: H_b_i    != null ? H_c_ij / H_b_i                       : null,
+        draftError:  H_b_i    != null ? (H_c_ij / H_b_i) - nominalDraft      : null,
+        cvAdded:     CV_c_ij != null && CV_b_i != null
+                       ? Math.sqrt(Math.max(0, CV_c_ij ** 2 - CV_b_i ** 2))
+                       : null,
+      })
     })
   })
 
-  // Gate 3: compute row / col fail rates
-  const rowStats = {}
-  const colStats = {}
-  bobbins.forEach(bobbin => {
-    const relevant = frames.map(f => results[`${bobbin.id}_${f}`])
-      .filter(r => r && r.status !== 'missing' && r.status !== 'pending')
-    const fails = relevant.filter(r => r.status === 'fail').length
-    rowStats[bobbin.id] = { total: relevant.length, fails, rate: relevant.length > 0 ? fails / relevant.length : 0 }
-  })
-  frames.forEach(frame => {
-    const relevant = bobbins.map(b => results[`${b.id}_${frame}`])
-      .filter(r => r && r.status !== 'missing' && r.status !== 'pending')
-    const fails = relevant.filter(r => r.status === 'fail').length
-    colStats[frame] = { total: relevant.length, fails, rate: relevant.length > 0 ? fails / relevant.length : 0 }
+  // Group by frame (Table 1) and by bobbin (Table 2)
+  const byFrame  = {}
+  frames.forEach(f => { byFrame[f] = [] })
+  interactions.forEach(r => byFrame[r.frame].push(r))
+
+  const byBobbin = {}
+  bobbins.forEach(b => { byBobbin[b.id] = { label: b.label, bobbinHank: b.bobbin_hank, rows: [] } })
+  interactions.forEach(r => byBobbin[r.bobbinId].rows.push(r))
+
+  const _avg    = arr => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : null
+  const _maxAbs = arr => arr.length ? arr.reduce((a, b) => Math.abs(b) > Math.abs(a) ? b : a, 0) : null
+
+  // Table 3: Frame Summary
+  const frameSummary = frames.map(f => {
+    const rows = byFrame[f] ?? []
+    if (!rows.length) return { frame: f, count: 0, avgCopHank: null, avgCountDev: null, maxCountDev: null, avgDraftError: null, avgCvAdded: null }
+    return {
+      frame:         f,
+      count:         rows.length,
+      avgCopHank:    _avg(rows.map(r => r.copHank)),
+      avgCountDev:   _avg(rows.map(r => r.countDev)),
+      maxCountDev:   _maxAbs(rows.map(r => r.countDev)),
+      avgDraftError: _avg(rows.filter(r => r.draftError != null).map(r => r.draftError)),
+      avgCvAdded:    _avg(rows.filter(r => r.cvAdded    != null).map(r => r.cvAdded)),
+    }
   })
 
-  // Assign pattern to each FAIL cell — never mislabel interaction as frame fault
-  Object.keys(results).forEach(key => {
-    const r = results[key]
-    if (r.status !== 'fail') return
-    const [bidStr, fStr] = key.split('_')
-    const rowRate = rowStats[parseInt(bidStr)]?.rate ?? 0
-    const colRate = colStats[parseInt(fStr)]?.rate  ?? 0
-    if      (rowRate >= 0.6 && colRate < 0.6)  r.pattern = 'upstream_bobbin'
-    else if (colRate >= 0.6 && rowRate < 0.6)  r.pattern = 'frame_calibration'
-    else if (rowRate >= 0.6 && colRate >= 0.6) r.pattern = 'systematic'
-    else                                        r.pattern = 'interaction'
+  // Table 4: Bobbin Summary
+  const bobbinSummary = bobbins.map(b => {
+    const rows = byBobbin[b.id]?.rows ?? []
+    if (!rows.length) return { bobbinId: b.id, label: b.label, count: 0, avgOutputHank: null, spread: null, avgCopCv: null }
+    const hanks = rows.map(r => r.copHank)
+    return {
+      bobbinId:      b.id,
+      label:         b.label,
+      count:         rows.length,
+      avgOutputHank: _avg(hanks),
+      spread:        Math.max(...hanks) - Math.min(...hanks),
+      avgCopCv:      _avg(rows.filter(r => r.copCv != null).map(r => r.copCv)),
+    }
   })
 
-  return { results, rowStats, colStats, bobbins, frames, benchmarks, nominalDraft }
+  return {
+    interactions, byFrame, byBobbin,
+    frameSummary, bobbinSummary,
+    frames, bobbins,
+    nominalDraft, H_target, H_b_target,
+    rfTol: benchmarks.ringframe.tolerance,
+  }
 }
 
-/* ── MatrixCell ─────────────────────────────────────────────────────────────── */
-const PATTERN_ICON = {
-  upstream_bobbin:   '⇑',
-  frame_calibration: '⇒',
-  systematic:        '⊗',
-  interaction:       '⊙',
+/* ── Colour helpers (text-only, no cell fills) ──────────────────────────────── */
+const _devColor    = (val, tol) => {
+  if (val == null) return 'var(--tx-4)'
+  const a = Math.abs(val)
+  if (a > tol)       return 'var(--bad)'
+  if (a > tol * 0.5) return 'var(--warn)'
+  return 'var(--tx)'
 }
+const _draftColor  = val => {
+  if (val == null) return 'var(--tx-4)'
+  const a = Math.abs(val)
+  if (a > 0.05) return 'var(--bad)'
+  if (a > 0.02) return 'var(--warn)'
+  return 'var(--tx)'
+}
+const _cvAddColor  = val => {
+  if (val == null || val < 0.01) return 'var(--tx-4)'
+  if (val > 1.5) return 'var(--bad)'
+  if (val > 0.5) return 'var(--warn)'
+  return 'var(--tx-3)'
+}
+const _copCvColor  = val => {
+  if (val == null) return 'var(--tx-4)'
+  if (val > 3.0)  return 'var(--bad)'
+  if (val > 2.0)  return 'var(--warn)'
+  return 'var(--tx)'
+}
+const _signed = (val, dp) => val != null ? `${val > 0 ? '+' : ''}${val.toFixed(dp)}` : '—'
+const _fmt    = (val, dp) => val != null ? val.toFixed(dp) : '—'
 
-function MatrixCell({ result, dp }) {
-  if (!result || result.status === 'missing') {
-    return (
-      <td style={{ padding: '6px 8px', textAlign: 'center', background: 'var(--bg-2)', color: 'var(--tx-4)', fontSize: 11 }}>
-        —
-      </td>
-    )
-  }
-  if (result.status === 'pending') {
-    return (
-      <td style={{ padding: '6px 8px', textAlign: 'center', background: 'var(--bg-3)', color: 'var(--tx-4)', fontSize: 10 }}>
-        ···
-      </td>
-    )
-  }
-  const bgMap    = { pass: 'var(--ok-bg)',   warn: 'var(--warn-bg)',   fail: 'var(--bad-bg)'  }
-  const colorMap = { pass: 'var(--ok)',      warn: 'var(--warn)',      fail: 'var(--bad)'     }
-  const iconMap  = { pass: '✓',              warn: '▲',                fail: '✕'              }
-  return (
-    <td style={{ padding: '6px 8px', background: bgMap[result.status], verticalAlign: 'top' }}>
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-        <span style={{ fontSize: 11, fontWeight: 700, color: colorMap[result.status], fontFamily: 'var(--mono)' }}>
-          {result.cop_hank?.toFixed(dp) ?? '—'}
-        </span>
-        <span style={{ fontSize: 10, color: colorMap[result.status] }}>{iconMap[result.status]}</span>
-        {result.status === 'fail' && result.pattern && (
-          <span style={{ fontSize: 9, color: 'var(--tx-3)' }} title={result.pattern}>
-            {PATTERN_ICON[result.pattern] ?? '?'}
-          </span>
-        )}
-        {result.gate4?.flag && (
-          <span style={{ fontSize: 9, color: 'var(--warn)' }} title={`CV+ ${result.gate4.cvAdded?.toFixed(2)}%`}>∿</span>
-        )}
-      </div>
-    </td>
+/* ── Shared table style atoms ───────────────────────────────────────────────── */
+const IR_TH = ({ children, right, left }) => (
+  <th style={{
+    padding: '7px 10px',
+    textAlign: right ? 'right' : 'left',
+    fontSize: 11, fontWeight: 600,
+    color: 'var(--tx-3)',
+    borderBottom: '2px solid var(--bd-md)',
+    whiteSpace: 'nowrap',
+    background: 'transparent',
+  }}>{children}</th>
+)
+const IR_TD = ({ children, right, color, mono, dim }) => (
+  <td style={{
+    padding: '6px 10px',
+    textAlign: right ? 'right' : 'left',
+    fontSize: 12,
+    color: color ?? (dim ? 'var(--tx-3)' : 'var(--tx)'),
+    fontFamily: mono ? 'var(--mono)' : 'inherit',
+    borderBottom: '1px solid var(--bd)',
+  }}>{children ?? '—'}</td>
+)
+
+/* ── Table 1: Frame-wise Interaction ────────────────────────────────────────── */
+function FrameInteractionTable({ frame, rows, dp, rfTol, H_target }) {
+  const tolPct = (rfTol / H_target) * 100
+  if (!rows.length) return (
+    <div style={{ marginBottom: 24 }}>
+      <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--tx)', marginBottom: 6 }}>Frame {frame}</div>
+      <p style={{ fontSize: 12, color: 'var(--tx-4)', margin: 0 }}>No interactions logged for this frame.</p>
+    </div>
   )
-}
-
-/* ── PatternSummary ─────────────────────────────────────────────────────────── */
-function PatternSummary({ results, rowStats, colStats, bobbins, frames }) {
-  const failCells = Object.values(results).filter(r => r.status === 'fail')
-  if (failCells.length === 0) {
-    return (
-      <div style={{ padding: '10px 14px', background: 'var(--ok-bg)', border: '1px solid var(--ok-bd)', borderRadius: 'var(--r)', fontSize: 12, color: 'var(--ok)' }}>
-        ✓ No count deviations detected — all measured cops are within specification.
-      </div>
-    )
-  }
-  const affectedBobbins = bobbins.filter(b => (rowStats[b.id]?.rate ?? 0) >= 0.6)
-  const affectedFrames  = frames.filter(f  => (colStats[f]?.rate  ?? 0) >= 0.6)
-  const patternCounts   = failCells.reduce((acc, r) => {
-    acc[r.pattern] = (acc[r.pattern] ?? 0) + 1; return acc
-  }, {})
-
-  const items = []
-  if (affectedBobbins.length > 0)
-    items.push({ icon: '⇑', msg: `Bobbin upstream issue: ${affectedBobbins.map(b => b.label).join(', ')} — review RSB sliver quality or Simplex draft settings.` })
-  if (affectedFrames.length > 0)
-    items.push({ icon: '⇒', msg: `Frame calibration needed: Frame ${affectedFrames.join(', Frame ')} — check draft gear ratio and front roller pressure.` })
-  if (patternCounts.interaction > 0)
-    items.push({ icon: '⊙', msg: `${patternCounts.interaction} isolated interaction failure${patternCounts.interaction > 1 ? 's' : ''} — check bobbin-to-frame cradle alignment and creel tension.` })
-  if (patternCounts.systematic > 0)
-    items.push({ icon: '⊗', msg: `${patternCounts.systematic} systematic failure${patternCounts.systematic > 1 ? 's' : ''} — both bobbin and frame affected; address bobbin issue first.` })
-
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-      <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--tx-2)', marginBottom: 2 }}>Gate 3 — Pattern Diagnosis</div>
-      {items.map(({ icon, msg }, i) => (
-        <div key={i} style={{
-          padding: '8px 12px', background: 'var(--bad-bg)',
-          border: '1px solid var(--bad-bd)', borderRadius: 'var(--r)',
-          fontSize: 12, color: 'var(--tx)', display: 'flex', gap: 8, alignItems: 'flex-start',
-        }}>
-          <span style={{ fontWeight: 700, color: 'var(--bad)', flexShrink: 0 }}>{icon}</span>
-          <span>{msg}</span>
-        </div>
-      ))}
+    <div style={{ marginBottom: 28 }}>
+      <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--tx)', marginBottom: 8 }}>Frame {frame}</div>
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ borderCollapse: 'collapse', width: '100%' }}>
+          <thead>
+            <tr>
+              <IR_TH>Bobbin</IR_TH>
+              <IR_TH right>Bobbin Hank</IR_TH>
+              <IR_TH right>Cop Hank</IR_TH>
+              <IR_TH right>Count Dev</IR_TH>
+              <IR_TH right>Count Dev %</IR_TH>
+              <IR_TH right>Draft Error</IR_TH>
+              <IR_TH right>Cop CV%</IR_TH>
+              <IR_TH right>CV Added</IR_TH>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r, i) => (
+              <tr key={i}>
+                <IR_TD>{r.bobbinLabel}</IR_TD>
+                <IR_TD right mono dim>{_fmt(r.bobbinHank, dp)}</IR_TD>
+                <IR_TD right mono>{_fmt(r.copHank, dp)}</IR_TD>
+                <IR_TD right mono color={_devColor(r.countDev, rfTol)}>{_signed(r.countDev, dp)}</IR_TD>
+                <IR_TD right mono color={_devColor(r.countDevPct, tolPct)}>{_signed(r.countDevPct, 2)}%</IR_TD>
+                <IR_TD right mono color={_draftColor(r.draftError)}>{_signed(r.draftError, 4)}</IR_TD>
+                <IR_TD right mono color={_copCvColor(r.copCv)}>{_fmt(r.copCv, 2)}{r.copCv != null ? '%' : ''}</IR_TD>
+                <IR_TD right mono color={_cvAddColor(r.cvAdded)}>{r.cvAdded != null ? `+${r.cvAdded.toFixed(2)}%` : '—'}</IR_TD>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }
 
-/* ── AnalysisMatrix — main component ────────────────────────────────────────── */
-function AnalysisMatrix({ trialId }) {
-  const [analysis,    setAnalysis]    = useState(null)
-  const [generating,  setGenerating]  = useState(false)
-  const [error,       setError]       = useState(null)
+/* ── Table 2: Bobbin-wise Interaction ───────────────────────────────────────── */
+function BobbinInteractionTable({ bobbinId, label, bobbinHank, rows, dp, rfTol, H_target }) {
+  const tolPct = (rfTol / H_target) * 100
+  if (!rows.length) return (
+    <div style={{ marginBottom: 24 }}>
+      <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--tx)', marginBottom: 6 }}>{label}</div>
+      <p style={{ fontSize: 12, color: 'var(--tx-4)', margin: 0 }}>No interactions logged for this bobbin.</p>
+    </div>
+  )
+  return (
+    <div style={{ marginBottom: 28 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 8 }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--tx)' }}>{label}</div>
+        {bobbinHank != null && (
+          <div style={{ fontSize: 11, color: 'var(--tx-3)', fontFamily: 'var(--mono)' }}>
+            Bobbin hank: {bobbinHank.toFixed(dp)}
+          </div>
+        )}
+      </div>
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ borderCollapse: 'collapse', width: '100%' }}>
+          <thead>
+            <tr>
+              <IR_TH>Frame</IR_TH>
+              <IR_TH right>Cop Hank</IR_TH>
+              <IR_TH right>Count Dev</IR_TH>
+              <IR_TH right>Count Dev %</IR_TH>
+              <IR_TH right>Draft Error</IR_TH>
+              <IR_TH right>Cop CV%</IR_TH>
+              <IR_TH right>CV Added</IR_TH>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r, i) => (
+              <tr key={i}>
+                <IR_TD>Frame {r.frame}</IR_TD>
+                <IR_TD right mono>{_fmt(r.copHank, dp)}</IR_TD>
+                <IR_TD right mono color={_devColor(r.countDev, rfTol)}>{_signed(r.countDev, dp)}</IR_TD>
+                <IR_TD right mono color={_devColor(r.countDevPct, tolPct)}>{_signed(r.countDevPct, 2)}%</IR_TD>
+                <IR_TD right mono color={_draftColor(r.draftError)}>{_signed(r.draftError, 4)}</IR_TD>
+                <IR_TD right mono color={_copCvColor(r.copCv)}>{_fmt(r.copCv, 2)}{r.copCv != null ? '%' : ''}</IR_TD>
+                <IR_TD right mono color={_cvAddColor(r.cvAdded)}>{r.cvAdded != null ? `+${r.cvAdded.toFixed(2)}%` : '—'}</IR_TD>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+/* ── Table 3: Frame Summary ─────────────────────────────────────────────────── */
+function FrameSummaryTable({ frameSummary, dp, rfTol, H_target }) {
+  const tolPct = (rfTol / H_target) * 100
+  return (
+    <div style={{ overflowX: 'auto' }}>
+      <table style={{ borderCollapse: 'collapse', width: '100%' }}>
+        <thead>
+          <tr>
+            <IR_TH>Frame</IR_TH>
+            <IR_TH right>Cops</IR_TH>
+            <IR_TH right>Avg Cop Hank</IR_TH>
+            <IR_TH right>Avg Count Dev</IR_TH>
+            <IR_TH right>Max |Count Dev|</IR_TH>
+            <IR_TH right>Avg Draft Error</IR_TH>
+            <IR_TH right>Avg CV Added</IR_TH>
+          </tr>
+        </thead>
+        <tbody>
+          {frameSummary.map((r, i) => (
+            <tr key={i}>
+              <IR_TD>Frame {r.frame}</IR_TD>
+              <IR_TD right dim>{r.count}</IR_TD>
+              <IR_TD right mono>{_fmt(r.avgCopHank, dp)}</IR_TD>
+              <IR_TD right mono color={_devColor(r.avgCountDev, rfTol)}>{_signed(r.avgCountDev, dp)}</IR_TD>
+              <IR_TD right mono color={_devColor(r.maxCountDev, rfTol)}>{r.maxCountDev != null ? Math.abs(r.maxCountDev).toFixed(dp) : '—'}</IR_TD>
+              <IR_TD right mono color={_draftColor(r.avgDraftError)}>{_signed(r.avgDraftError, 4)}</IR_TD>
+              <IR_TD right mono color={_cvAddColor(r.avgCvAdded)}>{r.avgCvAdded != null ? `+${r.avgCvAdded.toFixed(2)}%` : '—'}</IR_TD>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+/* ── Table 4: Bobbin Summary ────────────────────────────────────────────────── */
+function BobbinSummaryTable({ bobbinSummary, dp }) {
+  return (
+    <div style={{ overflowX: 'auto' }}>
+      <table style={{ borderCollapse: 'collapse', width: '100%' }}>
+        <thead>
+          <tr>
+            <IR_TH>Bobbin</IR_TH>
+            <IR_TH right>Cops Run</IR_TH>
+            <IR_TH right>Avg Output Hank</IR_TH>
+            <IR_TH right>Spread (Max − Min)</IR_TH>
+            <IR_TH right>Avg Cop CV%</IR_TH>
+          </tr>
+        </thead>
+        <tbody>
+          {bobbinSummary.map((r, i) => (
+            <tr key={i}>
+              <IR_TD>{r.label}</IR_TD>
+              <IR_TD right dim>{r.count > 0 ? r.count : '—'}</IR_TD>
+              <IR_TD right mono>{_fmt(r.avgOutputHank, dp)}</IR_TD>
+              <IR_TD right mono color={r.spread != null && r.spread > 0.1 ? 'var(--warn)' : 'var(--tx)'}>{_fmt(r.spread, dp)}</IR_TD>
+              <IR_TD right mono color={_copCvColor(r.avgCopCv)}>{_fmt(r.avgCopCv, 2)}{r.avgCopCv != null ? '%' : ''}</IR_TD>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+/* ── Section divider ────────────────────────────────────────────────────────── */
+function IrSection({ title, subtitle, children }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{ borderBottom: '2px solid var(--bd-md)', paddingBottom: 8 }}>
+        <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--tx)' }}>{title}</div>
+        {subtitle && <div style={{ fontSize: 11, color: 'var(--tx-3)', marginTop: 3 }}>{subtitle}</div>}
+      </div>
+      {children}
+    </div>
+  )
+}
+
+/* ── InteractionReport — main component ─────────────────────────────────────── */
+function InteractionReport({ trialId }) {
+  const [report,     setReport]     = useState(null)
+  const [generating, setGenerating] = useState(false)
+  const [error,      setError]      = useState(null)
 
   const handleGenerate = async () => {
     setGenerating(true)
     setError(null)
     try {
       const raw    = await getLabMatrix(trialId)
-      const result = runGatedAnalysis(raw)
-      setAnalysis(result)
+      const result = buildInteractionReport(raw)
+      setReport(result)
     } catch (e) {
-      setError(e?.response?.data?.detail ?? 'Failed to generate report. Check that benchmarks are set and data exists.')
+      setError(e?.response?.data?.detail ?? 'Failed to generate. Ensure benchmarks are set and cops have been logged.')
     } finally {
       setGenerating(false)
     }
   }
 
-  /* ── Placeholder ─────────────────────────────────────────────────────────── */
-  if (!analysis) {
+  /* ── Placeholder — nothing computed until clicked ───────────────────────── */
+  if (!report) {
     return (
       <div style={{
         display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-        gap: 16, padding: '56px 24px',
+        gap: 16, padding: '60px 24px',
         border: '1.5px dashed var(--bd-md)', borderRadius: 'var(--r-lg)',
         background: 'var(--bg-2)',
       }}>
-        <span style={{ fontSize: 36, lineHeight: 1 }}>⊞</span>
+        <span style={{ fontSize: 32, lineHeight: 1, color: 'var(--tx-3)' }}>⊟</span>
         <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--tx-2)', textAlign: 'center' }}>
-          Analysis Matrix Report
+          Bobbin–Frame Interaction Report
         </div>
-        <div style={{ fontSize: 12, color: 'var(--tx-3)', textAlign: 'center', maxWidth: 400, lineHeight: 1.6 }}>
-          4-gate gated analysis: Count Deviation → Draft Deviation → Pattern Diagnosis → CV Added.
-          <br />No computation or rendering occurs until you click Generate.
+        <div style={{ fontSize: 12, color: 'var(--tx-3)', textAlign: 'center', maxWidth: 420, lineHeight: 1.65 }}>
+          Generates four tables: frame-wise interaction, bobbin-wise interaction, frame summary, and bobbin summary.
+          Count Deviation, Draft Error, and CV Added are calculated for every logged bobbin-to-cop pair.
+          No data is loaded or computed until you click below.
         </div>
         {error && (
           <div style={{
-            fontSize: 12, color: 'var(--bad)', padding: '8px 14px',
+            fontSize: 12, color: 'var(--bad)', padding: '8px 14px', maxWidth: 420, textAlign: 'center',
             background: 'var(--bad-bg)', borderRadius: 'var(--r)', border: '1px solid var(--bad-bd)',
-            maxWidth: 400, textAlign: 'center',
           }}>
             {error}
           </div>
@@ -2040,244 +2168,100 @@ function AnalysisMatrix({ trialId }) {
             fontFamily: 'var(--font)',
           }}
         >
-          {generating ? 'Generating…' : '⊞ Generate Report'}
+          {generating ? 'Generating…' : 'Generate Interaction Report'}
         </button>
       </div>
     )
   }
 
-  /* ── Report ──────────────────────────────────────────────────────────────── */
-  const { results, rowStats, colStats, bobbins, frames, benchmarks, nominalDraft } = analysis
-  const rfBm = benchmarks.ringframe
-  const sxBm = benchmarks.simplex
-  const dp   = rfBm.target >= 10 ? 2 : 4
-
-  const allCells   = bobbins.flatMap(b => frames.map(f => results[`${b.id}_${f}`]))
-  const passCells  = allCells.filter(r => r?.status === 'pass').length
-  const warnCells  = allCells.filter(r => r?.status === 'warn').length
-  const failCells  = allCells.filter(r => r?.status === 'fail').length
-
-  const gate2Rows = []
-  bobbins.forEach(b => frames.forEach(f => {
-    const r = results[`${b.id}_${f}`]
-    if (r?.status === 'fail' && r.gate2) gate2Rows.push({ bobbin: b.label, frame: f, ...r.gate2, devPct: r.gate1.devPct })
-  }))
-  const gate4Rows = []
-  bobbins.forEach(b => frames.forEach(f => {
-    const r = results[`${b.id}_${f}`]
-    if (r?.status === 'warn' && r.gate4?.flag) gate4Rows.push({ bobbin: b.label, frame: f, cvAdded: r.gate4.cvAdded, cop_cv: r.cop_cv })
-  }))
-
-  const thStyle  = { padding: '5px 8px', textAlign: 'right', fontWeight: 600, color: 'var(--tx-3)', borderBottom: '1px solid var(--bd)', whiteSpace: 'nowrap', background: 'var(--bg-3)' }
-  const tdStyle  = { padding: '5px 8px', borderBottom: '1px solid var(--bd)' }
+  /* ── Render 4 tables ────────────────────────────────────────────────────── */
+  const { byFrame, byBobbin, frameSummary, bobbinSummary, frames, bobbins, nominalDraft, H_target, H_b_target, rfTol } = report
+  const dp = H_target >= 10 ? 2 : 4
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
 
-      {/* Report header */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+      {/* Report meta bar */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, paddingBottom: 12, borderBottom: '1px solid var(--bd)' }}>
         <div>
-          <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--tx)' }}>Analysis Matrix Report</div>
+          <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--tx)' }}>Bobbin–Frame Interaction Report</div>
           <div style={{ fontSize: 11, color: 'var(--tx-3)', marginTop: 3, fontFamily: 'var(--mono)' }}>
-            RF target {rfBm.target.toFixed(dp)} ±{rfBm.tolerance.toFixed(dp)} &nbsp;·&nbsp;
+            RF target {_fmt(H_target, dp)} &nbsp;·&nbsp;
+            Simplex target {_fmt(H_b_target, 4)} &nbsp;·&nbsp;
             Nominal draft {nominalDraft.toFixed(3)}× &nbsp;·&nbsp;
-            Simplex {sxBm.target.toFixed(4)} ±{sxBm.tolerance.toFixed(4)}
+            {report.interactions.length} interaction{report.interactions.length !== 1 ? 's' : ''} computed
           </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-          {passCells  > 0 && <span style={{ fontSize: 12, color: 'var(--ok)',   fontWeight: 600 }}>✓ {passCells}  pass</span>}
-          {warnCells  > 0 && <span style={{ fontSize: 12, color: 'var(--warn)', fontWeight: 600 }}>▲ {warnCells}  marginal</span>}
-          {failCells  > 0 && <span style={{ fontSize: 12, color: 'var(--bad)',  fontWeight: 600 }}>✕ {failCells}  fail</span>}
-          <button
-            onClick={() => setAnalysis(null)}
-            style={{
-              padding: '4px 10px', fontSize: 11, fontWeight: 500,
-              border: '1px solid var(--bd)', borderRadius: 'var(--r)',
-              background: 'var(--bg)', color: 'var(--tx-3)',
-              cursor: 'pointer', fontFamily: 'var(--font)',
-            }}
-          >↻ Regenerate</button>
-        </div>
+        <button
+          onClick={() => setReport(null)}
+          style={{
+            padding: '5px 12px', fontSize: 11, fontWeight: 500,
+            border: '1px solid var(--bd)', borderRadius: 'var(--r)',
+            background: 'var(--bg)', color: 'var(--tx-3)',
+            cursor: 'pointer', fontFamily: 'var(--font)',
+          }}
+        >↻ Regenerate</button>
       </div>
 
-      {/* Legend */}
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', fontSize: 11 }}>
-        {[
-          { color: 'var(--ok)',   bg: 'var(--ok-bg)',   label: '✓ Pass'              },
-          { color: 'var(--warn)', bg: 'var(--warn-bg)', label: '▲ Pass (high CV+)'   },
-          { color: 'var(--bad)',  bg: 'var(--bad-bg)',  label: '✕ Count fail'        },
-          { color: 'var(--tx-4)', bg: 'var(--bg-2)',    label: '— No data'           },
-        ].map(({ color, bg, label }) => (
-          <span key={label} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '2px 8px', borderRadius: 4, background: bg, color }}>
-            {label}
-          </span>
-        ))}
-        <span style={{ color: 'var(--tx-4)', fontSize: 11, alignSelf: 'center' }}>
-          ⇑ upstream &nbsp;·&nbsp; ⇒ frame cal &nbsp;·&nbsp; ⊙ interaction &nbsp;·&nbsp; ⊗ systematic
-        </span>
-      </div>
-
-      {/* Matrix table */}
-      {frames.length === 0 ? (
-        <div style={{ padding: 24, textAlign: 'center', color: 'var(--tx-3)', fontSize: 13, background: 'var(--bg-2)', borderRadius: 'var(--r-lg)' }}>
-          No ring frame cops logged yet. Add cops via the Flow Board first.
+      {report.interactions.length === 0 ? (
+        <div style={{ padding: 24, textAlign: 'center', color: 'var(--tx-3)', fontSize: 13 }}>
+          No bobbin–cop interactions found. Log ring frame cops with bobbin links via the Flow Board.
         </div>
-      ) : (
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: 12 }}>
-            <thead>
-              <tr>
-                <th style={{ padding: '7px 10px', textAlign: 'left', background: 'var(--bg-3)', color: 'var(--tx-3)', fontSize: 11, fontWeight: 600, borderBottom: '1px solid var(--bd)', whiteSpace: 'nowrap' }}>
-                  Bobbin ↓ / Frame →
-                </th>
-                {frames.map(f => {
-                  const stat   = colStats[f]
-                  const isBad  = stat && stat.rate >= 0.6
-                  return (
-                    <th key={f} style={{
-                      padding: '7px 10px', textAlign: 'center',
-                      background: isBad ? 'var(--bad-bg)' : 'var(--bg-3)',
-                      color: isBad ? 'var(--bad)' : 'var(--tx-2)',
-                      fontSize: 11, fontWeight: 600, borderBottom: '1px solid var(--bd)', whiteSpace: 'nowrap',
-                    }}>
-                      Frame {f}
-                      {isBad && <div style={{ fontSize: 9, fontWeight: 400, marginTop: 2 }}>⇒ recalibrate</div>}
-                    </th>
-                  )
-                })}
-                <th style={{ padding: '7px 10px', background: 'var(--bg-3)', color: 'var(--tx-3)', fontSize: 11, fontWeight: 600, borderBottom: '1px solid var(--bd)', textAlign: 'center', whiteSpace: 'nowrap' }}>
-                  Fail/Total
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {bobbins.map(bobbin => {
-                const rStat = rowStats[bobbin.id]
-                const isBad = rStat && rStat.rate >= 0.6
-                return (
-                  <tr key={bobbin.id} style={{ borderBottom: '1px solid var(--bd)' }}>
-                    <td style={{
-                      padding: '7px 10px', fontWeight: 600, fontSize: 11, whiteSpace: 'nowrap',
-                      background: isBad ? 'var(--bad-bg)' : 'var(--bg-2)',
-                      color: isBad ? 'var(--bad)' : 'var(--tx-2)',
-                    }}>
-                      {bobbin.label}
-                      {bobbin.bobbin_hank != null && (
-                        <div style={{ fontWeight: 400, fontSize: 10, color: 'var(--tx-3)', fontFamily: 'var(--mono)', marginTop: 1 }}>
-                          {bobbin.bobbin_hank.toFixed(4)}
-                        </div>
-                      )}
-                      {isBad && <div style={{ fontSize: 9, color: 'var(--bad)', marginTop: 2 }}>⇑ upstream</div>}
-                    </td>
-                    {frames.map(frame => (
-                      <MatrixCell key={frame} result={results[`${bobbin.id}_${frame}`]} dp={dp} />
-                    ))}
-                    <td style={{ padding: '7px 8px', textAlign: 'center', background: 'var(--bg-2)', fontSize: 11, color: 'var(--tx-3)', whiteSpace: 'nowrap' }}>
-                      {rStat ? `${rStat.fails}/${rStat.total}` : '—'}
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-            <tfoot>
-              <tr style={{ borderTop: '2px solid var(--bd-md)' }}>
-                <td style={{ padding: '6px 10px', fontSize: 11, fontWeight: 600, color: 'var(--tx-3)', background: 'var(--bg-2)' }}>
-                  Fail/Total
-                </td>
-                {frames.map(f => {
-                  const stat = colStats[f]
-                  return (
-                    <td key={f} style={{ padding: '6px 8px', textAlign: 'center', background: 'var(--bg-2)', fontSize: 11, color: 'var(--tx-3)', whiteSpace: 'nowrap' }}>
-                      {stat ? `${stat.fails}/${stat.total}` : '—'}
-                    </td>
-                  )
-                })}
-                <td style={{ padding: '6px 8px', background: 'var(--bg-2)' }} />
-              </tr>
-            </tfoot>
-          </table>
-        </div>
-      )}
+      ) : (<>
 
-      {/* Gate 2 detail table — draft analysis for failed cops */}
-      {gate2Rows.length > 0 && (
-        <div>
-          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--tx-2)', marginBottom: 6 }}>
-            Gate 2 — Draft Analysis (failed cops)
-          </div>
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: 11 }}>
-              <thead>
-                <tr>
-                  {['Bobbin', 'Frame', 'Count Dev%', 'Actual Draft', 'Nominal Draft', 'Draft Dev%'].map(h => (
-                    <th key={h} style={thStyle}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {gate2Rows.map((e, i) => (
-                  <tr key={i}>
-                    <td style={{ ...tdStyle, fontWeight: 600, textAlign: 'left', color: 'var(--tx)' }}>{e.bobbin}</td>
-                    <td style={{ ...tdStyle, textAlign: 'right', color: 'var(--tx-2)' }}>Frame {e.frame}</td>
-                    <td style={{ ...tdStyle, textAlign: 'right', fontFamily: 'var(--mono)', color: 'var(--bad)' }}>
-                      {e.devPct > 0 ? '+' : ''}{e.devPct.toFixed(2)}%
-                    </td>
-                    <td style={{ ...tdStyle, textAlign: 'right', fontFamily: 'var(--mono)', color: 'var(--tx)' }}>
-                      {e.actualDraft.toFixed(4)}×
-                    </td>
-                    <td style={{ ...tdStyle, textAlign: 'right', fontFamily: 'var(--mono)', color: 'var(--tx-3)' }}>
-                      {e.nominalDraft.toFixed(4)}×
-                    </td>
-                    <td style={{ ...tdStyle, textAlign: 'right', fontFamily: 'var(--mono)', color: Math.abs(e.draftDevPct) > 5 ? 'var(--bad)' : 'var(--warn)' }}>
-                      {e.draftDevPct > 0 ? '+' : ''}{e.draftDevPct.toFixed(2)}%
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
+        {/* Table 1: Frame-wise */}
+        <IrSection
+          title="Table 1 — Frame-wise Interaction"
+          subtitle="How each frame performs across all bobbins it received. Consistent count deviation within a frame indicates a frame calibration issue."
+        >
+          {frames.map(f => (
+            <FrameInteractionTable
+              key={f}
+              frame={f}
+              rows={byFrame[f] ?? []}
+              dp={dp}
+              rfTol={report.rfTol}
+              H_target={H_target}
+            />
+          ))}
+        </IrSection>
 
-      {/* Gate 4 detail table — high CV+ warnings */}
-      {gate4Rows.length > 0 && (
-        <div>
-          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--tx-2)', marginBottom: 6 }}>
-            Gate 4 — Added CV% (count-pass cops with elevated variability)
-          </div>
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: 11 }}>
-              <thead>
-                <tr>
-                  {['Bobbin', 'Frame', 'Cop CV%', 'CV Added%', 'Threshold'].map(h => (
-                    <th key={h} style={thStyle}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {gate4Rows.map((e, i) => (
-                  <tr key={i}>
-                    <td style={{ ...tdStyle, fontWeight: 600, textAlign: 'left', color: 'var(--tx)' }}>{e.bobbin}</td>
-                    <td style={{ ...tdStyle, textAlign: 'right', color: 'var(--tx-2)' }}>Frame {e.frame}</td>
-                    <td style={{ ...tdStyle, textAlign: 'right', fontFamily: 'var(--mono)', color: 'var(--tx)' }}>
-                      {e.cop_cv?.toFixed(2) ?? '—'}%
-                    </td>
-                    <td style={{ ...tdStyle, textAlign: 'right', fontFamily: 'var(--mono)', color: 'var(--warn)', fontWeight: 700 }}>
-                      +{e.cvAdded.toFixed(2)}%
-                    </td>
-                    <td style={{ ...tdStyle, textAlign: 'right', color: 'var(--tx-4)', fontSize: 10 }}>
-                      &gt;1.5% flagged
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
+        {/* Table 2: Bobbin-wise */}
+        <IrSection
+          title="Table 2 — Bobbin-wise Interaction"
+          subtitle="How each bobbin performs across every frame it fed. Consistent count deviation for one bobbin across frames indicates an upstream roving quality issue."
+        >
+          {bobbins.map(b => (
+            <BobbinInteractionTable
+              key={b.id}
+              bobbinId={b.id}
+              label={byBobbin[b.id]?.label ?? b.label}
+              bobbinHank={byBobbin[b.id]?.bobbinHank}
+              rows={byBobbin[b.id]?.rows ?? []}
+              dp={dp}
+              rfTol={report.rfTol}
+              H_target={H_target}
+            />
+          ))}
+        </IrSection>
 
-      {/* Gate 3 pattern summary */}
-      <PatternSummary results={results} rowStats={rowStats} colStats={colStats} bobbins={bobbins} frames={frames} />
+        {/* Table 3: Frame Summary */}
+        <IrSection
+          title="Table 3 — Frame Summary"
+          subtitle="Aggregated metrics per frame across all bobbins it processed."
+        >
+          <FrameSummaryTable frameSummary={frameSummary} dp={dp} rfTol={report.rfTol} H_target={H_target} />
+        </IrSection>
+
+        {/* Table 4: Bobbin Summary */}
+        <IrSection
+          title="Table 4 — Bobbin Summary"
+          subtitle="Aggregated output metrics per bobbin across all frames it fed."
+        >
+          <BobbinSummaryTable bobbinSummary={bobbinSummary} dp={dp} />
+        </IrSection>
+
+      </>)}
     </div>
   )
 }
@@ -2412,7 +2396,7 @@ function TrialDashboard({ trialId, depts, onBack }) {
       <div style={{ display: 'flex', gap: 0, borderRadius: 'var(--r)', overflow: 'hidden', border: '1px solid var(--bd)', alignSelf: 'flex-start' }}>
         {[
           { key: 'flow',   label: '⊡ Flow Board'      },
-          { key: 'matrix', label: '⊞ Analysis Matrix' },
+          { key: 'matrix', label: '⊟ Interaction Report' },
         ].map(({ key, label }) => (
           <button
             key={key}
@@ -2438,7 +2422,7 @@ function TrialDashboard({ trialId, depts, onBack }) {
           refreshFlow={loadFlow}
         />
       ) : (
-        <AnalysisMatrix trialId={trialId} />
+        <InteractionReport trialId={trialId} />
       )}
 
       {/* Panel */}
