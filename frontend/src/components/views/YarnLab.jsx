@@ -1508,7 +1508,7 @@ function FrameCard({ initialFrameNumber, cops, isLocal, busy, onCreateCop, onUpd
       const form = copForms[cop.id]
       if (!form) continue
       const weights = form.readings.map(v => parseFloat(v)).filter(v => !isNaN(v) && v > 0)
-      const validWeights = weights.length === RING_READING_COUNT ? weights : []
+      const validWeights = weights.length >= 2 ? weights : []
       const hankReadings = validWeights.length ? toHanks(validWeights, form.sampleLength || DEFAULT_LENGTHS.ringframe) : []
       await onUpdateCop(cop.id, {
         label: cop.label,

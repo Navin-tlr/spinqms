@@ -296,8 +296,8 @@ class RingframeCopCreate(BaseModel):
     @model_validator(mode="after")
     def validate_readings(self) -> "RingframeCopCreate":
         if self.readings:
-            if len(self.readings) not in (0, 2):
-                raise ValueError("Provide exactly 2 readings for ring frame cops")
+            if len(self.readings) == 1:
+                raise ValueError("Provide at least 2 readings for ring frame cops")
             if any(r is not None and r <= 0 for r in self.readings):
                 raise ValueError("Ring frame readings must be positive")
         return self
@@ -315,8 +315,8 @@ class RingframeCopUpdate(BaseModel):
     @model_validator(mode="after")
     def validate_readings(self) -> "RingframeCopUpdate":
         if self.readings is not None:
-            if len(self.readings) not in (0, 2):
-                raise ValueError("Provide exactly 2 readings for ring frame cops")
+            if len(self.readings) == 1:
+                raise ValueError("Provide at least 2 readings for ring frame cops")
             if any(r is not None and r <= 0 for r in self.readings):
                 raise ValueError("Ring frame readings must be positive")
         return self
