@@ -2575,6 +2575,7 @@ function TrialDashboard({ trialId, depts, onBack }) {
   const [saving,      setSaving]      = useState(false)
   const [flow,        setFlow]        = useState(null)
   const [flowLoading, setFlowLoading] = useState(true)
+  const [flowError,   setFlowError]   = useState(null)
   const [boardView,   setBoardView]   = useState('flow')  // 'flow' | 'matrix'
 
   const reload = useCallback(async () => {
@@ -2589,9 +2590,12 @@ function TrialDashboard({ trialId, depts, onBack }) {
 
   const loadFlow = useCallback(async () => {
     setFlowLoading(true)
+    setFlowError(null)
     try {
       const data = await getLabFlow(trialId)
       setFlow(data)
+    } catch (e) {
+      setFlowError(e?.response?.data?.detail || e.message || 'Failed to load flow board.')
     } finally {
       setFlowLoading(false)
     }
@@ -2714,12 +2718,32 @@ function TrialDashboard({ trialId, depts, onBack }) {
       </div>
 
       {boardView === 'flow' ? (
-        <FlowBoard
-          trialId={trialId}
-          flow={flow}
-          loading={flowLoading}
-          refreshFlow={loadFlow}
-        />
+        flowError ? (
+          <div style={{
+            border: '1px solid var(--bad-bd)', borderRadius: 'var(--r-lg)',
+            padding: 24, background: 'var(--bad-bg)',
+            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12,
+          }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--bad)' }}>Flow Board failed to load</div>
+            <div style={{ fontSize: 12, color: 'var(--tx-2)', textAlign: 'center', maxWidth: 420 }}>{flowError}</div>
+            <button
+              onClick={loadFlow}
+              style={{
+                padding: '7px 18px', fontSize: 12, fontWeight: 600,
+                border: '1px solid var(--bd)', borderRadius: 'var(--r)',
+                background: 'var(--bg)', color: 'var(--tx)', cursor: 'pointer',
+                fontFamily: 'var(--font)',
+              }}
+            >↻ Retry</button>
+          </div>
+        ) : (
+          <FlowBoard
+            trialId={trialId}
+            flow={flow}
+            loading={flowLoading}
+            refreshFlow={loadFlow}
+          />
+        )
       ) : (
         <InteractionReport trialId={trialId} />
       )}

@@ -181,7 +181,7 @@ class LabSampleCreate(BaseModel):
 
 
 class RSBCanPayload(BaseModel):
-    slot: int = Field(..., ge=1, le=5)
+    slot: int = Field(..., ge=1, le=10)
     hank_value: Optional[float] = Field(None, gt=0)
     notes: Optional[str] = Field(None, max_length=200)
     is_perfect: bool = False
