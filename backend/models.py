@@ -325,7 +325,7 @@ class LabSimplexBobbin(Base):
     trial   = relationship("LabTrial", back_populates="simplex_bobbins")
     inputs  = relationship("LabSimplexInput", back_populates="bobbin",
                            cascade="all, delete-orphan")
-    outputs = relationship("LabRingframeInput", back_populates="simplex_bobbin")
+    outputs = relationship("LabRingframeInput", back_populates="simplex_bobbin", cascade="all, delete-orphan")
 
 
 class LabSimplexInput(Base):
