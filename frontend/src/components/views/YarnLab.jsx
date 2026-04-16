@@ -823,6 +823,8 @@ function RSBPanel({ trialId, cans, refreshFlow, canFeedsTo }) {
       await saveLabRSB(trialId, payload)
       await refreshFlow()
       setDirty(false)
+    } catch (e) {
+      setErr(e?.response?.data?.detail || e.message || 'Save failed')
     } finally {
       setSaving(false)
     }

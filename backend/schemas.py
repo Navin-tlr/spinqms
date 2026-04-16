@@ -197,10 +197,10 @@ class RSBCanBulkSave(BaseModel):
         slots = [c.slot for c in self.cans]
         if len(slots) != len(set(slots)):
             raise ValueError("Duplicate RSB can slots are not allowed")
-        if any(slot < 1 or slot > 5 for slot in slots):
-            raise ValueError("RSB slots must be between 1 and 5")
-        if len(slots) != 5:
-            raise ValueError("Provide exactly 5 cans (slots 1–5)")
+        if any(slot < 1 or slot > 10 for slot in slots):
+            raise ValueError("RSB slots must be between 1 and 10")
+        if not (1 <= len(slots) <= 10):
+            raise ValueError("Provide between 1 and 10 cans")
         for c in self.cans:
             if c.readings:
                 if len(c.readings) not in (0, 3):
