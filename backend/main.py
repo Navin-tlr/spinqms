@@ -211,7 +211,7 @@ def _ensure_rsb_cans(trial_id: int, db: Session) -> List[LabRSBCan]:
     )
     slots = {c.slot for c in cans}
     created = False
-    for slot in range(1, 6):
+    for slot in range(1, 11):
         if slot not in slots:
             db.add(LabRSBCan(trial_id=trial_id, slot=slot, is_perfect=False))
             created = True
@@ -1146,7 +1146,7 @@ def create_lab_trial(body: LabTrialCreate, db: Session = Depends(get_db)):
         )
         db.add(bench)
 
-    for slot in range(1, 6):
+    for slot in range(1, 11):
         db.add(LabRSBCan(trial_id=trial.id, slot=slot, is_perfect=False, sample_length=6.0))
 
     db.commit()
