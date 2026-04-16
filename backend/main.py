@@ -1648,4 +1648,87 @@ def get_lab_matrix(trial_id: int, db: Session = Depends(get_db)):
         "cells":   cells,
         "benchmarks": benchmarks,
     }
-    db.commit()
+
+
+# ── Interaction Report ─────────────────────────────────────────────────────────
+@app.get("/api/lab/trials/{trial_id}/interaction-report")
+def get_interaction_report(trial_id: int, db: Session = Depends(get_db)):
+    """
+    Return matrix data + ANOVA results for the Bobbin–Frame Interaction Report.
+    The response extends the /matrix payload with an 'anova' key containing
+    statistical analysis (frame effect, machine effect, interaction effect).
+    """
+    from sqlalchemy import text as sa_text
+    from stats_engine import run_interaction_anova
+
+    trial = db.query(LabTrial).filter_by(id=trial_id).first()
+    if not trial:
+        raise HTTPException(404, "Trial not found")
+
+    bm_rows = db.execute(
+        sa_text("SELECT dept_id, target, tolerance FROM lab_benchmarks WHERE trial_id = :tid"),
+        {"tid": trial_id},
+    ).fetchall()
+    benchmarks = {row.dept_id: {"target": row.target, "tolerance": row.tolerance} for row in bm_rows}
+
+    if "ringframe" not in benchmarks:
+        raise HTTPException(400, "Ring frame benchmark not set for this trial")
+    if "simplex" not in benchmarks:
+        raise HTTPException(400, "Simplex benchmark not set for this trial")
+
+    bobbin_rows = db.execute(
+        sa_text(
+            "SELECT id, label, mean_hank AS bobbin_hank, cv_pct AS bobbin_cv, machine_number "
+            "FROM lab_simplex_bobbins WHERE trial_id = :tid ORDER BY id"
+        ),
+        {"tid": trial_id},
+    ).fetchall()
+
+    cell_rows = db.execute(
+        sa_text(
+            """
+            SELECT c.id          AS cop_id,
+                   c.frame_number,
+                   c.mean_hank   AS cop_hank,
+                   c.cv_pct      AS cop_cv,
+                   ri.simplex_bobbin_id AS bobbin_id
+            FROM   lab_ringframe_cops c
+            LEFT JOIN lab_ringframe_inputs ri ON ri.cop_id = c.id
+            WHERE  c.trial_id = :tid
+            ORDER  BY c.frame_number, c.id
+            """
+        ),
+        {"tid": trial_id},
+    ).fetchall()
+
+    cells = [dict(row._mapping) for row in cell_rows]
+    frames = sorted({c["frame_number"] for c in cells if c["frame_number"] is not None})
+
+    # Build bobbin id → machine_number lookup for ANOVA input
+    bobbin_machine = {r.id: r.machine_number for r in bobbin_rows}
+
+    # Construct cops_data for ANOVA: one entry per unique cop with its machine source
+    cops_seen: dict[int, dict] = {}
+    for c in cells:
+        cid = c["cop_id"]
+        if cid not in cops_seen:
+            machine = bobbin_machine.get(c["bobbin_id"]) if c["bobbin_id"] is not None else None
+            cops_seen[cid] = {
+                "cop_id":        cid,
+                "cop_hank":      c["cop_hank"],
+                "frame_number":  c["frame_number"],
+                "machine_number": machine,
+            }
+        elif cops_seen[cid]["machine_number"] is None and c["bobbin_id"] is not None:
+            # If a cop links multiple bobbins, use first non-null machine
+            cops_seen[cid]["machine_number"] = bobbin_machine.get(c["bobbin_id"])
+
+    anova = run_interaction_anova(list(cops_seen.values()))
+
+    return {
+        "bobbins":    [dict(r._mapping) for r in bobbin_rows],
+        "frames":     frames,
+        "cells":      cells,
+        "benchmarks": benchmarks,
+        "anova":      anova,
+    }

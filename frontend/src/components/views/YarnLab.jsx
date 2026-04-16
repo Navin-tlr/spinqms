@@ -5,7 +5,7 @@ import {
   getLabFlow, saveLabRSB,
   createSimplexBobbin, updateSimplexBobbin, deleteSimplexBobbin,
   createRingframeCop, updateRingframeCop, deleteRingframeCop,
-  getLabMatrix,
+  getInteractionReport,
 } from '../../api.js'
 import { Spinner, Badge } from '../Primitives.jsx'
 import { decimalPlaces, weightToHank, hankToWeight } from '../../api.js'
@@ -1010,22 +1010,51 @@ function FormulaNote({ length }) {
   )
 }
 
+/* ════════════════════════════════════════════════════════════════════════════
+   SimplexPanel — groups bobbins by Simplex machine number (1–3 + Unassigned)
+══════════════════════════════════════════════════════════════════════════════ */
 function SimplexPanel({ trialId, bobbins, refreshFlow, bobbinFeedsTo }) {
   const [busyId, setBusyId] = useState(null)
 
-  const handleAdd = async () => {
-    setBusyId('new')
+  // Group bobbins by machine_number (null → unassigned)
+  const groups = useMemo(() => {
+    const map = new Map([[1, []], [2, []], [3, []], [null, []]])
+    for (const b of bobbins) {
+      const key = b.machine_number ?? null
+      if (!map.has(key)) map.set(key, [])
+      map.get(key).push(b)
+    }
+    return map
+  }, [bobbins])
+
+  const handleAdd = async (machineNum) => {
+    const key = `new-${machineNum}`
+    setBusyId(key)
     try {
       await createSimplexBobbin(trialId, {
         label: 'Bobbin ' + (bobbins.length + 1),
-        sample_length: 6,
+        sample_length: DEFAULT_LENGTHS.simplex,
         readings: [],
         rsb_can_ids: [],
+        machine_number: machineNum,
       })
       await refreshFlow()
     } finally {
       setBusyId(null)
     }
+  }
+
+  const handleAddWithCan = async (machineNum, canId) => {
+    try {
+      await createSimplexBobbin(trialId, {
+        label: 'Bobbin ' + (bobbins.length + 1),
+        sample_length: DEFAULT_LENGTHS.simplex,
+        readings: [],
+        rsb_can_ids: canId ? [canId] : [],
+        machine_number: machineNum,
+      })
+      await refreshFlow()
+    } catch { /* swallow — parent rerenders on next refresh */ }
   }
 
   const handleUpdate = async (id, body) => {
@@ -1048,50 +1077,133 @@ function SimplexPanel({ trialId, bobbins, refreshFlow, bobbinFeedsTo }) {
     }
   }
 
+  const hasUnassigned = (groups.get(null) ?? []).length > 0
+
   return (
     <div style={{ border: '1.5px solid var(--bd)', borderRadius: 'var(--r-lg)', padding: 16, background: 'var(--bg)' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-        <div>
-          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--tx)' }}>Simplex</div>
-          <div style={{ fontSize: 11, color: 'var(--tx-4)' }}>Verify hank parity · 3 readings</div>
-        </div>
-        <SmBtn primary onClick={handleAdd} disabled={busyId === 'new'}>
-          {busyId === 'new' ? 'Adding…' : '+ Add Bobbin'}
-        </SmBtn>
+      <div style={{ marginBottom: 10 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--tx)' }}>Simplex</div>
+        <div style={{ fontSize: 11, color: 'var(--tx-4)' }}>Grouped by machine · 3 readings per bobbin</div>
       </div>
       <FormulaNote length={DEFAULT_LENGTHS.simplex} />
-      {bobbins.length === 0 ? (
-        <div style={{
-          border: '1px dashed var(--bd)', borderRadius: 'var(--r)', padding: 16,
-          fontSize: 12, color: 'var(--tx-3)', textAlign: 'center',
-        }}>
-          Drag perfect cans here to start the simplex run.
-        </div>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {bobbins.map(b => (
-            <SimplexCard
-              key={b.id}
-              bobbin={b}
-              busy={busyId === b.id}
-              onUpdate={handleUpdate}
-              onDelete={handleDelete}
-              bobbinFeedsTo={bobbinFeedsTo}
-            />
-          ))}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {[1, 2, 3].map(mn => (
+          <SimplexMachineCard
+            key={mn}
+            machineNum={mn}
+            bobbins={groups.get(mn) ?? []}
+            busyId={busyId}
+            trialId={trialId}
+            onAdd={() => handleAdd(mn)}
+            onAddWithCan={(canId) => handleAddWithCan(mn, canId)}
+            onUpdate={handleUpdate}
+            onDelete={handleDelete}
+            bobbinFeedsTo={bobbinFeedsTo}
+          />
+        ))}
+        {hasUnassigned && (
+          <SimplexMachineCard
+            machineNum={null}
+            bobbins={groups.get(null) ?? []}
+            busyId={busyId}
+            trialId={trialId}
+            onAdd={() => handleAdd(null)}
+            onAddWithCan={(canId) => handleAddWithCan(null, canId)}
+            onUpdate={handleUpdate}
+            onDelete={handleDelete}
+            bobbinFeedsTo={bobbinFeedsTo}
+          />
+        )}
+      </div>
+    </div>
+  )
+}
+
+function SimplexMachineCard({ machineNum, bobbins, busyId, trialId, onAdd, onAddWithCan, onUpdate, onDelete, bobbinFeedsTo }) {
+  const [collapsed, setCollapsed] = useState(false)
+  const newKey = `new-${machineNum}`
+  const machineLabel = machineNum != null ? `Simplex M/c #${machineNum}` : 'Unassigned'
+
+  const handleMachineDrop = async (e) => {
+    e.preventDefault()
+    const canId = parseInt(e.dataTransfer.getData('application/x-rsb-can'), 10)
+    if (!canId) return
+    await onAddWithCan(canId)
+  }
+
+  return (
+    <div style={{
+      border: '1px solid var(--bd-md)', borderRadius: 'var(--r)',
+      background: 'var(--bg-2)', overflow: 'hidden',
+    }}>
+      {/* Collapsible header */}
+      <div
+        style={{
+          display: 'flex', alignItems: 'center', gap: 8,
+          padding: '8px 12px', cursor: 'pointer',
+          borderBottom: collapsed ? 'none' : '1px solid var(--bd)',
+        }}
+        onClick={() => setCollapsed(c => !c)}
+      >
+        <span style={{ fontSize: 10, color: 'var(--tx-4)', userSelect: 'none' }}>
+          {collapsed ? '▶' : '▼'}
+        </span>
+        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--tx)', flex: 1 }}>{machineLabel}</span>
+        <span style={{ fontSize: 11, color: 'var(--tx-4)' }}>
+          {bobbins.length} {bobbins.length === 1 ? 'bobbin' : 'bobbins'}
+        </span>
+        <SmBtn primary onClick={e => { e.stopPropagation(); onAdd() }} disabled={busyId === newKey}>
+          {busyId === newKey ? 'Adding…' : '+ Add Bobbin'}
+        </SmBtn>
+      </div>
+
+      {!collapsed && (
+        <div style={{ padding: 10 }}>
+          {/* RSB can drop zone — creates a new bobbin for this machine, pre-linked to the dropped can */}
+          <div
+            onDragOver={e => e.preventDefault()}
+            onDrop={handleMachineDrop}
+            style={{
+              border: '1px dashed var(--bd)', borderRadius: 'var(--r)',
+              padding: '6px 10px', marginBottom: 8,
+              fontSize: 11, color: 'var(--tx-4)', textAlign: 'center',
+              background: 'var(--bg)',
+            }}
+          >
+            Drop RSB can here to add a new bobbin to {machineLabel}
+          </div>
+
+          {bobbins.length === 0 ? (
+            <div style={{ fontSize: 12, color: 'var(--tx-3)', textAlign: 'center', padding: '8px 0' }}>
+              No bobbins yet.
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {bobbins.map(b => (
+                <SimplexCard
+                  key={b.id}
+                  bobbin={b}
+                  machineNum={machineNum}
+                  busy={busyId === b.id}
+                  onUpdate={onUpdate}
+                  onDelete={onDelete}
+                  bobbinFeedsTo={bobbinFeedsTo}
+                />
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>
   )
 }
 
-function SimplexCard({ bobbin, busy, onUpdate, onDelete, bobbinFeedsTo }) {
+function SimplexCard({ bobbin, machineNum, busy, onUpdate, onDelete, bobbinFeedsTo }) {
   const [form, setForm] = useState(() => ({
     notes: bobbin.notes ?? '',
     verified: bobbin.verified_same_hank,
     sampleLength: bobbin.sample_length ?? DEFAULT_LENGTHS.simplex,
     readings: buildReadings(bobbin.readings, SIMPLEX_READING_COUNT),
-    machineNumber: bobbin.machine_number ?? '',
   }))
 
   useEffect(() => {
@@ -1100,7 +1212,6 @@ function SimplexCard({ bobbin, busy, onUpdate, onDelete, bobbinFeedsTo }) {
       verified: bobbin.verified_same_hank,
       sampleLength: bobbin.sample_length ?? DEFAULT_LENGTHS.simplex,
       readings: buildReadings(bobbin.readings, SIMPLEX_READING_COUNT),
-      machineNumber: bobbin.machine_number ?? '',
     })
   }, [bobbin])
 
@@ -1109,7 +1220,6 @@ function SimplexCard({ bobbin, busy, onUpdate, onDelete, bobbinFeedsTo }) {
 
   const buildCompletePayload = (overrides = {}) => {
     const currentReadings = Array.isArray(bobbin.readings) ? bobbin.readings : []
-    const mn = parseInt(form.machineNumber, 10)
     return {
       label: bobbin.label,
       hank_value: bobbin.hank_value ?? bobbin.mean_hank ?? null,
@@ -1119,7 +1229,7 @@ function SimplexCard({ bobbin, busy, onUpdate, onDelete, bobbinFeedsTo }) {
       sample_length: bobbin.sample_length ?? DEFAULT_LENGTHS.simplex,
       readings: currentReadings,
       rsb_can_ids: bobbin.rsb_can_ids || (bobbin.rsb_cans || []).map(c => c.id),
-      machine_number: !isNaN(mn) && mn >= 1 && mn <= 3 ? mn : null,
+      machine_number: machineNum ?? null,
       ...overrides,
     }
   }
@@ -1231,15 +1341,6 @@ function SimplexCard({ bobbin, busy, onUpdate, onDelete, bobbinFeedsTo }) {
                 setForm(f => ({ ...f, sampleLength: Number.isNaN(val) || val <= 0 ? DEFAULT_LENGTHS.simplex : val }))
               }}
               style={{ ...inputStyle, width: 120 }}
-            />
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <span style={{ fontSize: 10, color: 'var(--tx-4)', fontWeight: 600 }}>Simplex M/c #</span>
-            <input
-              type="number" step="1" min="1" max="3" placeholder="1–3"
-              value={form.machineNumber}
-              onChange={e => setForm(f => ({ ...f, machineNumber: e.target.value }))}
-              style={{ ...inputStyle, width: 76 }}
             />
           </div>
           <span style={{ fontSize: 11, color: 'var(--tx-4)' }}>Ne = (L × 0.54) / W</span>
@@ -1806,7 +1907,7 @@ function FrameCard({ initialFrameNumber, cops, isLocal, busy, onCreateCop, onUpd
  *   CV_c_ij    = cop CV%
  */
 function buildInteractionReport(raw) {
-  const { bobbins, frames, cells, benchmarks } = raw
+  const { bobbins, frames, cells, benchmarks, anova } = raw
   const H_target   = benchmarks.ringframe.target
   const H_b_target = benchmarks.simplex.target
   const nominalDraft = H_target / H_b_target
@@ -1895,6 +1996,7 @@ function buildInteractionReport(raw) {
     frames, bobbins,
     nominalDraft, H_target, H_b_target,
     rfTol: benchmarks.ringframe.tolerance,
+    anova: anova ?? null,
   }
 }
 
@@ -2136,6 +2238,161 @@ function IrSection({ title, subtitle, children }) {
   )
 }
 
+/* ── Phase 5: Statistical Alert Banner ──────────────────────────────────────── */
+function AnovaAlertBanner({ anova }) {
+  if (!anova || anova.status !== 'ok') return null
+  const alerts = []
+  if (anova.frame_effect?.significant)   alerts.push('Frame effect is statistically significant (p=' + anova.frame_effect.p.toFixed(4) + '). Cop hank varies systematically by frame — investigate frame calibration.')
+  if (anova.machine_effect?.significant) alerts.push('Machine effect is statistically significant (p=' + anova.machine_effect.p.toFixed(4) + '). Cop hank differs between Simplex machines — check roving count consistency across machines.')
+  if (anova.interaction?.significant)    alerts.push('Machine–frame interaction is statistically significant (p=' + anova.interaction.p.toFixed(4) + '). Certain machine–frame combinations are systematically off — identify specific pairings from Table 1.')
+  if (alerts.length === 0) return null
+  return (
+    <div style={{
+      border: '1px solid var(--warn-bd)', borderRadius: 'var(--r)',
+      background: 'var(--warn-bg)', padding: '12px 16px',
+      display: 'flex', flexDirection: 'column', gap: 6,
+    }}>
+      <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--warn)', marginBottom: 2 }}>
+        Statistical Analysis — Significant Effects Detected
+      </div>
+      {alerts.map((msg, i) => (
+        <div key={i} style={{ fontSize: 12, color: 'var(--tx-2)', lineHeight: 1.6 }}>
+          {msg}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/* ── Phase 5: ANOVA P-value Metrics Row ─────────────────────────────────────── */
+function AnovaPvalueRow({ anova }) {
+  if (!anova) return null
+
+  const insufficient = anova.status === 'insufficient_data'
+
+  const MetricCell = ({ label, val, sig }) => (
+    <div style={{
+      flex: 1, minWidth: 140,
+      border: '1px solid var(--bd)', borderRadius: 'var(--r)',
+      padding: '10px 14px', background: 'var(--bg)',
+    }}>
+      <div style={{ fontSize: 10, color: 'var(--tx-4)', fontWeight: 600, marginBottom: 4 }}>{label}</div>
+      {val == null ? (
+        <div style={{ fontSize: 11, color: 'var(--tx-4)', fontFamily: 'var(--mono)' }}>
+          {insufficient ? 'Insufficient data' : 'N/A'}
+        </div>
+      ) : (
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+          <span style={{
+            fontSize: 14, fontFamily: 'var(--mono)', fontWeight: 600,
+            color: sig ? 'var(--warn)' : 'var(--ok)',
+          }}>
+            p = {val.toFixed(4)}
+          </span>
+          <span style={{ fontSize: 10, color: sig ? 'var(--warn)' : 'var(--ok)', fontWeight: 600 }}>
+            {sig ? 'significant' : 'not significant'}
+          </span>
+        </div>
+      )}
+    </div>
+  )
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--tx-3)' }}>
+        ANOVA Results
+        {anova.status === 'ok' && (
+          <span style={{ fontWeight: 400, marginLeft: 8, fontFamily: 'var(--mono)' }}>
+            {anova.mode === 'two_way' ? 'Two-Way' : 'One-Way'} · n = {anova.n}
+          </span>
+        )}
+      </div>
+      {insufficient ? (
+        <div style={{
+          fontSize: 12, color: 'var(--tx-3)', padding: '10px 14px',
+          border: '1px solid var(--bd)', borderRadius: 'var(--r)', background: 'var(--bg)',
+        }}>
+          {anova.reason ?? 'Insufficient data for ANOVA. Log more cops with frame and machine numbers assigned.'}
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          <MetricCell
+            label="Frame Effect"
+            val={anova.frame_effect?.p}
+            sig={anova.frame_effect?.significant}
+          />
+          <MetricCell
+            label="Machine Effect"
+            val={anova.machine_effect?.p ?? null}
+            sig={anova.machine_effect?.significant}
+          />
+          <MetricCell
+            label="Machine × Frame Interaction"
+            val={anova.interaction?.p ?? null}
+            sig={anova.interaction?.significant}
+          />
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* ── Phase 5: Diagnostic Heatmap ─────────────────────────────────────────────── */
+function DiagnosticHeatmap({ report }) {
+  const { bobbins, frames, byBobbin, H_target, rfTol } = report
+  if (!bobbins.length || !frames.length) return null
+
+  // Precompute per-cell cop hank
+  const cellHank = {}
+  report.interactions.forEach(r => {
+    cellHank[`${r.bobbinId}_${r.frame}`] = r.copHank
+  })
+
+  const dp = H_target >= 10 ? 2 : 4
+
+  return (
+    <div style={{ overflowX: 'auto' }}>
+      <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--tx-3)', marginBottom: 6 }}>
+        Diagnostic Heatmap — Cop Hank by Bobbin × Frame
+        <span style={{ fontWeight: 400, marginLeft: 8, color: 'var(--tx-4)' }}>
+          Target {_fmt(H_target, dp)} · text colour = deviation
+        </span>
+      </div>
+      <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: 11, fontFamily: 'var(--mono)' }}>
+        <thead>
+          <tr>
+            <IR_TH style={{ textAlign: 'left' }}>Bobbin</IR_TH>
+            {frames.map(f => (
+              <IR_TH key={f} style={{ textAlign: 'center', minWidth: 64 }}>Fr {f}</IR_TH>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {bobbins.map(b => {
+            const info = byBobbin[b.id]
+            const machineSuffix = info?.machineNumber != null ? ` [Sx ${info.machineNumber}]` : ''
+            return (
+              <tr key={b.id}>
+                <IR_TD style={{ textAlign: 'left', whiteSpace: 'nowrap' }}>
+                  {b.label}{machineSuffix}
+                </IR_TD>
+                {frames.map(f => {
+                  const hank = cellHank[`${b.id}_${f}`]
+                  return (
+                    <IR_TD key={f} style={{ textAlign: 'center', color: _devColor(hank != null ? hank - H_target : null, rfTol) }}>
+                      {hank != null ? hank.toFixed(dp) : '—'}
+                    </IR_TD>
+                  )
+                })}
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
 /* ── InteractionReport — main component ─────────────────────────────────────── */
 function InteractionReport({ trialId }) {
   const [report,     setReport]     = useState(null)
@@ -2146,7 +2403,7 @@ function InteractionReport({ trialId }) {
     setGenerating(true)
     setError(null)
     try {
-      const raw    = await getLabMatrix(trialId)
+      const raw    = await getInteractionReport(trialId)
       const result = buildInteractionReport(raw)
       setReport(result)
     } catch (e) {
@@ -2165,12 +2422,13 @@ function InteractionReport({ trialId }) {
         border: '1.5px dashed var(--bd-md)', borderRadius: 'var(--r-lg)',
         background: 'var(--bg-2)',
       }}>
-        <span style={{ fontSize: 32, lineHeight: 1, color: 'var(--tx-3)' }}>⊟</span>
+        <span style={{ fontSize: 32, lineHeight: 1, color: 'var(--tx-3)' }}>⊞</span>
         <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--tx-2)', textAlign: 'center' }}>
           Bobbin–Frame Interaction Report
         </div>
         <div style={{ fontSize: 12, color: 'var(--tx-3)', textAlign: 'center', maxWidth: 420, lineHeight: 1.65 }}>
-          Generates four tables: frame-wise interaction, bobbin-wise interaction, frame summary, and bobbin summary.
+          Runs ANOVA and generates a statistical alert banner, P-value metrics, diagnostic heatmap,
+          and four tables: frame-wise interaction, bobbin-wise interaction, frame summary, and bobbin summary.
           Count Deviation, Draft Error, and CV Added are calculated for every logged bobbin-to-cop pair.
           No data is loaded or computed until you click below.
         </div>
@@ -2200,7 +2458,7 @@ function InteractionReport({ trialId }) {
     )
   }
 
-  /* ── Render 4 tables ────────────────────────────────────────────────────── */
+  /* ── Render report ──────────────────────────────────────────────────────── */
   const { byFrame, byBobbin, frameSummary, bobbinSummary, frames, bobbins, nominalDraft, H_target, H_b_target, rfTol } = report
   const dp = H_target >= 10 ? 2 : 4
 
@@ -2229,11 +2487,25 @@ function InteractionReport({ trialId }) {
         >↻ Regenerate</button>
       </div>
 
+      {/* Statistical Alert Banner — only shown when P < 0.05 */}
+      <AnovaAlertBanner anova={report.anova} />
+
+      {/* ANOVA P-value metrics — always shown */}
+      <AnovaPvalueRow anova={report.anova} />
+
       {report.interactions.length === 0 ? (
         <div style={{ padding: 24, textAlign: 'center', color: 'var(--tx-3)', fontSize: 13 }}>
           No bobbin–cop interactions found. Log ring frame cops with bobbin links via the Flow Board.
         </div>
       ) : (<>
+
+        {/* Diagnostic Heatmap */}
+        <IrSection
+          title="Diagnostic Heatmap"
+          subtitle="Cop hank at each bobbin–frame intersection. Text colour indicates deviation from target."
+        >
+          <DiagnosticHeatmap report={report} />
+        </IrSection>
 
         {/* Table 1: Frame-wise */}
         <IrSection
@@ -2423,7 +2695,7 @@ function TrialDashboard({ trialId, depts, onBack }) {
       <div style={{ display: 'flex', gap: 0, borderRadius: 'var(--r)', overflow: 'hidden', border: '1px solid var(--bd)', alignSelf: 'flex-start' }}>
         {[
           { key: 'flow',   label: '⊡ Flow Board'      },
-          { key: 'matrix', label: '⊟ Interaction Report' },
+          { key: 'matrix', label: '⊞ Interaction Report' },
         ].map(({ key, label }) => (
           <button
             key={key}

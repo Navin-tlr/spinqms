@@ -68,6 +68,7 @@ export const createRingframeCop    = (trialId, body)       => http.post(`/lab/tr
 export const updateRingframeCop    = (id, body)            => http.put(`/lab/ringframe/${id}`, body).then(r => r.data)
 export const deleteRingframeCop    = (id)                  => http.delete(`/lab/ringframe/${id}`)
 export const getLabMatrix          = (trialId)             => http.get(`/lab/trials/${trialId}/matrix`).then(r => r.data)
+export const getInteractionReport  = (trialId)             => http.get(`/lab/trials/${trialId}/interaction-report`).then(r => r.data)
 
 // ── Hank formula helpers (client-side mirror of logic.py) ────────────────────
 export const weightToHank = (weightGrams, lengthYards) =>
