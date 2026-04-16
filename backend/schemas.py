@@ -229,6 +229,7 @@ class SimplexBobbinCreate(BaseModel):
     sample_length: float = Field(6.0, gt=0)
     rsb_can_ids: List[int] = Field(default_factory=list)
     readings: Optional[List[float]] = None
+    machine_number: Optional[int] = Field(None, ge=1, le=3)
 
     @model_validator(mode="after")
     def validate_readings(self) -> "SimplexBobbinCreate":
@@ -249,6 +250,7 @@ class SimplexBobbinUpdate(BaseModel):
     sample_length: Optional[float] = Field(None, gt=0)
     rsb_can_ids: Optional[List[int]] = None
     readings: Optional[List[float]] = None
+    machine_number: Optional[int] = Field(None, ge=1, le=3)
 
     @model_validator(mode="after")
     def validate_readings(self) -> "SimplexBobbinUpdate":
@@ -276,12 +278,14 @@ class SimplexBobbinOut(BaseModel):
     mean_hank: Optional[float]
     cv_pct: Optional[float]
     status: str
+    machine_number: Optional[int] = None
 
 
 class SimplexBobbinRef(BaseModel):
     id: int
     label: str
     hank_value: Optional[float]
+    machine_number: Optional[int] = None
 
 
 class RingframeCopCreate(BaseModel):

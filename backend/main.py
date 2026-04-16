@@ -328,6 +328,7 @@ def _simplex_bobbin_payload(
         "mean_hank":          b.mean_hank,
         "cv_pct":             b.cv_pct,
         "status":             _unit_status(b.mean_hank, b.cv_pct, simplex_dept),
+        "machine_number":     b.machine_number,
     }
 
 
@@ -347,9 +348,10 @@ def _ringframe_cop_payload(
     for inp in inputs:
         bob = inp.simplex_bobbin
         simplex_refs.append({
-            "id":         bob.id,
-            "label":      bob.label,
-            "hank_value": bob.hank_value,
+            "id":            bob.id,
+            "label":         bob.label,
+            "hank_value":    bob.hank_value,
+            "machine_number": bob.machine_number,
         })
         sorted_links = sorted(
             [link for link in bob.inputs if link.rsb_can is not None],
@@ -1426,6 +1428,7 @@ def create_simplex_bobbin(
         doff_minutes=body.doff_minutes,
         order_index=count or 0,
         sample_length=body.sample_length,
+        machine_number=body.machine_number,
     )
     db.add(bobbin)
     db.flush()
@@ -1471,6 +1474,8 @@ def update_simplex_bobbin(
     if body.readings is not None:
         readings = [round(r, 6) for r in body.readings if r is not None]
         _set_reading_fields(bobbin, readings, bobbin.sample_length)
+    if body.machine_number is not None:
+        bobbin.machine_number = body.machine_number
 
     db.commit()
     db.refresh(bobbin)
@@ -1610,7 +1615,7 @@ def get_lab_matrix(trial_id: int, db: Session = Depends(get_db)):
     # Simplex bobbins
     bobbin_rows = db.execute(
         sa_text(
-            "SELECT id, label, mean_hank AS bobbin_hank, cv_pct AS bobbin_cv "
+            "SELECT id, label, mean_hank AS bobbin_hank, cv_pct AS bobbin_cv, machine_number "
             "FROM lab_simplex_bobbins WHERE trial_id = :tid ORDER BY id"
         ),
         {"tid": trial_id},

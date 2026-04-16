@@ -315,6 +315,7 @@ class LabSimplexBobbin(Base):
     doff_minutes       = Column(Integer, nullable=False, default=180)
     order_index        = Column(Integer, nullable=False, default=0)
     sample_length      = Column(Float,   nullable=False, default=6.0)
+    machine_number     = Column(Integer, nullable=True)   # 1–3 (Simplex machine that produced this bobbin)
     readings_json      = Column(Text,    nullable=True)
     readings_count     = Column(Integer, nullable=False, default=0)
     mean_hank          = Column(Float,   nullable=True)

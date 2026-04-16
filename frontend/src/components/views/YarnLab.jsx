@@ -1015,7 +1015,7 @@ function SimplexPanel({ trialId, bobbins, refreshFlow, bobbinFeedsTo }) {
     setBusyId('new')
     try {
       await createSimplexBobbin(trialId, {
-        label: 'Simplex ' + (bobbins.length + 1),
+        label: 'Bobbin ' + (bobbins.length + 1),
         sample_length: 6,
         readings: [],
         rsb_can_ids: [],
@@ -1089,6 +1089,7 @@ function SimplexCard({ bobbin, busy, onUpdate, onDelete, bobbinFeedsTo }) {
     verified: bobbin.verified_same_hank,
     sampleLength: bobbin.sample_length ?? DEFAULT_LENGTHS.simplex,
     readings: buildReadings(bobbin.readings, SIMPLEX_READING_COUNT),
+    machineNumber: bobbin.machine_number ?? '',
   }))
 
   useEffect(() => {
@@ -1097,6 +1098,7 @@ function SimplexCard({ bobbin, busy, onUpdate, onDelete, bobbinFeedsTo }) {
       verified: bobbin.verified_same_hank,
       sampleLength: bobbin.sample_length ?? DEFAULT_LENGTHS.simplex,
       readings: buildReadings(bobbin.readings, SIMPLEX_READING_COUNT),
+      machineNumber: bobbin.machine_number ?? '',
     })
   }, [bobbin])
 
@@ -1105,6 +1107,7 @@ function SimplexCard({ bobbin, busy, onUpdate, onDelete, bobbinFeedsTo }) {
 
   const buildCompletePayload = (overrides = {}) => {
     const currentReadings = Array.isArray(bobbin.readings) ? bobbin.readings : []
+    const mn = parseInt(form.machineNumber, 10)
     return {
       label: bobbin.label,
       hank_value: bobbin.hank_value ?? bobbin.mean_hank ?? null,
@@ -1114,6 +1117,7 @@ function SimplexCard({ bobbin, busy, onUpdate, onDelete, bobbinFeedsTo }) {
       sample_length: bobbin.sample_length ?? DEFAULT_LENGTHS.simplex,
       readings: currentReadings,
       rsb_can_ids: bobbin.rsb_can_ids || (bobbin.rsb_cans || []).map(c => c.id),
+      machine_number: !isNaN(mn) && mn >= 1 && mn <= 3 ? mn : null,
       ...overrides,
     }
   }
@@ -1225,6 +1229,15 @@ function SimplexCard({ bobbin, busy, onUpdate, onDelete, bobbinFeedsTo }) {
                 setForm(f => ({ ...f, sampleLength: Number.isNaN(val) || val <= 0 ? DEFAULT_LENGTHS.simplex : val }))
               }}
               style={{ ...inputStyle, width: 120 }}
+            />
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <span style={{ fontSize: 10, color: 'var(--tx-4)', fontWeight: 600 }}>Simplex M/c #</span>
+            <input
+              type="number" step="1" min="1" max="3" placeholder="1–3"
+              value={form.machineNumber}
+              onChange={e => setForm(f => ({ ...f, machineNumber: e.target.value }))}
+              style={{ ...inputStyle, width: 76 }}
             />
           </div>
           <span style={{ fontSize: 11, color: 'var(--tx-4)' }}>Ne = (L × 0.54) / W</span>
@@ -1814,9 +1827,10 @@ function buildInteractionReport(raw) {
       const H_c_ij  = cell.cop_hank
       const CV_c_ij = cell.cop_cv
       interactions.push({
-        bobbinId:    bobbin.id,
-        bobbinLabel: bobbin.label,
-        bobbinHank:  H_b_i,
+        bobbinId:      bobbin.id,
+        bobbinLabel:   bobbin.label,
+        bobbinHank:    H_b_i,
+        bobbinMachine: bobbin.machine_number ?? null,
         frame,
         copHank:     H_c_ij,
         copCv:       CV_c_ij,
@@ -1837,7 +1851,7 @@ function buildInteractionReport(raw) {
   interactions.forEach(r => byFrame[r.frame].push(r))
 
   const byBobbin = {}
-  bobbins.forEach(b => { byBobbin[b.id] = { label: b.label, bobbinHank: b.bobbin_hank, rows: [] } })
+  bobbins.forEach(b => { byBobbin[b.id] = { label: b.label, bobbinHank: b.bobbin_hank, machineNumber: b.machine_number ?? null, rows: [] } })
   interactions.forEach(r => byBobbin[r.bobbinId].rows.push(r))
 
   const _avg    = arr => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : null
@@ -1964,7 +1978,14 @@ function FrameInteractionTable({ frame, rows, dp, rfTol, H_target }) {
           <tbody>
             {rows.map((r, i) => (
               <tr key={i}>
-                <IR_TD>{r.bobbinLabel}</IR_TD>
+                <IR_TD>
+                  {r.bobbinLabel}
+                  {r.bobbinMachine != null && (
+                    <span style={{ fontSize: 10, color: 'var(--tx-3)', marginLeft: 7, fontWeight: 400, letterSpacing: 0 }}>
+                      Sx&nbsp;{r.bobbinMachine}
+                    </span>
+                  )}
+                </IR_TD>
                 <IR_TD right mono dim>{_fmt(r.bobbinHank, dp)}</IR_TD>
                 <IR_TD right mono>{_fmt(r.copHank, dp)}</IR_TD>
                 <IR_TD right mono color={_devColor(r.countDev, rfTol)}>{_signed(r.countDev, dp)}</IR_TD>
@@ -1982,7 +2003,7 @@ function FrameInteractionTable({ frame, rows, dp, rfTol, H_target }) {
 }
 
 /* ── Table 2: Bobbin-wise Interaction ───────────────────────────────────────── */
-function BobbinInteractionTable({ bobbinId, label, bobbinHank, rows, dp, rfTol, H_target }) {
+function BobbinInteractionTable({ bobbinId, label, bobbinHank, machineNumber, rows, dp, rfTol, H_target }) {
   const tolPct = (rfTol / H_target) * 100
   if (!rows.length) return (
     <div style={{ marginBottom: 24 }}>
@@ -1994,6 +2015,9 @@ function BobbinInteractionTable({ bobbinId, label, bobbinHank, rows, dp, rfTol, 
     <div style={{ marginBottom: 28 }}>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 8 }}>
         <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--tx)' }}>{label}</div>
+        {machineNumber != null && (
+          <span style={{ fontSize: 11, color: 'var(--tx-3)', fontWeight: 400 }}>Sx&nbsp;{machineNumber}</span>
+        )}
         {bobbinHank != null && (
           <div style={{ fontSize: 11, color: 'var(--tx-3)', fontFamily: 'var(--mono)' }}>
             Bobbin hank: {bobbinHank.toFixed(dp)}
@@ -2237,6 +2261,7 @@ function InteractionReport({ trialId }) {
               bobbinId={b.id}
               label={byBobbin[b.id]?.label ?? b.label}
               bobbinHank={byBobbin[b.id]?.bobbinHank}
+              machineNumber={byBobbin[b.id]?.machineNumber ?? null}
               rows={byBobbin[b.id]?.rows ?? []}
               dp={dp}
               rfTol={report.rfTol}
