@@ -197,16 +197,15 @@ class RSBCanBulkSave(BaseModel):
         slots = [c.slot for c in self.cans]
         if len(slots) != len(set(slots)):
             raise ValueError("Duplicate RSB can slots are not allowed")
-        if any(slot < 1 or slot > 10 for slot in slots):
-            raise ValueError("RSB slots must be between 1 and 10")
+        # slot range 1–10 is already enforced per-item by RSBCanPayload.slot Field constraint
         if not (1 <= len(slots) <= 10):
             raise ValueError("Provide between 1 and 10 cans")
         for c in self.cans:
-            if c.readings:
-                if len(c.readings) not in (0, 3):
-                    raise ValueError("Provide exactly 3 readings per can")
-                if any(r is not None and r <= 0 for r in c.readings):
-                    raise ValueError("All readings must be positive numbers")
+            readings = c.readings or []
+            if len(readings) not in (0, 3):
+                raise ValueError(f"Can {c.slot}: provide exactly 3 readings or none at all")
+            if any(r is not None and r <= 0 for r in readings):
+                raise ValueError(f"Can {c.slot}: all readings must be positive numbers")
         return self
 
 
@@ -233,11 +232,11 @@ class SimplexBobbinCreate(BaseModel):
 
     @model_validator(mode="after")
     def validate_readings(self) -> "SimplexBobbinCreate":
-        if self.readings:
-            if len(self.readings) not in (0, 3):
-                raise ValueError("Provide exactly 3 readings for Simplex bobbins")
-            if any(r is not None and r <= 0 for r in self.readings):
-                raise ValueError("Simplex readings must be positive")
+        readings = self.readings or []
+        if len(readings) not in (0, 3):
+            raise ValueError("Provide exactly 3 readings for Simplex bobbins")
+        if any(r is not None and r <= 0 for r in readings):
+            raise ValueError("Simplex readings must be positive")
         return self
 
 
@@ -255,9 +254,10 @@ class SimplexBobbinUpdate(BaseModel):
     @model_validator(mode="after")
     def validate_readings(self) -> "SimplexBobbinUpdate":
         if self.readings is not None:
-            if len(self.readings) not in (0, 3):
+            readings = self.readings
+            if len(readings) not in (0, 3):
                 raise ValueError("Provide exactly 3 readings for Simplex bobbins")
-            if any(r is not None and r <= 0 for r in self.readings):
+            if any(r is not None and r <= 0 for r in readings):
                 raise ValueError("Simplex readings must be positive")
         return self
 
@@ -299,11 +299,11 @@ class RingframeCopCreate(BaseModel):
 
     @model_validator(mode="after")
     def validate_readings(self) -> "RingframeCopCreate":
-        if self.readings:
-            if len(self.readings) == 1:
-                raise ValueError("Provide at least 2 readings for ring frame cops")
-            if any(r is not None and r <= 0 for r in self.readings):
-                raise ValueError("Ring frame readings must be positive")
+        readings = self.readings or []
+        if len(readings) == 1:
+            raise ValueError("Provide at least 2 readings for ring frame cops")
+        if any(r is not None and r <= 0 for r in readings):
+            raise ValueError("Ring frame readings must be positive")
         return self
 
 
@@ -319,9 +319,10 @@ class RingframeCopUpdate(BaseModel):
     @model_validator(mode="after")
     def validate_readings(self) -> "RingframeCopUpdate":
         if self.readings is not None:
-            if len(self.readings) == 1:
+            readings = self.readings
+            if len(readings) == 1:
                 raise ValueError("Provide at least 2 readings for ring frame cops")
-            if any(r is not None and r <= 0 for r in self.readings):
+            if any(r is not None and r <= 0 for r in readings):
                 raise ValueError("Ring frame readings must be positive")
         return self
 

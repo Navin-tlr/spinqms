@@ -280,7 +280,7 @@ class LabRSBCan(Base):
     id          = Column(Integer, primary_key=True)
     trial_id    = Column(Integer, ForeignKey("lab_trials.id", ondelete="CASCADE"),
                          nullable=False, index=True)
-    slot        = Column(Integer, nullable=False)  # 1..5
+    slot        = Column(Integer, nullable=False)  # 1..10
     hank_value  = Column(Float,   nullable=True)
     notes       = Column(String,  nullable=True)
     is_perfect  = Column(Boolean, nullable=False, default=False)

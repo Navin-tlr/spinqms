@@ -159,7 +159,7 @@ def _get_trial_or_404(trial_id: int, db: Session) -> LabTrial:
 
 def _ordered_depts(db: Session) -> List[Department]:
     """All departments in canonical pipeline order."""
-    order = ["carding", "drawing", "breaker", "rsb", "simplex", "ringframe", "autoconer"]
+    order = ["carding", "breaker", "rsb", "simplex", "ringframe", "autoconer"]
     rows  = {d.dept_id: d for d in db.query(Department).all()}
     return [rows[did] for did in order if did in rows]
 
@@ -1396,6 +1396,10 @@ def save_rsb_cans(trial_id: int, body: RSBCanBulkSave, db: Session = Depends(get
         row.sample_length = item.sample_length
         weights = [round(r, 6) for r in (item.readings or []) if r is not None]
         _set_reading_fields(row, weights, row.sample_length)
+        # If no readings were taken but a manual hank_value was provided, honour it.
+        # _set_reading_fields sets hank_value=None when weights is empty, so apply after.
+        if not weights and item.hank_value is not None:
+            row.hank_value = item.hank_value
     db.commit()
     refreshed = _ensure_rsb_cans(trial_id, db)
     return {
