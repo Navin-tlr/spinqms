@@ -2056,34 +2056,51 @@ const _signed = (val, dp) => val != null ? `${val > 0 ? '+' : ''}${val.toFixed(d
 const _fmt    = (val, dp) => val != null ? val.toFixed(dp) : '—'
 
 /* ── InfoTip — inline ? tooltip for jargon column headers ──────────────────── */
+/* Uses position:fixed so it escapes table overflow clipping entirely          */
 function InfoTip({ formula, explain }) {
-  const [open, setOpen] = useState(false)
+  const [tipPos, setTipPos] = useState(null)
+
+  const handleClick = (e) => {
+    e.stopPropagation()
+    if (tipPos) { setTipPos(null); return }
+    const rect = e.currentTarget.getBoundingClientRect()
+    const tipW = 248
+    let left = Math.round(rect.left)
+    if (left + tipW > window.innerWidth - 12) left = window.innerWidth - tipW - 12
+    setTipPos({ top: Math.round(rect.bottom + 5), left })
+  }
+
+  useEffect(() => {
+    if (!tipPos) return
+    const hide = () => setTipPos(null)
+    window.addEventListener('click', hide, { capture: true, once: true })
+    return () => window.removeEventListener('click', hide, { capture: true })
+  }, [tipPos])
+
   return (
-    <span style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', gap: 3, verticalAlign: 'middle' }}>
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, verticalAlign: 'middle' }}>
       <button
-        onClick={e => { e.stopPropagation(); setOpen(o => !o) }}
+        onClick={handleClick}
         style={{
           width: 13, height: 13, borderRadius: '50%',
           border: '1px solid var(--bd-md)',
-          background: open ? 'var(--claude)' : 'var(--bg-3)',
-          color: open ? '#fff' : 'var(--tx-4)',
+          background: tipPos ? 'var(--claude)' : 'var(--bg-3)',
+          color: tipPos ? '#fff' : 'var(--tx-4)',
           fontSize: 8, fontWeight: 700, lineHeight: 1,
           cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
           fontFamily: 'var(--font)', padding: 0, flexShrink: 0,
         }}
       >?</button>
-      {open && (
-        <div
-          style={{
-            position: 'absolute', top: 18, left: 0, zIndex: 300,
-            width: 220, padding: '8px 10px',
-            background: 'var(--bg)', border: '1px solid var(--bd-md)',
-            borderRadius: 'var(--r)', boxShadow: '0 4px 16px rgba(0,0,0,.18)',
-          }}
-          onMouseLeave={() => setOpen(false)}
-        >
-          <code style={{ display: 'block', fontSize: 10, fontFamily: 'var(--mono)', color: 'var(--claude)', marginBottom: 5 }}>{formula}</code>
-          <div style={{ fontSize: 11, color: 'var(--tx-2)', lineHeight: 1.55, fontFamily: 'var(--font)', fontWeight: 400 }}>{explain}</div>
+      {tipPos && (
+        <div style={{
+          position: 'fixed', top: tipPos.top, left: tipPos.left, zIndex: 9999,
+          width: 248, padding: '9px 12px',
+          background: 'var(--bg)', border: '1px solid var(--bd-md)',
+          borderRadius: 'var(--r)', boxShadow: '0 4px 20px rgba(0,0,0,.22)',
+          pointerEvents: 'none',
+        }}>
+          <code style={{ display: 'block', fontSize: 10, fontFamily: 'var(--mono)', color: 'var(--claude)', marginBottom: 6 }}>{formula}</code>
+          <div style={{ fontSize: 11, color: 'var(--tx-2)', lineHeight: 1.6, fontFamily: 'var(--font)', fontWeight: 400 }}>{explain}</div>
         </div>
       )}
     </span>
@@ -2560,8 +2577,6 @@ function LineageTraceTable({ report, machineFilter }) {
   const visible = bobbins.filter(b =>
     machineFilter == null || b.machine_number === machineFilter
   )
-
-  // All unique frame numbers that appear in the visible bobbin data
   const allFrames = [...new Set(
     visible.flatMap(b => (byBobbin[b.id]?.rows ?? []).map(r => r.frame))
   )].sort((a, b) => a - b)
@@ -2570,31 +2585,35 @@ function LineageTraceTable({ report, machineFilter }) {
     <div style={{ fontSize: 12, color: 'var(--tx-4)', padding: '10px 0' }}>No bobbins match the current filter.</div>
   )
 
-  const nodeBase = {
-    display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-start',
-    padding: '8px 12px', borderRadius: 'var(--r)',
-    minWidth: 82, flexShrink: 0,
+  // Classify a cop hank into pass/warn/fail/pending
+  const copStatus = (hank) => {
+    if (hank == null) return 'pending'
+    const dev = Math.abs(hank - H_target)
+    if (dev <= rfTol * 0.5) return 'pass'
+    if (dev <= rfTol)       return 'warn'
+    return 'fail'
   }
-  const nodeStyle       = { ...nodeBase, background: 'var(--bg)',        border: '1px solid var(--bd)' }
-  const nodeHighlight   = { ...nodeBase, background: 'var(--claude-bg)', border: '1px solid var(--claude-bd)' }
-  const nodeLabel = (accent) => ({
-    fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em',
-    color: accent ? 'var(--claude)' : 'var(--tx-4)', marginBottom: 2,
-  })
-  const arrow = (
-    <div style={{ display: 'flex', alignItems: 'center', alignSelf: 'center', padding: '0 3px', color: 'var(--tx-4)', fontSize: 20, userSelect: 'none', flexShrink: 0 }}>→</div>
+
+  // Arrow connector
+  const Arrow = () => (
+    <div style={{
+      alignSelf: 'center', flexShrink: 0, padding: '0 4px',
+      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1,
+    }}>
+      <div style={{ width: 28, height: 1, background: 'var(--bd-md)' }} />
+      <div style={{ fontSize: 10, color: 'var(--tx-4)', lineHeight: 1 }}>▶</div>
+    </div>
   )
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
 
       {/* Frame filter bar */}
       {allFrames.length > 1 && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
           <span style={{ fontSize: 11, color: 'var(--tx-4)', fontWeight: 600 }}>Frame:</span>
           {[null, ...allFrames].map(f => (
-            <button
-              key={f ?? 'all'}
+            <button key={f ?? 'all'}
               onClick={() => setFrameFilter(prev => prev === f ? null : f)}
               style={{
                 padding: '3px 10px', fontSize: 11, fontWeight: 600, borderRadius: 'var(--r)',
@@ -2619,87 +2638,153 @@ function LineageTraceTable({ report, machineFilter }) {
         const avgCopHank = cops.length ? cops.reduce((s, r) => s + r.copHank, 0) / cops.length : null
         const sxDraft    = avgCanHank && b.bobbin_hank ? b.bobbin_hank / avgCanHank : null
         const rfDraft    = b.bobbin_hank && avgCopHank  ? avgCopHank / b.bobbin_hank : null
-
-        // If frame filter is active and this bobbin has no cops on that frame, skip
         if (frameFilter != null && !cops.length) return null
+
+        // Overall card status — worst cop determines the border colour
+        const cardStatus = cops.length === 0 ? 'pending'
+          : cops.some(r => copStatus(r.copHank) === 'fail')  ? 'fail'
+          : cops.some(r => copStatus(r.copHank) === 'warn')  ? 'warn'
+          : 'pass'
 
         return (
           <div key={b.id} style={{
-            border: '1px solid var(--bd)', borderRadius: 'var(--r)',
-            padding: '12px 14px', background: 'var(--bg-2)',
+            borderRadius: 'var(--r-lg)', overflow: 'hidden',
+            border: `1px solid ${V_BD[cardStatus]}`,
+            boxShadow: '0 1px 4px rgba(0,0,0,.06)',
           }}>
-            {/* Card header */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-              <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--tx)' }}>{b.label}</span>
+
+            {/* ── Card header ── */}
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 10,
+              padding: '9px 14px',
+              background: V_BG[cardStatus],
+              borderBottom: `1px solid ${V_BD[cardStatus]}`,
+            }}>
+              <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--tx)' }}>{b.label}</span>
               {b.machine_number != null && (
                 <span style={{
-                  fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 8,
+                  fontSize: 10, fontWeight: 700, padding: '1px 7px', borderRadius: 8,
                   background: 'var(--bg-3)', border: '1px solid var(--bd)', color: 'var(--tx-2)',
                 }}>Sx {b.machine_number}</span>
               )}
+              {/* Provenance summary */}
+              <span style={{ fontSize: 11, color: 'var(--tx-3)', fontFamily: 'var(--mono)', marginLeft: 2 }}>
+                {cans.length} can{cans.length !== 1 ? 's' : ''} → 1 bobbin → {cops.length} cop{cops.length !== 1 ? 's' : ''}
+              </span>
+              {/* Status pill */}
+              <span style={{
+                marginLeft: 'auto', fontSize: 10, fontWeight: 700,
+                padding: '2px 8px', borderRadius: 6,
+                background: V_BG[cardStatus], color: V_COLOR[cardStatus],
+                border: `1px solid ${V_BD[cardStatus]}`,
+              }}>{V_LABEL[cardStatus]}</span>
             </div>
 
-            {/* Visual chain */}
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 2, overflowX: 'auto', paddingBottom: 2 }}>
+            {/* ── Flow chain ── */}
+            <div style={{
+              padding: '14px 16px',
+              background: 'var(--bg)',
+              display: 'flex', alignItems: 'flex-start', gap: 0, overflowX: 'auto',
+            }}>
 
-              {/* RSB Can(s) node */}
-              <div style={nodeStyle}>
-                <span style={nodeLabel(false)}>RSB Can{cans.length !== 1 ? 's' : ''}</span>
-                {cans.length === 0
-                  ? <span style={{ fontSize: 11, color: 'var(--tx-4)' }}>—</span>
-                  : cans.map(c => (
-                    <div key={c.can_id} style={{ display: 'flex', alignItems: 'baseline', gap: 5 }}>
-                      <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--tx)', whiteSpace: 'nowrap' }}>Can {c.can_slot}</span>
-                      <span style={{ fontSize: 11, fontFamily: 'var(--mono)', color: 'var(--tx-3)', whiteSpace: 'nowrap' }}>
-                        {c.can_hank != null ? c.can_hank.toFixed(b_dp) : '—'}
-                      </span>
-                    </div>
-                  ))
-                }
+              {/* Can(s) node */}
+              <div style={{
+                flexShrink: 0, minWidth: 96,
+                display: 'flex', flexDirection: 'column', gap: 0,
+                border: '1px solid var(--bd)', borderRadius: 'var(--r)',
+                overflow: 'hidden',
+              }}>
+                <div style={{ padding: '4px 10px', background: 'var(--bg-2)', borderBottom: '1px solid var(--bd)' }}>
+                  <span style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.08em', color: 'var(--tx-4)' }}>
+                    RSB Can{cans.length !== 1 ? 's' : ''}
+                  </span>
+                </div>
+                <div style={{ padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 5 }}>
+                  {cans.length === 0
+                    ? <span style={{ fontSize: 12, color: 'var(--tx-4)' }}>—</span>
+                    : cans.map(c => (
+                      <div key={c.can_id}>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--tx)', lineHeight: 1.2 }}>Can {c.can_slot}</div>
+                        <div style={{ fontSize: 11, fontFamily: 'var(--mono)', color: 'var(--tx-3)', marginTop: 1 }}>
+                          {c.can_hank != null ? c.can_hank.toFixed(b_dp) : <span style={{ color: 'var(--tx-4)' }}>—</span>}
+                        </div>
+                      </div>
+                    ))
+                  }
+                </div>
               </div>
 
-              {arrow}
+              <Arrow />
 
-              {/* Bobbin node */}
-              <div style={nodeHighlight}>
-                <span style={nodeLabel(true)}>Bobbin</span>
-                <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--tx)' }}>{b.label}</span>
-                <span style={{ fontSize: 11, fontFamily: 'var(--mono)', color: b.bobbin_hank != null ? 'var(--tx-2)' : 'var(--tx-4)', whiteSpace: 'nowrap' }}>
-                  {b.bobbin_hank != null ? b.bobbin_hank.toFixed(b_dp) : 'No reading'}
-                </span>
+              {/* Bobbin node — accent coloured */}
+              <div style={{
+                flexShrink: 0, minWidth: 106,
+                display: 'flex', flexDirection: 'column', gap: 0,
+                border: '1px solid var(--claude-bd)', borderRadius: 'var(--r)',
+                overflow: 'hidden',
+              }}>
+                <div style={{ padding: '4px 10px', background: 'var(--claude-bg)', borderBottom: '1px solid var(--claude-bd)' }}>
+                  <span style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.08em', color: 'var(--claude)' }}>Bobbin</span>
+                </div>
+                <div style={{ padding: '8px 10px' }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--tx)', lineHeight: 1.2 }}>{b.label}</div>
+                  <div style={{ fontSize: 11, fontFamily: 'var(--mono)', color: b.bobbin_hank != null ? 'var(--tx-2)' : 'var(--tx-4)', marginTop: 1 }}>
+                    {b.bobbin_hank != null ? b.bobbin_hank.toFixed(b_dp) : 'No reading'}
+                  </div>
+                </div>
               </div>
 
-              {arrow}
+              <Arrow />
 
               {/* Cop(s) node */}
-              <div style={nodeStyle}>
-                <span style={nodeLabel(false)}>Ring Frame</span>
-                {cops.length === 0
-                  ? <span style={{ fontSize: 11, color: 'var(--tx-4)' }}>
-                      {frameFilter != null ? `No cop on Fr ${frameFilter}` : 'No cops logged'}
-                    </span>
-                  : cops.map((r, ci) => (
-                    <div key={ci} style={{ display: 'flex', alignItems: 'baseline', gap: 5 }}>
-                      <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--tx-3)', whiteSpace: 'nowrap' }}>Fr {r.frame}</span>
-                      <span style={{ fontSize: 12, fontFamily: 'var(--mono)', fontWeight: 600, whiteSpace: 'nowrap', color: _devColor(r.copHank - H_target, rfTol) }}>
-                        {r.copHank.toFixed(dp)}
+              <div style={{
+                flexShrink: 0, minWidth: 120,
+                display: 'flex', flexDirection: 'column', gap: 0,
+                border: '1px solid var(--bd)', borderRadius: 'var(--r)',
+                overflow: 'hidden',
+              }}>
+                <div style={{ padding: '4px 10px', background: 'var(--bg-2)', borderBottom: '1px solid var(--bd)' }}>
+                  <span style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.08em', color: 'var(--tx-4)' }}>Ring Frame</span>
+                </div>
+                <div style={{ padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 5 }}>
+                  {cops.length === 0
+                    ? <span style={{ fontSize: 12, color: 'var(--tx-4)' }}>
+                        {frameFilter != null ? `No cop on Fr ${frameFilter}` : 'No cops logged'}
                       </span>
-                    </div>
-                  ))
-                }
+                    : cops.map((r, ci) => {
+                      const st  = copStatus(r.copHank)
+                      const dev = r.copHank - H_target
+                      return (
+                        <div key={ci} style={{ display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'nowrap' }}>
+                          <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--tx-3)', whiteSpace: 'nowrap' }}>Fr {r.frame}</span>
+                          <span style={{ fontSize: 13, fontFamily: 'var(--mono)', fontWeight: 700, color: V_COLOR[st], whiteSpace: 'nowrap' }}>
+                            {r.copHank.toFixed(dp)}
+                          </span>
+                          <span style={{ fontSize: 10, fontFamily: 'var(--mono)', color: V_COLOR[st], whiteSpace: 'nowrap' }}>
+                            {dev >= 0 ? '+' : ''}{dev.toFixed(dp)}
+                          </span>
+                        </div>
+                      )
+                    })
+                  }
+                </div>
               </div>
             </div>
 
-            {/* Secondary metrics row */}
-            <div style={{ display: 'flex', gap: 20, marginTop: 10, paddingTop: 8, borderTop: '1px solid var(--bd)', flexWrap: 'wrap' }}>
+            {/* ── Metrics footer ── */}
+            <div style={{
+              display: 'flex', gap: 24, flexWrap: 'wrap', alignItems: 'center',
+              padding: '8px 16px',
+              background: 'var(--bg-2)', borderTop: '1px solid var(--bd)',
+            }}>
               {[
                 { label: 'Sx Draft', val: sxDraft != null ? sxDraft.toFixed(3) + '×' : '—' },
                 { label: 'RF Draft', val: rfDraft != null ? rfDraft.toFixed(3) + '×' : '—' },
-                { label: 'Cops shown', val: String(cops.length) + (frameFilter != null ? '' : ` / ${allCops.length}`) },
+                { label: 'Cops',     val: frameFilter != null ? String(cops.length) : `${allCops.length}` },
               ].map(m => (
-                <div key={m.label} style={{ display: 'flex', gap: 5, alignItems: 'baseline' }}>
-                  <span style={{ fontSize: 10, color: 'var(--tx-4)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.05em' }}>{m.label}</span>
-                  <span style={{ fontSize: 11, fontFamily: 'var(--mono)', color: 'var(--tx-2)', fontWeight: 600 }}>{m.val}</span>
+                <div key={m.label} style={{ display: 'flex', gap: 6, alignItems: 'baseline' }}>
+                  <span style={{ fontSize: 10, color: 'var(--tx-4)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.07em' }}>{m.label}</span>
+                  <span style={{ fontSize: 12, fontFamily: 'var(--mono)', color: 'var(--tx-2)', fontWeight: 600 }}>{m.val}</span>
                 </div>
               ))}
             </div>
