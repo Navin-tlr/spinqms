@@ -1750,8 +1750,41 @@ def get_interaction_report(trial_id: int, db: Session = Depends(get_db)):
 
     anova = run_interaction_anova(list(cops_seen.values()))
 
+    # RSB can lineage: which cans fed each bobbin (slot, hank, cv)
+    rsb_lineage_rows = db.execute(
+        sa_text(
+            """
+            SELECT si.bobbin_id,
+                   rc.id       AS can_id,
+                   rc.slot     AS can_slot,
+                   rc.mean_hank AS can_hank,
+                   rc.cv_pct   AS can_cv
+            FROM   lab_simplex_inputs si
+            JOIN   lab_rsb_cans rc ON rc.id = si.rsb_can_id
+            WHERE  rc.trial_id = :tid
+            ORDER  BY si.bobbin_id, rc.slot
+            """
+        ),
+        {"tid": trial_id},
+    ).fetchall()
+
+    rsb_by_bobbin: dict[int, list] = {}
+    for row in rsb_lineage_rows:
+        rsb_by_bobbin.setdefault(row.bobbin_id, []).append({
+            "can_id":   row.can_id,
+            "can_slot": row.can_slot,
+            "can_hank": row.can_hank,
+            "can_cv":   row.can_cv,
+        })
+
+    bobbins_out = []
+    for r in bobbin_rows:
+        d = dict(r._mapping)
+        d["rsb_cans"] = rsb_by_bobbin.get(r.id, [])
+        bobbins_out.append(d)
+
     return {
-        "bobbins":    [dict(r._mapping) for r in bobbin_rows],
+        "bobbins":    bobbins_out,
         "frames":     frames,
         "cells":      cells,
         "benchmarks": benchmarks,
