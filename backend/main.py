@@ -1423,25 +1423,35 @@ def create_simplex_bobbin(
         .filter(LabSimplexBobbin.trial_id == trial_id)
         .scalar()
     )
-    # Auto-derive label from the primary RSB can slot so bobbin names always
-    # match their source can (e.g. Can 3 → "Bobbin 3").
-    # Falls back to sequential numbering only when no can is linked yet.
-    # If body.label is explicitly supplied, honour it (trimmed, non-empty).
+    # ── Structured ID: {can_slot}-{n}  e.g. "1-1", "1-2", "3-1" ──────────────
+    # If body.label is explicitly supplied (non-empty), honour it as-is.
     provided = (body.label or "").strip()
     if provided:
         label = provided
+    elif body.rsb_can_ids:
+        first_can = (
+            db.query(LabRSBCan)
+            .filter(LabRSBCan.trial_id == trial_id, LabRSBCan.id == body.rsb_can_ids[0])
+            .first()
+        )
+        if first_can:
+            # Count bobbins already linked to this specific can in this trial
+            siblings = (
+                db.query(func.count(LabSimplexInput.id))
+                .join(LabSimplexBobbin, LabSimplexInput.bobbin_id == LabSimplexBobbin.id)
+                .filter(
+                    LabSimplexInput.rsb_can_id == first_can.id,
+                    LabSimplexBobbin.trial_id == trial_id,
+                )
+                .scalar()
+            ) or 0
+            label = f"{first_can.slot}-{siblings + 1}"
+        else:
+            label = f"B{count + 1}"
     else:
-        label = f"Bobbin {count + 1}"
-        if body.rsb_can_ids:
-            first_can = (
-                db.query(LabRSBCan)
-                .filter(LabRSBCan.trial_id == trial_id, LabRSBCan.id == body.rsb_can_ids[0])
-                .first()
-            )
-            if first_can:
-                label = f"Bobbin {first_can.slot}"
+        label = f"B{count + 1}"
 
-    # Ensure label is unique within this trial — append -2, -3 … if needed
+    # Guarantee uniqueness within trial (handles gaps from deletions)
     existing_labels = {
         row[0]
         for row in db.query(LabSimplexBobbin.label)
@@ -1505,19 +1515,12 @@ def update_simplex_bobbin(
         bobbin.sample_length = body.sample_length
     if body.rsb_can_ids is not None:
         _set_simplex_inputs(bobbin, body.rsb_can_ids, bobbin.trial_id, db)
-        # Auto-rename: label always tracks the primary (first) linked RSB can slot.
-        # This overrides any manually supplied body.label so naming stays consistent.
-        if body.rsb_can_ids:
-            first_can = (
-                db.query(LabRSBCan)
-                .filter(LabRSBCan.trial_id == bobbin.trial_id, LabRSBCan.id == body.rsb_can_ids[0])
-                .first()
-            )
-            if first_can:
-                bobbin.label = f"Bobbin {first_can.slot}"
-    elif body.label is not None:
-        # Only allow a manual label when no can linkage is being set in this request
-        bobbin.label = body.label.strip() or bobbin.label
+        # Do NOT auto-rename on linkage changes — the structured ID was assigned
+        # at creation time and should remain stable regardless of re-linking.
+    if body.label is not None:
+        stripped = body.label.strip()
+        if stripped:
+            bobbin.label = stripped
     if body.readings is not None:
         readings = [round(r, 6) for r in body.readings if r is not None]
         _set_reading_fields(bobbin, readings, bobbin.sample_length)
@@ -1553,9 +1556,35 @@ def create_ringframe_cop(
         .filter(LabRingframeCop.trial_id == trial_id)
         .scalar()
     )
+    # ── Structured ID: {bobbin_label}-{n}  e.g. "1-1-1", "1-1-2", "2-3-1" ───
     provided_label = (body.label or "").strip()
-    label = provided_label or f"Cop {count + 1}"
-    # Ensure label is unique within this trial — append -2, -3 … if needed
+    if provided_label:
+        label = provided_label
+    elif body.simplex_bobbin_ids:
+        first_bobbin = (
+            db.query(LabSimplexBobbin)
+            .filter(LabSimplexBobbin.id == body.simplex_bobbin_ids[0],
+                    LabSimplexBobbin.trial_id == trial_id)
+            .first()
+        )
+        if first_bobbin:
+            # Count cops already linked to this bobbin in this trial
+            siblings = (
+                db.query(func.count(LabRingframeInput.id))
+                .join(LabRingframeCop, LabRingframeInput.cop_id == LabRingframeCop.id)
+                .filter(
+                    LabRingframeInput.simplex_bobbin_id == first_bobbin.id,
+                    LabRingframeCop.trial_id == trial_id,
+                )
+                .scalar()
+            ) or 0
+            label = f"{first_bobbin.label}-{siblings + 1}"
+        else:
+            label = f"C{count + 1}"
+    else:
+        label = f"C{count + 1}"
+
+    # Guarantee uniqueness within trial (handles gaps from deletions)
     existing_cop_labels = {
         row[0]
         for row in db.query(LabRingframeCop.label)

@@ -1880,11 +1880,8 @@ function FrameCard({ initialFrameNumber, cops, isLocal, busy, forceExpanded, onC
     const bobbinLabel = e.dataTransfer.getData('application/x-simplex-bobbin-label') || 'Bobbin'
     if (!bobbinId) return
     const fn = frameNum !== '' ? parseInt(frameNum, 10) : null
-    // Derive cop label from bobbin: "Bobbin 1-2" → "Cop 1-2"
-    const bobbinSuffix = bobbinLabel.replace(/^Bobbin\s+/i, '').trim()
-    const copLabel = bobbinSuffix ? `Cop ${bobbinSuffix}` : 'Cop'
+    // No label sent — backend auto-generates structured ID: {bobbin_label}-{n}
     await onCreateCop(fn, {
-      label: copLabel,
       sample_length: DEFAULT_LENGTHS.ringframe,
       readings: [],
       simplex_bobbin_ids: [bobbinId],
