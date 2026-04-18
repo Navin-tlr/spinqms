@@ -1921,7 +1921,13 @@ function FrameCard({ initialFrameNumber, cops, isLocal, busy, onCreateCop, onUpd
  *   CV_c_ij    = cop CV%
  */
 function buildInteractionReport(raw) {
-  const { bobbins, frames, cells, benchmarks, anova } = raw
+  const { bobbins: _rawBobbins, frames, cells, benchmarks, anova } = raw
+  // TASK 01 — sort bobbins chronologically by the numeric portion of their label
+  const bobbins = [..._rawBobbins].sort((a, b) => {
+    const na = parseInt((a.label ?? '').replace(/\D/g, ''), 10) || 0
+    const nb = parseInt((b.label ?? '').replace(/\D/g, ''), 10) || 0
+    return na - nb
+  })
   const H_target   = benchmarks.ringframe.target
   const H_b_target = benchmarks.simplex.target
   const nominalDraft = H_target / H_b_target
@@ -2049,6 +2055,41 @@ const _copCvColor  = val => {
 const _signed = (val, dp) => val != null ? `${val > 0 ? '+' : ''}${val.toFixed(dp)}` : '—'
 const _fmt    = (val, dp) => val != null ? val.toFixed(dp) : '—'
 
+/* ── InfoTip — inline ? tooltip for jargon column headers ──────────────────── */
+function InfoTip({ formula, explain }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <span style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', gap: 3, verticalAlign: 'middle' }}>
+      <button
+        onClick={e => { e.stopPropagation(); setOpen(o => !o) }}
+        style={{
+          width: 13, height: 13, borderRadius: '50%',
+          border: '1px solid var(--bd-md)',
+          background: open ? 'var(--claude)' : 'var(--bg-3)',
+          color: open ? '#fff' : 'var(--tx-4)',
+          fontSize: 8, fontWeight: 700, lineHeight: 1,
+          cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+          fontFamily: 'var(--font)', padding: 0, flexShrink: 0,
+        }}
+      >?</button>
+      {open && (
+        <div
+          style={{
+            position: 'absolute', top: 18, left: 0, zIndex: 300,
+            width: 220, padding: '8px 10px',
+            background: 'var(--bg)', border: '1px solid var(--bd-md)',
+            borderRadius: 'var(--r)', boxShadow: '0 4px 16px rgba(0,0,0,.18)',
+          }}
+          onMouseLeave={() => setOpen(false)}
+        >
+          <code style={{ display: 'block', fontSize: 10, fontFamily: 'var(--mono)', color: 'var(--claude)', marginBottom: 5 }}>{formula}</code>
+          <div style={{ fontSize: 11, color: 'var(--tx-2)', lineHeight: 1.55, fontFamily: 'var(--font)', fontWeight: 400 }}>{explain}</div>
+        </div>
+      )}
+    </span>
+  )
+}
+
 /* ── Shared table style atoms ───────────────────────────────────────────────── */
 const IR_TH = ({ children, right, left }) => (
   <th style={{
@@ -2059,6 +2100,7 @@ const IR_TH = ({ children, right, left }) => (
     borderBottom: '2px solid var(--bd-md)',
     whiteSpace: 'nowrap',
     background: 'transparent',
+    position: 'relative',
   }}>{children}</th>
 )
 const IR_TD = ({ children, right, color, mono, dim }) => (
@@ -2091,11 +2133,11 @@ function FrameInteractionTable({ frame, rows, dp, rfTol, H_target }) {
               <IR_TH>Bobbin</IR_TH>
               <IR_TH right>Bobbin Hank</IR_TH>
               <IR_TH right>Cop Hank</IR_TH>
-              <IR_TH right>Count Dev</IR_TH>
-              <IR_TH right>Count Dev %</IR_TH>
-              <IR_TH right>Draft Error</IR_TH>
+              <IR_TH right>Count Dev <InfoTip formula="Cop Hank − Target" explain="Absolute deviation from target count. Positive = coarser yarn; negative = finer yarn. Zero is ideal." /></IR_TH>
+              <IR_TH right>Count Dev % <InfoTip formula="(Count Dev ÷ Target) × 100" explain="Percentage deviation from target count. ±1% is the typical industry tolerance." /></IR_TH>
+              <IR_TH right>Draft Error <InfoTip formula="Actual Draft − Nominal Draft" explain="Nominal draft = RF target ÷ Simplex target. Negative = under-drafting (yarn too coarse); positive = over-drafting (yarn too fine)." /></IR_TH>
               <IR_TH right>Cop CV%</IR_TH>
-              <IR_TH right>CV Added</IR_TH>
+              <IR_TH right>CV Added <InfoTip formula="√(CV_cop² − CV_bobbin²)" explain="Extra unevenness introduced by the ring frame itself. Large values point to worn rollers or tension problems at the frame." /></IR_TH>
             </tr>
           </thead>
           <tbody>
@@ -2153,11 +2195,11 @@ function BobbinInteractionTable({ bobbinId, label, bobbinHank, machineNumber, ro
             <tr>
               <IR_TH>Frame</IR_TH>
               <IR_TH right>Cop Hank</IR_TH>
-              <IR_TH right>Count Dev</IR_TH>
-              <IR_TH right>Count Dev %</IR_TH>
-              <IR_TH right>Draft Error</IR_TH>
+              <IR_TH right>Count Dev <InfoTip formula="Cop Hank − Target" explain="Absolute deviation from target count. Positive = coarser yarn; negative = finer yarn." /></IR_TH>
+              <IR_TH right>Count Dev % <InfoTip formula="(Count Dev ÷ Target) × 100" explain="Percentage deviation from target count. ±1% is the typical industry tolerance." /></IR_TH>
+              <IR_TH right>Draft Error <InfoTip formula="Actual Draft − Nominal Draft" explain="Nominal draft = RF target ÷ Simplex target. Negative = under-drafting; positive = over-drafting." /></IR_TH>
               <IR_TH right>Cop CV%</IR_TH>
-              <IR_TH right>CV Added</IR_TH>
+              <IR_TH right>CV Added <InfoTip formula="√(CV_cop² − CV_bobbin²)" explain="Extra unevenness introduced by the ring frame itself. Large values point to worn rollers or tension problems." /></IR_TH>
             </tr>
           </thead>
           <tbody>
@@ -2191,10 +2233,10 @@ function FrameSummaryTable({ frameSummary, dp, rfTol, H_target }) {
             <IR_TH>Simplex Sources</IR_TH>
             <IR_TH right>Cops</IR_TH>
             <IR_TH right>Avg Cop Hank</IR_TH>
-            <IR_TH right>Avg Count Dev</IR_TH>
-            <IR_TH right>Max |Count Dev|</IR_TH>
-            <IR_TH right>Avg Draft Error</IR_TH>
-            <IR_TH right>Avg CV Added</IR_TH>
+            <IR_TH right>Avg Count Dev <InfoTip formula="mean(Cop Hank − Target)" explain="Average absolute deviation from target count across all bobbins that ran through this frame." /></IR_TH>
+            <IR_TH right>Max |Count Dev| <InfoTip formula="max(|Cop Hank − Target|)" explain="Worst-case single deviation seen for this frame. Flags outlier batches even when the average looks acceptable." /></IR_TH>
+            <IR_TH right>Avg Draft Error <InfoTip formula="mean(Actual Draft − Nominal Draft)" explain="Average draft ratio error across all cops from this frame. Consistent non-zero values indicate a frame setting issue." /></IR_TH>
+            <IR_TH right>Avg CV Added <InfoTip formula="mean(√(CV_cop² − CV_bobbin²))" explain="Average unevenness introduced by this frame. Elevated values suggest worn drafting rollers or inconsistent tension." /></IR_TH>
           </tr>
         </thead>
         <tbody>
@@ -2240,8 +2282,8 @@ function BobbinSummaryTable({ bobbinSummary, dp }) {
             <IR_TH>Simplex M/c</IR_TH>
             <IR_TH right>Cops Run</IR_TH>
             <IR_TH right>Avg Output Hank</IR_TH>
-            <IR_TH right>Spread (Max − Min)</IR_TH>
-            <IR_TH right>Avg Cop CV%</IR_TH>
+            <IR_TH right>Spread (Max − Min) <InfoTip formula="max(cop hank) − min(cop hank)" explain="Range of cop counts produced from this bobbin. High spread means this bobbin's yarn count varies depending on which frame it goes to." /></IR_TH>
+            <IR_TH right>Avg Cop CV% <InfoTip formula="mean(CV%) across all cops from this bobbin" explain="Average unevenness of cops produced from this bobbin. High values indicate the upstream roving (simplex output) may itself be uneven." /></IR_TH>
           </tr>
         </thead>
         <tbody>
@@ -2507,79 +2549,163 @@ function MathGlossary({ dp, nominalDraft, H_target, H_b_target }) {
   )
 }
 
-/* ── Lineage Trace table: Can → Bobbin → Cop ────────────────────────────────── */
+/* ── Lineage Trace: visual chain Can → Bobbin → Cop ─────────────────────────── */
 function LineageTraceTable({ report, machineFilter }) {
+  const [frameFilter, setFrameFilter] = useState(null)
+
   const { bobbins, byBobbin, H_target, H_b_target, rfTol } = report
-  const dp = H_target >= 10 ? 2 : 4
+  const dp   = H_target   >= 10 ? 2 : 4
   const b_dp = H_b_target >= 10 ? 2 : 4
 
   const visible = bobbins.filter(b =>
     machineFilter == null || b.machine_number === machineFilter
   )
+
+  // All unique frame numbers that appear in the visible bobbin data
+  const allFrames = [...new Set(
+    visible.flatMap(b => (byBobbin[b.id]?.rows ?? []).map(r => r.frame))
+  )].sort((a, b) => a - b)
+
   if (!visible.length) return (
     <div style={{ fontSize: 12, color: 'var(--tx-4)', padding: '10px 0' }}>No bobbins match the current filter.</div>
   )
 
+  const nodeBase = {
+    display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-start',
+    padding: '8px 12px', borderRadius: 'var(--r)',
+    minWidth: 82, flexShrink: 0,
+  }
+  const nodeStyle       = { ...nodeBase, background: 'var(--bg)',        border: '1px solid var(--bd)' }
+  const nodeHighlight   = { ...nodeBase, background: 'var(--claude-bg)', border: '1px solid var(--claude-bd)' }
+  const nodeLabel = (accent) => ({
+    fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em',
+    color: accent ? 'var(--claude)' : 'var(--tx-4)', marginBottom: 2,
+  })
+  const arrow = (
+    <div style={{ display: 'flex', alignItems: 'center', alignSelf: 'center', padding: '0 3px', color: 'var(--tx-4)', fontSize: 20, userSelect: 'none', flexShrink: 0 }}>→</div>
+  )
+
   return (
-    <div style={{ overflowX: 'auto' }}>
-      <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: 11 }}>
-        <thead>
-          <tr>
-            <IR_TH style={{ minWidth: 90 }}>Bobbin</IR_TH>
-            <IR_TH>Sx M/c</IR_TH>
-            <IR_TH>RSB Can(s)</IR_TH>
-            <IR_TH right>Can Hank (avg)</IR_TH>
-            <IR_TH right>Bobbin Hank</IR_TH>
-            <IR_TH right>Sx Draft</IR_TH>
-            <IR_TH>Cops Produced</IR_TH>
-            <IR_TH right>Avg Cop Hank</IR_TH>
-            <IR_TH right>RF Draft</IR_TH>
-          </tr>
-        </thead>
-        <tbody>
-          {visible.map(b => {
-            const info      = byBobbin[b.id]
-            const cops      = info?.rows ?? []
-            const cans      = b.rsb_cans ?? []
-            const avgCanHank = cans.length
-              ? cans.reduce((s, c) => s + (c.can_hank ?? 0), 0) / cans.filter(c => c.can_hank != null).length
-              : null
-            const avgCopHank = cops.length
-              ? cops.reduce((s, r) => s + r.copHank, 0) / cops.length
-              : null
-            const sxDraft   = avgCanHank && b.bobbin_hank ? b.bobbin_hank / avgCanHank : null
-            const rfDraft   = b.bobbin_hank && avgCopHank ? avgCopHank / b.bobbin_hank : null
-            const canLabel  = cans.length
-              ? cans.map(c => `Can ${c.can_slot}`).join(', ')
-              : '—'
-            const copLabel  = cops.length
-              ? cops.map(r => `Fr ${r.frame}`).join(', ')
-              : '—'
-            return (
-              <tr key={b.id}>
-                <IR_TD style={{ fontWeight: 600 }}>{b.label}</IR_TD>
-                <IR_TD>
-                  {b.machine_number != null
-                    ? <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 8, background: 'var(--bg-3)', border: '1px solid var(--bd)', color: 'var(--tx-2)' }}>Sx {b.machine_number}</span>
-                    : <span style={{ color: 'var(--tx-4)' }}>—</span>
-                  }
-                </IR_TD>
-                <IR_TD dim>{canLabel}</IR_TD>
-                <IR_TD right mono dim>{avgCanHank != null ? avgCanHank.toFixed(b_dp) : '—'}</IR_TD>
-                <IR_TD right mono color={_devColor(b.bobbin_hank != null ? b.bobbin_hank - H_b_target : null, report.rfTol * (H_b_target / H_target))}>
-                  {b.bobbin_hank != null ? b.bobbin_hank.toFixed(b_dp) : '—'}
-                </IR_TD>
-                <IR_TD right mono dim>{sxDraft != null ? sxDraft.toFixed(2) + '×' : '—'}</IR_TD>
-                <IR_TD dim style={{ fontSize: 10 }}>{copLabel}</IR_TD>
-                <IR_TD right mono color={avgCopHank != null ? _devColor(avgCopHank - H_target, rfTol) : undefined}>
-                  {avgCopHank != null ? avgCopHank.toFixed(dp) : '—'}
-                </IR_TD>
-                <IR_TD right mono dim>{rfDraft != null ? rfDraft.toFixed(2) + '×' : '—'}</IR_TD>
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+      {/* Frame filter bar */}
+      {allFrames.length > 1 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 11, color: 'var(--tx-4)', fontWeight: 600 }}>Frame:</span>
+          {[null, ...allFrames].map(f => (
+            <button
+              key={f ?? 'all'}
+              onClick={() => setFrameFilter(prev => prev === f ? null : f)}
+              style={{
+                padding: '3px 10px', fontSize: 11, fontWeight: 600, borderRadius: 'var(--r)',
+                border: `1px solid ${frameFilter === f ? 'var(--claude)' : 'var(--bd)'}`,
+                background: frameFilter === f ? 'var(--claude)' : 'var(--bg)',
+                color: frameFilter === f ? '#fff' : 'var(--tx-3)',
+                cursor: 'pointer', fontFamily: 'var(--font)', transition: 'all .1s',
+              }}
+            >{f == null ? 'All' : `Fr ${f}`}</button>
+          ))}
+        </div>
+      )}
+
+      {/* One card per visible bobbin */}
+      {visible.map(b => {
+        const info       = byBobbin[b.id]
+        const allCops    = info?.rows ?? []
+        const cops       = frameFilter == null ? allCops : allCops.filter(r => r.frame === frameFilter)
+        const cans       = b.rsb_cans ?? []
+        const validCans  = cans.filter(c => c.can_hank != null)
+        const avgCanHank = validCans.length ? validCans.reduce((s, c) => s + c.can_hank, 0) / validCans.length : null
+        const avgCopHank = cops.length ? cops.reduce((s, r) => s + r.copHank, 0) / cops.length : null
+        const sxDraft    = avgCanHank && b.bobbin_hank ? b.bobbin_hank / avgCanHank : null
+        const rfDraft    = b.bobbin_hank && avgCopHank  ? avgCopHank / b.bobbin_hank : null
+
+        // If frame filter is active and this bobbin has no cops on that frame, skip
+        if (frameFilter != null && !cops.length) return null
+
+        return (
+          <div key={b.id} style={{
+            border: '1px solid var(--bd)', borderRadius: 'var(--r)',
+            padding: '12px 14px', background: 'var(--bg-2)',
+          }}>
+            {/* Card header */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+              <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--tx)' }}>{b.label}</span>
+              {b.machine_number != null && (
+                <span style={{
+                  fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 8,
+                  background: 'var(--bg-3)', border: '1px solid var(--bd)', color: 'var(--tx-2)',
+                }}>Sx {b.machine_number}</span>
+              )}
+            </div>
+
+            {/* Visual chain */}
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 2, overflowX: 'auto', paddingBottom: 2 }}>
+
+              {/* RSB Can(s) node */}
+              <div style={nodeStyle}>
+                <span style={nodeLabel(false)}>RSB Can{cans.length !== 1 ? 's' : ''}</span>
+                {cans.length === 0
+                  ? <span style={{ fontSize: 11, color: 'var(--tx-4)' }}>—</span>
+                  : cans.map(c => (
+                    <div key={c.can_id} style={{ display: 'flex', alignItems: 'baseline', gap: 5 }}>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--tx)', whiteSpace: 'nowrap' }}>Can {c.can_slot}</span>
+                      <span style={{ fontSize: 11, fontFamily: 'var(--mono)', color: 'var(--tx-3)', whiteSpace: 'nowrap' }}>
+                        {c.can_hank != null ? c.can_hank.toFixed(b_dp) : '—'}
+                      </span>
+                    </div>
+                  ))
+                }
+              </div>
+
+              {arrow}
+
+              {/* Bobbin node */}
+              <div style={nodeHighlight}>
+                <span style={nodeLabel(true)}>Bobbin</span>
+                <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--tx)' }}>{b.label}</span>
+                <span style={{ fontSize: 11, fontFamily: 'var(--mono)', color: b.bobbin_hank != null ? 'var(--tx-2)' : 'var(--tx-4)', whiteSpace: 'nowrap' }}>
+                  {b.bobbin_hank != null ? b.bobbin_hank.toFixed(b_dp) : 'No reading'}
+                </span>
+              </div>
+
+              {arrow}
+
+              {/* Cop(s) node */}
+              <div style={nodeStyle}>
+                <span style={nodeLabel(false)}>Ring Frame</span>
+                {cops.length === 0
+                  ? <span style={{ fontSize: 11, color: 'var(--tx-4)' }}>
+                      {frameFilter != null ? `No cop on Fr ${frameFilter}` : 'No cops logged'}
+                    </span>
+                  : cops.map((r, ci) => (
+                    <div key={ci} style={{ display: 'flex', alignItems: 'baseline', gap: 5 }}>
+                      <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--tx-3)', whiteSpace: 'nowrap' }}>Fr {r.frame}</span>
+                      <span style={{ fontSize: 12, fontFamily: 'var(--mono)', fontWeight: 600, whiteSpace: 'nowrap', color: _devColor(r.copHank - H_target, rfTol) }}>
+                        {r.copHank.toFixed(dp)}
+                      </span>
+                    </div>
+                  ))
+                }
+              </div>
+            </div>
+
+            {/* Secondary metrics row */}
+            <div style={{ display: 'flex', gap: 20, marginTop: 10, paddingTop: 8, borderTop: '1px solid var(--bd)', flexWrap: 'wrap' }}>
+              {[
+                { label: 'Sx Draft', val: sxDraft != null ? sxDraft.toFixed(3) + '×' : '—' },
+                { label: 'RF Draft', val: rfDraft != null ? rfDraft.toFixed(3) + '×' : '—' },
+                { label: 'Cops shown', val: String(cops.length) + (frameFilter != null ? '' : ` / ${allCops.length}`) },
+              ].map(m => (
+                <div key={m.label} style={{ display: 'flex', gap: 5, alignItems: 'baseline' }}>
+                  <span style={{ fontSize: 10, color: 'var(--tx-4)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.05em' }}>{m.label}</span>
+                  <span style={{ fontSize: 11, fontFamily: 'var(--mono)', color: 'var(--tx-2)', fontWeight: 600 }}>{m.val}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )
+      })}
     </div>
   )
 }
@@ -2744,8 +2870,8 @@ function InteractionReport({ trialId }) {
 
         {/* Lineage Trace: Can → Bobbin → Cop */}
         <IrSection
-          title="Lineage Trace — Can to Bobbin to Cop"
-          subtitle="Tracks the full hank chain from each RSB can through its Simplex bobbin to the Ring Frame cop. Sx Draft = Bobbin Hank ÷ Can Hank. RF Draft = Cop Hank ÷ Bobbin Hank."
+          title="Lineage Trace — Can → Bobbin → Cop"
+          subtitle="Visual flow chain showing which RSB cans fed each Simplex bobbin, and which cops each bobbin produced. Filter by frame to isolate specific frame interactions. Sx Draft and RF Draft are shown as secondary metrics."
         >
           <LineageTraceTable report={report} machineFilter={machineFilter} />
         </IrSection>
