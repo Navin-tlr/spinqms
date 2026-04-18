@@ -1457,6 +1457,8 @@ function RingFramePanel({ trialId, cops, refreshFlow }) {
     return result
   }, [copsByFrame, localFrames])
 
+  const [allFramesExpanded, setAllFramesExpanded] = useState(true)
+
   const addFrame = () => setLocalFrames(lf => [...lf, { id: Date.now(), frameNumber: '', expanded: true }])
 
   const handleCreateCop = async (frameNumber, body) => {
@@ -1492,9 +1494,16 @@ function RingFramePanel({ trialId, cops, refreshFlow }) {
             {frames.length} frame{frames.length !== 1 ? 's' : ''} · {cops.length} cop{cops.length !== 1 ? 's' : ''} total · drop bobbins to create cops
           </div>
         </div>
-        <SmBtn primary onClick={addFrame} disabled={busyId === 'new'}>
-          {busyId === 'new' ? 'Adding…' : '+ Add Frame'}
-        </SmBtn>
+        <div style={{ display: 'flex', gap: 6 }}>
+          {frames.length > 1 && (
+            <SmBtn onClick={() => setAllFramesExpanded(v => !v)}>
+              {allFramesExpanded ? '↑ Collapse Frames' : '↓ Expand Frames'}
+            </SmBtn>
+          )}
+          <SmBtn primary onClick={addFrame} disabled={busyId === 'new'}>
+            {busyId === 'new' ? 'Adding…' : '+ Add Frame'}
+          </SmBtn>
+        </div>
       </div>
       <FormulaNote length={DEFAULT_LENGTHS.ringframe} />
       {frames.length === 0 ? (
@@ -1513,6 +1522,7 @@ function RingFramePanel({ trialId, cops, refreshFlow }) {
               cops={frame.cops}
               isLocal={frame.isLocal}
               busy={busyId}
+              forceExpanded={allFramesExpanded}
               onCreateCop={handleCreateCop}
               onUpdateCop={handleUpdateCop}
               onDeleteCop={handleDeleteCop}
@@ -1526,14 +1536,272 @@ function RingFramePanel({ trialId, cops, refreshFlow }) {
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
+   CopAccordion — compact list of cop rows with per-cop expand/collapse
+   Default: all collapsed → one 36px row per cop
+   Click a row → expands inline to full reading form
+   "Expand All" / "Collapse All" buttons in the header
+══════════════════════════════════════════════════════════════════════════════ */
+function CopAccordion({ cops, copForms, setCopForms, onDeleteCop, handleCopDrop, removeBobbin }) {
+  const [openIds, setOpenIds] = useState(new Set())
+
+  const toggleCop = (id) => setOpenIds(prev => {
+    const next = new Set(prev)
+    next.has(id) ? next.delete(id) : next.add(id)
+    return next
+  })
+  const expandAll  = () => setOpenIds(new Set(cops.map(c => c.id)))
+  const collapseAll = () => setOpenIds(new Set())
+  const allOpen = cops.length > 0 && cops.every(c => openIds.has(c.id))
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 0, border: '1px solid var(--bd)', borderRadius: 'var(--r)', overflow: 'hidden' }}>
+      {/* Accordion toolbar */}
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '5px 10px', background: 'var(--bg-2)', borderBottom: '1px solid var(--bd)',
+      }}>
+        <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--tx-4)', letterSpacing: '.05em' }}>
+          {cops.length} COP{cops.length !== 1 ? 'S' : ''} · {cops.filter(c => (c.status ?? 'pending') !== 'pending').length} saved
+        </span>
+        <button
+          onClick={allOpen ? collapseAll : expandAll}
+          style={{ fontSize: 10, border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--claude)', fontWeight: 600, fontFamily: 'var(--font)', padding: '2px 6px' }}
+        >
+          {allOpen ? '↑ Collapse All' : '↓ Expand All'}
+        </button>
+      </div>
+
+      {/* Cop rows */}
+      {cops.map((cop, idx) => {
+        const isOpen = openIds.has(cop.id)
+        const status  = cop.status ?? 'pending'
+        const statusColor = STATUS_META[status]?.color ?? 'var(--tx-4)'
+        const form = copForms[cop.id] ?? {
+          notes: cop.notes ?? '',
+          sampleLength: cop.sample_length ?? DEFAULT_LENGTHS.ringframe,
+          readings: buildReadings(cop.readings, RING_READING_COUNT),
+          spindleNumber: cop.spindle_number != null ? String(cop.spindle_number) : '',
+        }
+        const updateForm = (field, value) =>
+          setCopForms(f => ({ ...f, [cop.id]: { ...(f[cop.id] ?? form), [field]: value } }))
+
+        const bobbinTag = (cop.simplex_bobbins || []).map(b =>
+          b.machine_number != null
+            ? `${b.label} Sx${b.machine_number}${b.spindle_number != null ? '/Sp' + b.spindle_number : ''}`
+            : b.label
+        ).join(', ')
+
+        return (
+          <div key={cop.id} style={{ borderTop: idx > 0 ? '1px solid var(--bd)' : undefined }}>
+
+            {/* ── Compact row (always visible) ── */}
+            <div
+              onClick={() => toggleCop(cop.id)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                padding: '7px 10px', cursor: 'pointer',
+                background: isOpen ? 'var(--bg-2)' : STATUS_BG[status] ?? 'var(--bg)',
+                transition: 'background .1s',
+                userSelect: 'none',
+              }}
+            >
+              {/* Status dot */}
+              <span style={{ width: 7, height: 7, borderRadius: '50%', background: statusColor, flexShrink: 0 }} />
+
+              {/* Label */}
+              <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--tx)', minWidth: 56, flexShrink: 0 }}>
+                {cop.label}
+              </span>
+
+              {/* Source bobbins */}
+              {bobbinTag && (
+                <span style={{ fontSize: 10, color: 'var(--tx-4)', flexShrink: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  ← {bobbinTag}
+                </span>
+              )}
+
+              {/* Saved hank + CV */}
+              {cop.mean_hank != null && (
+                <span style={{ fontSize: 10, fontFamily: 'var(--mono)', color: 'var(--tx-3)', marginLeft: 'auto', flexShrink: 0, whiteSpace: 'nowrap' }}>
+                  Ne {cop.mean_hank.toFixed(2)}
+                  {cop.cv_pct != null && (
+                    <span style={{ color: cop.cv_pct > 3 ? 'var(--bad)' : cop.cv_pct > 1.5 ? 'var(--warn)' : 'var(--ok)', marginLeft: 5 }}>
+                      CV {cop.cv_pct.toFixed(1)}%
+                    </span>
+                  )}
+                </span>
+              )}
+              {cop.mean_hank == null && (
+                <span style={{ fontSize: 10, color: 'var(--tx-4)', marginLeft: 'auto', fontStyle: 'italic' }}>no data</span>
+              )}
+
+              {/* Spindle badge if set */}
+              {cop.spindle_number != null && (
+                <span style={{ fontSize: 9, fontFamily: 'var(--mono)', color: 'var(--tx-4)', flexShrink: 0 }}>
+                  Sp{cop.spindle_number}
+                </span>
+              )}
+
+              {/* Status badge */}
+              <span style={{
+                fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 8, flexShrink: 0,
+                border: `1px solid ${STATUS_BORDER[status] ?? 'var(--bd)'}`,
+                background: 'var(--bg)', color: statusColor,
+              }}>{STATUS_META[status]?.label ?? 'PENDING'}</span>
+
+              {/* Chevron */}
+              <span style={{ fontSize: 10, color: 'var(--tx-4)', flexShrink: 0, transition: 'transform .15s', transform: isOpen ? 'rotate(180deg)' : 'none' }}>▼</span>
+            </div>
+
+            {/* ── Expanded form ── */}
+            {isOpen && (
+              <div style={{
+                padding: 12, background: STATUS_BG[status] ?? 'var(--bg-3)',
+                borderTop: '1px solid var(--bd)',
+                display: 'flex', flexDirection: 'column', gap: 8,
+              }}
+                onClick={e => e.stopPropagation()}
+              >
+                {/* Spindle # + delete */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--tx)' }}>{cop.label}</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <span style={{ fontSize: 10, color: 'var(--tx-4)', fontWeight: 600 }}>Sp#</span>
+                    <input
+                      type="number" step="1" min="1" placeholder="spindle"
+                      value={form.spindleNumber ?? ''}
+                      onChange={e => updateForm('spindleNumber', e.target.value)}
+                      style={{ ...inputStyle, width: 70, padding: '2px 6px', fontSize: 11 }}
+                      title="Spindle number within this ring frame"
+                    />
+                  </div>
+                  <button onClick={() => onDeleteCop(cop.id)} style={{
+                    marginLeft: 'auto', border: 'none', background: 'transparent',
+                    cursor: 'pointer', color: 'var(--tx-4)', fontSize: 11, padding: '2px 6px',
+                  }}>✕ Delete</button>
+                </div>
+
+                {/* 5 relay readings */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 5 }}>
+                  {form.readings.map((v, ridx) => {
+                    const weight = parseFloat(v)
+                    const hank = !isNaN(weight) && weight > 0
+                      ? weightToHank(weight, form.sampleLength || DEFAULT_LENGTHS.ringframe)
+                      : null
+                    return (
+                      <div key={ridx} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                        <input
+                          type="number" step="any"
+                          placeholder={`Relay ${ridx + 1}`}
+                          value={v}
+                          onChange={e => {
+                            const arr = form.readings.slice()
+                            arr[ridx] = e.target.value
+                            updateForm('readings', arr)
+                          }}
+                          style={inputStyle}
+                        />
+                        <span style={{ fontSize: 9, color: 'var(--tx-3)', textAlign: 'center' }}>
+                          {hank ? hank.toFixed(2) : '—'}
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
+
+                {/* Sample length */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: 10, color: 'var(--tx-4)', fontWeight: 600 }}>Length</span>
+                  <input
+                    type="number" step="1" min="10"
+                    value={form.sampleLength}
+                    onChange={e => {
+                      const val = parseFloat(e.target.value)
+                      updateForm('sampleLength', isNaN(val) || val <= 0 ? DEFAULT_LENGTHS.ringframe : val)
+                    }}
+                    style={{ ...inputStyle, width: 90 }}
+                  />
+                  <span style={{ fontSize: 10, color: 'var(--tx-4)' }}>yds · Ne = (L × 0.54) / W</span>
+                </div>
+
+                {/* Live hank summary */}
+                <MiniSummary
+                  readings={form.readings}
+                  savedMean={cop.mean_hank}
+                  savedCv={cop.cv_pct}
+                  expected={RING_READING_COUNT}
+                  sampleLength={form.sampleLength || DEFAULT_LENGTHS.ringframe}
+                />
+
+                {/* Notes */}
+                <input
+                  type="text" placeholder="Notes (optional)"
+                  value={form.notes}
+                  onChange={e => updateForm('notes', e.target.value)}
+                  style={{ ...inputStyle }}
+                />
+
+                {/* Bobbin drop zone */}
+                <div
+                  onDragOver={e => e.preventDefault()}
+                  onDrop={e => handleCopDrop(e, cop)}
+                  style={{
+                    border: '1px dashed var(--bd)', borderRadius: 'var(--r)', padding: '5px 8px',
+                    minHeight: 34, display: 'flex', flexWrap: 'wrap', gap: 5, alignItems: 'center',
+                    background: 'var(--bg)',
+                  }}>
+                  {(cop.simplex_bobbins || []).length === 0 ? (
+                    <span style={{ fontSize: 10, color: 'var(--tx-4)' }}>Drop another bobbin to link it here</span>
+                  ) : (cop.simplex_bobbins || []).map(b => (
+                    <span key={b.id} style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 3,
+                      padding: '1px 6px', borderRadius: 10, background: 'var(--claude-bg)',
+                      border: '1px solid var(--claude-bd)', fontSize: 10, color: 'var(--claude)',
+                    }}>
+                      {b.label}
+                      {b.machine_number != null && (
+                        <span style={{
+                          fontSize: 9, fontWeight: 700, color: 'var(--tx-3)',
+                          background: 'var(--bg-3)', borderRadius: 6,
+                          padding: '0px 4px', marginLeft: 2, border: '1px solid var(--bd)',
+                        }}>Sx {b.machine_number}</span>
+                      )}
+                      <button onClick={() => removeBobbin(cop, b.id)} style={{
+                        border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--claude)', fontSize: 10,
+                      }}>×</button>
+                    </span>
+                  ))}
+                </div>
+
+                {/* RSB upstream trace */}
+                {(cop.rsb_cans || []).length > 0 && (
+                  <ConnectionTag
+                    direction="Upstream RSB ←"
+                    items={(cop.rsb_cans || []).map(c => c.slot ? `Can ${c.slot}` : c.label)}
+                    color="var(--tx-4)"
+                  />
+                )}
+              </div>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
    FrameCard — one ring-frame machine container
    • Starts expanded; collapses on "Save Frame"
-   • Up to 9 cops per frame, each cop has 5 relay readings
+   • Up to 500 cops per frame, each cop has 5 relay readings
    • Bobbins from Simplex can be dropped onto the frame → creates a new cop
    • A single bobbin can also be linked to multiple frames
 ══════════════════════════════════════════════════════════════════════════════ */
-function FrameCard({ initialFrameNumber, cops, isLocal, busy, onCreateCop, onUpdateCop, onDeleteCop, onRemoveLocal }) {
+function FrameCard({ initialFrameNumber, cops, isLocal, busy, forceExpanded, onCreateCop, onUpdateCop, onDeleteCop, onRemoveLocal }) {
   const [isExpanded, setIsExpanded] = useState(true)
+
+  // Sync with panel-level expand/collapse toggle
+  useEffect(() => { setIsExpanded(forceExpanded) }, [forceExpanded])
   const [frameNum, setFrameNum] = useState(
     initialFrameNumber != null ? String(initialFrameNumber) : ''
   )
@@ -1748,166 +2016,16 @@ function FrameCard({ initialFrameNumber, cops, isLocal, busy, onCreateCop, onUpd
           )}
         </div>
 
-        {/* Individual cop entries */}
+        {/* Individual cop entries — two-level accordion */}
         {cops.length > 0 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {cops.map((cop, idx) => {
-              const form = copForms[cop.id] ?? {
-                notes: cop.notes ?? '',
-                sampleLength: cop.sample_length ?? DEFAULT_LENGTHS.ringframe,
-                readings: buildReadings(cop.readings, RING_READING_COUNT),
-              }
-              const status = cop.status ?? 'pending'
-              const updateForm = (field, value) =>
-                setCopForms(f => ({ ...f, [cop.id]: { ...(f[cop.id] ?? form), [field]: value } }))
-
-              return (
-                <div key={cop.id} style={{
-                  border: `1px solid ${STATUS_BORDER[status] ?? 'var(--bd)'}`,
-                  borderRadius: 'var(--r)', padding: 10,
-                  background: STATUS_BG[status] ?? 'var(--bg-3)',
-                  display: 'flex', flexDirection: 'column', gap: 8,
-                }}>
-                  {/* Cop header */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                    <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--tx)' }}>Cop {idx + 1}</span>
-                    {(cop.simplex_bobbins || []).length > 0 && (
-                      <span style={{ fontSize: 10, color: 'var(--tx-3)' }}>
-                        ← {(cop.simplex_bobbins || []).map(b =>
-                          b.machine_number != null
-                            ? `${b.label} (Sx ${b.machine_number}${b.spindle_number != null ? '/Sp' + b.spindle_number : ''})`
-                            : b.label
-                        ).join(', ')}
-                      </span>
-                    )}
-                    {/* Spindle number for this cop */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                      <span style={{ fontSize: 10, color: 'var(--tx-4)', fontWeight: 600 }}>Sp#</span>
-                      <input
-                        type="number" step="1" min="1" placeholder="spindle"
-                        value={form.spindleNumber ?? ''}
-                        onChange={e => updateForm('spindleNumber', e.target.value)}
-                        style={{ ...inputStyle, width: 70, padding: '2px 6px', fontSize: 11 }}
-                        title="Spindle number within this ring frame"
-                      />
-                    </div>
-                    <span style={{
-                      fontSize: 10, fontWeight: 700, padding: '1px 7px', borderRadius: 8,
-                      border: `1px solid ${STATUS_BORDER[status] ?? 'var(--bd)'}`,
-                      background: 'var(--bg)', color: STATUS_META[status]?.color ?? 'var(--tx-4)',
-                    }}>{STATUS_META[status]?.label ?? 'Pending'}</span>
-                    <button onClick={() => onDeleteCop(cop.id)} style={{
-                      marginLeft: 'auto', border: 'none', background: 'transparent',
-                      cursor: 'pointer', color: 'var(--tx-4)', fontSize: 11, padding: '2px 6px',
-                    }}>✕</button>
-                  </div>
-
-                  {/* 5 relay readings in a 5-col grid */}
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 5 }}>
-                    {form.readings.map((v, ridx) => {
-                      const weight = parseFloat(v)
-                      const hank = !isNaN(weight) && weight > 0
-                        ? weightToHank(weight, form.sampleLength || DEFAULT_LENGTHS.ringframe)
-                        : null
-                      return (
-                        <div key={ridx} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                          <input
-                            type="number" step="any"
-                            placeholder={`Relay ${ridx + 1}`}
-                            value={v}
-                            onChange={e => {
-                              const arr = form.readings.slice()
-                              arr[ridx] = e.target.value
-                              updateForm('readings', arr)
-                            }}
-                            style={inputStyle}
-                          />
-                          <span style={{ fontSize: 9, color: 'var(--tx-3)', textAlign: 'center' }}>
-                            {hank ? hank.toFixed(2) : '—'}
-                          </span>
-                        </div>
-                      )
-                    })}
-                  </div>
-
-                  {/* Sample length + formula hint */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                    <span style={{ fontSize: 10, color: 'var(--tx-4)', fontWeight: 600 }}>Length</span>
-                    <input
-                      type="number" step="1" min="10"
-                      value={form.sampleLength}
-                      onChange={e => {
-                        const val = parseFloat(e.target.value)
-                        updateForm('sampleLength', isNaN(val) || val <= 0 ? DEFAULT_LENGTHS.ringframe : val)
-                      }}
-                      style={{ ...inputStyle, width: 90 }}
-                    />
-                    <span style={{ fontSize: 10, color: 'var(--tx-4)' }}>yds · Ne = (L × 0.54) / W</span>
-                  </div>
-
-                  {/* Live hank summary */}
-                  <MiniSummary
-                    readings={form.readings}
-                    savedMean={cop.mean_hank}
-                    savedCv={cop.cv_pct}
-                    expected={RING_READING_COUNT}
-                    sampleLength={form.sampleLength || DEFAULT_LENGTHS.ringframe}
-                  />
-
-                  {/* Notes */}
-                  <input
-                    type="text" placeholder="Notes (optional)"
-                    value={form.notes}
-                    onChange={e => updateForm('notes', e.target.value)}
-                    style={{ ...inputStyle }}
-                  />
-
-                  {/* Bobbin drop zone for linking additional bobbins (multi-frame support) */}
-                  <div
-                    onDragOver={e => e.preventDefault()}
-                    onDrop={e => handleCopDrop(e, cop)}
-                    style={{
-                      border: '1px dashed var(--bd)', borderRadius: 'var(--r)', padding: '5px 8px',
-                      minHeight: 34, display: 'flex', flexWrap: 'wrap', gap: 5, alignItems: 'center',
-                      background: 'var(--bg)',
-                    }}>
-                    {(cop.simplex_bobbins || []).length === 0 ? (
-                      <span style={{ fontSize: 10, color: 'var(--tx-4)' }}>Drop another bobbin to link it here</span>
-                    ) : (cop.simplex_bobbins || []).map(b => (
-                      <span key={b.id} style={{
-                        display: 'inline-flex', alignItems: 'center', gap: 3,
-                        padding: '1px 6px', borderRadius: 10, background: 'var(--claude-bg)',
-                        border: '1px solid var(--claude-bd)', fontSize: 10, color: 'var(--claude)',
-                      }}>
-                        {b.label}
-                        {b.machine_number != null && (
-                          <span style={{
-                            fontSize: 9, fontWeight: 700, color: 'var(--tx-3)',
-                            background: 'var(--bg-3)', borderRadius: 6,
-                            padding: '0px 4px', marginLeft: 2, border: '1px solid var(--bd)',
-                          }}>
-                            Sx {b.machine_number}
-                          </span>
-                        )}
-                        <button onClick={() => removeBobbin(cop, b.id)} style={{
-                          border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--claude)', fontSize: 10,
-                        }}>×</button>
-                      </span>
-                    ))}
-                  </div>
-
-                  {/* RSB upstream trace */}
-                  {(cop.rsb_cans || []).length > 0 && (
-                    <ConnectionTag
-                      direction="Upstream RSB ←"
-                      items={(cop.rsb_cans || []).map(c => c.slot ? `Can ${c.slot}` : c.label)}
-                      color="var(--tx-4)"
-                    />
-                  )}
-                </div>
-              )
-            })}
-          </div>
+          <CopAccordion
+            cops={cops}
+            copForms={copForms}
+            setCopForms={setCopForms}
+            onDeleteCop={onDeleteCop}
+            handleCopDrop={handleCopDrop}
+            removeBobbin={removeBobbin}
+          />
         )}
 
         {/* Frame footer actions */}
