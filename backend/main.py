@@ -1426,15 +1426,34 @@ def create_simplex_bobbin(
     # Auto-derive label from the primary RSB can slot so bobbin names always
     # match their source can (e.g. Can 3 → "Bobbin 3").
     # Falls back to sequential numbering only when no can is linked yet.
-    label = f"Bobbin {count + 1}"
-    if body.rsb_can_ids:
-        first_can = (
-            db.query(LabRSBCan)
-            .filter(LabRSBCan.trial_id == trial_id, LabRSBCan.id == body.rsb_can_ids[0])
-            .first()
-        )
-        if first_can:
-            label = f"Bobbin {first_can.slot}"
+    # If body.label is explicitly supplied, honour it (trimmed, non-empty).
+    provided = (body.label or "").strip()
+    if provided:
+        label = provided
+    else:
+        label = f"Bobbin {count + 1}"
+        if body.rsb_can_ids:
+            first_can = (
+                db.query(LabRSBCan)
+                .filter(LabRSBCan.trial_id == trial_id, LabRSBCan.id == body.rsb_can_ids[0])
+                .first()
+            )
+            if first_can:
+                label = f"Bobbin {first_can.slot}"
+
+    # Ensure label is unique within this trial — append -2, -3 … if needed
+    existing_labels = {
+        row[0]
+        for row in db.query(LabSimplexBobbin.label)
+        .filter(LabSimplexBobbin.trial_id == trial_id)
+        .all()
+    }
+    base_label = label
+    suffix = 2
+    while label in existing_labels:
+        label = f"{base_label}-{suffix}"
+        suffix += 1
+
     bobbin = LabSimplexBobbin(
         trial_id=trial_id,
         label=label,
@@ -1536,6 +1555,18 @@ def create_ringframe_cop(
     )
     provided_label = (body.label or "").strip()
     label = provided_label or f"Cop {count + 1}"
+    # Ensure label is unique within this trial — append -2, -3 … if needed
+    existing_cop_labels = {
+        row[0]
+        for row in db.query(LabRingframeCop.label)
+        .filter(LabRingframeCop.trial_id == trial_id)
+        .all()
+    }
+    base_label = label
+    suffix = 2
+    while label in existing_cop_labels:
+        label = f"{base_label}-{suffix}"
+        suffix += 1
     cop = LabRingframeCop(
         trial_id=trial_id,
         label=label,

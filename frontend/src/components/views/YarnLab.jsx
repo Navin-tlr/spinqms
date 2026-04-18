@@ -1032,7 +1032,7 @@ function SimplexPanel({ trialId, bobbins, refreshFlow, bobbinFeedsTo }) {
     setBusyId(key)
     try {
       await createSimplexBobbin(trialId, {
-        label: 'Bobbin ' + (bobbins.length + 1),
+        // No label — backend auto-generates a unique one
         sample_length: DEFAULT_LENGTHS.simplex,
         readings: [],
         rsb_can_ids: [],
@@ -1047,7 +1047,7 @@ function SimplexPanel({ trialId, bobbins, refreshFlow, bobbinFeedsTo }) {
   const handleAddWithCan = async (machineNum, canId) => {
     try {
       await createSimplexBobbin(trialId, {
-        label: 'Bobbin ' + (bobbins.length + 1),
+        // No label — backend derives from can slot and deduplicates
         sample_length: DEFAULT_LENGTHS.simplex,
         readings: [],
         rsb_can_ids: canId ? [canId] : [],
