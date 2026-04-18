@@ -3101,39 +3101,6 @@ function TrialDashboard({ trialId, depts, onBack }) {
         </div>
       </div>
 
-      {/* Overall verdict banner */}
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 16, padding: '14px 20px',
-        borderRadius: 'var(--r-lg)',
-        background: V_BG[ov], border: `1.5px solid ${V_BD[ov]}`,
-        flexWrap: 'wrap',
-      }}>
-        <span style={{ fontSize: 24, fontWeight: 800, color: V_COLOR[ov] }}>
-          {V_ICON[ov]}
-        </span>
-        <div>
-          <div style={{ fontSize: 14, fontWeight: 700, color: V_COLOR[ov] }}>
-            Overall: {ov === 'pending' ? 'Awaiting Data' : ov === 'pass' ? 'All Departments PASS' : ov === 'warn' ? 'Marginal — Review Required' : 'FAILING — Machine Tuning Needed'}
-          </div>
-          <div style={{ fontSize: 12, color: 'var(--tx-3)', marginTop: 2 }}>
-            {pass > 0 && <span style={{ color: 'var(--ok)', marginRight: 10 }}>✓ {pass} pass</span>}
-            {warn > 0 && <span style={{ color: 'var(--warn)', marginRight: 10 }}>▲ {warn} marginal</span>}
-            {fail > 0 && <span style={{ color: 'var(--bad)', marginRight: 10 }}>✕ {fail} fail</span>}
-            {pending > 0 && <span style={{ color: 'var(--tx-4)' }}>… {pending} pending</span>}
-          </div>
-        </div>
-        {ov === 'pass' && (
-          <div style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--ok)', fontWeight: 600 }}>
-            ✓ Ready for mass production
-          </div>
-        )}
-        {ov === 'fail' && (
-          <div style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--bad)', fontWeight: 600 }}>
-            ✕ Do NOT start mass production
-          </div>
-        )}
-      </div>
-
       {/* View toggle: Flow Board | Analysis Matrix */}
       <div style={{ display: 'flex', gap: 0, borderRadius: 'var(--r)', overflow: 'hidden', border: '1px solid var(--bd)', alignSelf: 'flex-start' }}>
         {[
@@ -3199,12 +3166,6 @@ function TrialDashboard({ trialId, depts, onBack }) {
         </div>
       )}
 
-      {/* Department cards */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {dashboard.departments.map(dept => (
-          <DeptVerdictCard key={dept.dept_id} dept={dept} onDeleteSample={handleDeleteSample} />
-        ))}
-      </div>
     </div>
   )
 }
