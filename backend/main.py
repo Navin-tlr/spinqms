@@ -329,6 +329,7 @@ def _simplex_bobbin_payload(
         "cv_pct":             b.cv_pct,
         "status":             _unit_status(b.mean_hank, b.cv_pct, simplex_dept),
         "machine_number":     b.machine_number,
+        "spindle_number":     b.spindle_number,
     }
 
 
@@ -369,6 +370,7 @@ def _ringframe_cop_payload(
         "id":                 c.id,
         "label":              c.label,
         "frame_number":       c.frame_number,
+        "spindle_number":     c.spindle_number,
         "hank_value":         c.hank_value,
         "notes":              c.notes,
         "sample_length":      c.sample_length,
@@ -1443,6 +1445,7 @@ def create_simplex_bobbin(
         order_index=count or 0,
         sample_length=body.sample_length,
         machine_number=body.machine_number,
+        spindle_number=body.spindle_number,
     )
     db.add(bobbin)
     db.flush()
@@ -1501,6 +1504,8 @@ def update_simplex_bobbin(
         _set_reading_fields(bobbin, readings, bobbin.sample_length)
     if body.machine_number is not None:
         bobbin.machine_number = body.machine_number
+    if body.spindle_number is not None:
+        bobbin.spindle_number = body.spindle_number
 
     db.commit()
     db.refresh(bobbin)
@@ -1535,6 +1540,7 @@ def create_ringframe_cop(
         trial_id=trial_id,
         label=label,
         frame_number=body.frame_number,
+        spindle_number=body.spindle_number,
         hank_value=body.hank_value,
         notes=body.notes,
         sample_length=body.sample_length,
@@ -1580,6 +1586,8 @@ def update_ringframe_cop(
         cop.label = body.label.strip() or cop.label
     if body.frame_number is not None:
         cop.frame_number = body.frame_number
+    if body.spindle_number is not None:
+        cop.spindle_number = body.spindle_number
     if body.hank_value is not None:
         cop.hank_value = body.hank_value
     if body.notes is not None:
@@ -1679,17 +1687,25 @@ def get_lab_matrix(trial_id: int, db: Session = Depends(get_db)):
 @app.get("/api/lab/trials/{trial_id}/interaction-report")
 def get_interaction_report(trial_id: int, db: Session = Depends(get_db)):
     """
-    Return matrix data + ANOVA results for the Bobbin–Frame Interaction Report.
-    The response extends the /matrix payload with an 'anova' key containing
-    statistical analysis (frame effect, machine effect, interaction effect).
+    Comprehensive interaction report: hierarchy, matrices, variation, and ANOVA.
+
+    Returns:
+      bobbins    — flat list for backward-compat matrix/heatmap tables
+      frames     — unique frame numbers
+      cells      — cop↔bobbin mapping rows
+      benchmarks — trial benchmarks
+      anova      — ANOVA statistical test results
+      hierarchy  — NEW: Can → Bobbin → Cop nested tree with lineage
+      variation  — NEW: 4-level hierarchical variation analysis
     """
     from sqlalchemy import text as sa_text
-    from stats_engine import run_interaction_anova
+    from stats_engine import run_interaction_anova, run_hierarchical_variation
 
     trial = db.query(LabTrial).filter_by(id=trial_id).first()
     if not trial:
         raise HTTPException(404, "Trial not found")
 
+    # ── Benchmarks ────────────────────────────────────────────────────────────
     bm_rows = db.execute(
         sa_text("SELECT dept_id, target, tolerance FROM lab_benchmarks WHERE trial_id = :tid"),
         {"tid": trial_id},
@@ -1701,92 +1717,158 @@ def get_interaction_report(trial_id: int, db: Session = Depends(get_db)):
     if "simplex" not in benchmarks:
         raise HTTPException(400, "Simplex benchmark not set for this trial")
 
-    bobbin_rows = db.execute(
-        sa_text(
-            "SELECT id, label, mean_hank AS bobbin_hank, cv_pct AS bobbin_cv, machine_number "
-            "FROM lab_simplex_bobbins WHERE trial_id = :tid ORDER BY id"
-        ),
-        {"tid": trial_id},
-    ).fetchall()
+    # ── Load all objects with relationships ───────────────────────────────────
+    bobbins_q = (
+        db.query(LabSimplexBobbin)
+        .options(joinedload(LabSimplexBobbin.inputs).joinedload(LabSimplexInput.rsb_can))
+        .filter_by(trial_id=trial_id)
+        .order_by(LabSimplexBobbin.order_index.asc(), LabSimplexBobbin.id.asc())
+        .all()
+    )
+    cops_q = (
+        db.query(LabRingframeCop)
+        .options(joinedload(LabRingframeCop.inputs))
+        .filter_by(trial_id=trial_id)
+        .order_by(LabRingframeCop.id.asc())
+        .all()
+    )
+    cans_q = (
+        db.query(LabRSBCan)
+        .filter_by(trial_id=trial_id)
+        .order_by(LabRSBCan.slot.asc())
+        .all()
+    )
 
-    cell_rows = db.execute(
-        sa_text(
-            """
-            SELECT c.id          AS cop_id,
-                   c.frame_number,
-                   c.mean_hank   AS cop_hank,
-                   c.cv_pct      AS cop_cv,
-                   ri.simplex_bobbin_id AS bobbin_id
-            FROM   lab_ringframe_cops c
-            LEFT JOIN lab_ringframe_inputs ri ON ri.cop_id = c.id
-            WHERE  c.trial_id = :tid
-            ORDER  BY c.frame_number, c.id
-            """
-        ),
-        {"tid": trial_id},
-    ).fetchall()
+    # ── Build flat data for backward-compat tables / heatmap / ANOVA ─────────
+    # bobbin flat rows
+    bobbin_rows_flat = []
+    rsb_by_bobbin: dict[int, list] = {}
+    for b in bobbins_q:
+        can_links = [
+            {"can_id": inp.rsb_can_id, "can_slot": inp.rsb_can.slot,
+             "can_hank": inp.rsb_can.mean_hank, "can_cv": inp.rsb_can.cv_pct}
+            for inp in sorted(b.inputs, key=lambda x: x.rsb_can.slot if x.rsb_can else 999)
+            if inp.rsb_can is not None
+        ]
+        rsb_by_bobbin[b.id] = can_links
+        bobbin_rows_flat.append({
+            "id": b.id, "label": b.label,
+            "bobbin_hank": b.mean_hank, "bobbin_cv": b.cv_pct,
+            "machine_number": b.machine_number, "spindle_number": b.spindle_number,
+            "rsb_cans": can_links,
+        })
 
-    cells = [dict(row._mapping) for row in cell_rows]
+    # cell rows
+    cells: list[dict] = []
+    bobbin_machine: dict[int, int | None] = {b.id: b.machine_number for b in bobbins_q}
+    for cop in cops_q:
+        if cop.inputs:
+            for inp in cop.inputs:
+                cells.append({
+                    "cop_id": cop.id, "frame_number": cop.frame_number,
+                    "cop_hank": cop.mean_hank, "cop_cv": cop.cv_pct,
+                    "bobbin_id": inp.simplex_bobbin_id,
+                })
+        else:
+            cells.append({
+                "cop_id": cop.id, "frame_number": cop.frame_number,
+                "cop_hank": cop.mean_hank, "cop_cv": cop.cv_pct,
+                "bobbin_id": None,
+            })
+
     frames = sorted({c["frame_number"] for c in cells if c["frame_number"] is not None})
 
-    # Build bobbin id → machine_number lookup for ANOVA input
-    bobbin_machine = {r.id: r.machine_number for r in bobbin_rows}
-
-    # Construct cops_data for ANOVA: one entry per unique cop with its machine source
+    # ANOVA input
     cops_seen: dict[int, dict] = {}
     for c in cells:
         cid = c["cop_id"]
         if cid not in cops_seen:
             machine = bobbin_machine.get(c["bobbin_id"]) if c["bobbin_id"] is not None else None
             cops_seen[cid] = {
-                "cop_id":        cid,
-                "cop_hank":      c["cop_hank"],
-                "frame_number":  c["frame_number"],
-                "machine_number": machine,
+                "cop_id": cid, "cop_hank": c["cop_hank"],
+                "frame_number": c["frame_number"], "machine_number": machine,
             }
         elif cops_seen[cid]["machine_number"] is None and c["bobbin_id"] is not None:
-            # If a cop links multiple bobbins, use first non-null machine
             cops_seen[cid]["machine_number"] = bobbin_machine.get(c["bobbin_id"])
-
     anova = run_interaction_anova(list(cops_seen.values()))
 
-    # RSB can lineage: which cans fed each bobbin (slot, hank, cv)
-    rsb_lineage_rows = db.execute(
-        sa_text(
-            """
-            SELECT si.bobbin_id,
-                   rc.id       AS can_id,
-                   rc.slot     AS can_slot,
-                   rc.mean_hank AS can_hank,
-                   rc.cv_pct   AS can_cv
-            FROM   lab_simplex_inputs si
-            JOIN   lab_rsb_cans rc ON rc.id = si.rsb_can_id
-            WHERE  rc.trial_id = :tid
-            ORDER  BY si.bobbin_id, rc.slot
-            """
-        ),
-        {"tid": trial_id},
-    ).fetchall()
+    # ── Build hierarchy: Can → Bobbin → Cop ──────────────────────────────────
+    # Map: can_id → list of bobbins fed by that can
+    can_to_bobbins: dict[int, list] = {}
+    for b in bobbins_q:
+        for inp in b.inputs:
+            if inp.rsb_can_id is not None:
+                can_to_bobbins.setdefault(inp.rsb_can_id, [])
+                if b not in can_to_bobbins[inp.rsb_can_id]:
+                    can_to_bobbins[inp.rsb_can_id].append(b)
 
-    rsb_by_bobbin: dict[int, list] = {}
-    for row in rsb_lineage_rows:
-        rsb_by_bobbin.setdefault(row.bobbin_id, []).append({
-            "can_id":   row.can_id,
-            "can_slot": row.can_slot,
-            "can_hank": row.can_hank,
-            "can_cv":   row.can_cv,
+    # Map: bobbin_id → list of cops
+    bobbin_to_cops: dict[int, list] = {}
+    for cop in cops_q:
+        for inp in cop.inputs:
+            if inp.simplex_bobbin_id is not None:
+                bobbin_to_cops.setdefault(inp.simplex_bobbin_id, [])
+                if cop not in bobbin_to_cops[inp.simplex_bobbin_id]:
+                    bobbin_to_cops[inp.simplex_bobbin_id].append(cop)
+
+    def _cop_node(cop: LabRingframeCop) -> dict:
+        sample_len = cop.sample_length or 120.0
+        weights = json.loads(cop.readings_json) if cop.readings_json else []
+        hanks = [round((sample_len * 0.54) / w, 4) for w in weights if w and w > 0]
+        return {
+            "cop_id": cop.id, "label": cop.label,
+            "frame_number": cop.frame_number, "spindle_number": cop.spindle_number,
+            "mean_hank": cop.mean_hank, "cv_pct": cop.cv_pct,
+            "n_readings": cop.readings_count,
+            "readings_hanks": hanks,
+        }
+
+    def _bobbin_node(b: LabSimplexBobbin) -> dict:
+        cops = [_cop_node(c) for c in sorted(bobbin_to_cops.get(b.id, []), key=lambda x: x.id)]
+        return {
+            "bobbin_id": b.id, "label": b.label,
+            "machine_number": b.machine_number, "spindle_number": b.spindle_number,
+            "mean_hank": b.mean_hank, "cv_pct": b.cv_pct,
+            "rsb_cans": rsb_by_bobbin.get(b.id, []),
+            "cops": cops,
+        }
+
+    linked_bobbin_ids: set[int] = set()
+    hierarchy: list[dict] = []
+    for can in cans_q:
+        can_bobbins = can_to_bobbins.get(can.id, [])
+        for b in can_bobbins:
+            linked_bobbin_ids.add(b.id)
+        bobbin_nodes = [
+            _bobbin_node(b)
+            for b in sorted(can_bobbins, key=lambda b: (b.order_index, b.id))
+        ]
+        # Only include cans that have either readings or linked bobbins
+        if can.mean_hank is not None or bobbin_nodes:
+            hierarchy.append({
+                "can_id": can.id, "slot": can.slot, "label": f"Can {can.slot}",
+                "mean_hank": can.mean_hank, "cv_pct": can.cv_pct,
+                "bobbins": bobbin_nodes,
+            })
+
+    # Bobbins not linked to any can
+    unlinked = [b for b in bobbins_q if b.id not in linked_bobbin_ids]
+    if unlinked:
+        hierarchy.append({
+            "can_id": None, "slot": None, "label": "Unlinked Bobbins",
+            "mean_hank": None, "cv_pct": None,
+            "bobbins": [_bobbin_node(b) for b in unlinked],
         })
 
-    bobbins_out = []
-    for r in bobbin_rows:
-        d = dict(r._mapping)
-        d["rsb_cans"] = rsb_by_bobbin.get(r.id, [])
-        bobbins_out.append(d)
+    # ── 4-level variation analysis ────────────────────────────────────────────
+    variation = run_hierarchical_variation(hierarchy)
 
     return {
-        "bobbins":    bobbins_out,
+        "bobbins":    bobbin_rows_flat,
         "frames":     frames,
         "cells":      cells,
         "benchmarks": benchmarks,
         "anova":      anova,
+        "hierarchy":  hierarchy,
+        "variation":  variation,
     }

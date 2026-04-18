@@ -229,6 +229,7 @@ class SimplexBobbinCreate(BaseModel):
     rsb_can_ids: List[int] = Field(default_factory=list)
     readings: Optional[List[float]] = None
     machine_number: Optional[int] = Field(None, ge=1, le=3)
+    spindle_number: Optional[int] = Field(None, ge=1)
 
     @model_validator(mode="after")
     def validate_readings(self) -> "SimplexBobbinCreate":
@@ -250,6 +251,7 @@ class SimplexBobbinUpdate(BaseModel):
     rsb_can_ids: Optional[List[int]] = None
     readings: Optional[List[float]] = None
     machine_number: Optional[int] = Field(None, ge=1, le=3)
+    spindle_number: Optional[int] = Field(None, ge=1)
 
     @model_validator(mode="after")
     def validate_readings(self) -> "SimplexBobbinUpdate":
@@ -279,6 +281,7 @@ class SimplexBobbinOut(BaseModel):
     cv_pct: Optional[float]
     status: str
     machine_number: Optional[int] = None
+    spindle_number: Optional[int] = None
 
 
 class SimplexBobbinRef(BaseModel):
@@ -286,11 +289,13 @@ class SimplexBobbinRef(BaseModel):
     label: str
     hank_value: Optional[float]
     machine_number: Optional[int] = None
+    spindle_number: Optional[int] = None
 
 
 class RingframeCopCreate(BaseModel):
     label: Optional[str] = Field(None, min_length=1, max_length=60)
     frame_number: Optional[int] = Field(None, ge=1, le=25)
+    spindle_number: Optional[int] = Field(None, ge=1)
     hank_value: Optional[float] = Field(None, gt=0)
     notes: Optional[str] = Field(None, max_length=200)
     simplex_bobbin_ids: List[int] = Field(default_factory=list)
@@ -310,6 +315,7 @@ class RingframeCopCreate(BaseModel):
 class RingframeCopUpdate(BaseModel):
     label: Optional[str] = Field(None, min_length=1, max_length=60)
     frame_number: Optional[int] = Field(None, ge=1, le=25)
+    spindle_number: Optional[int] = Field(None, ge=1)
     hank_value: Optional[float] = Field(None, gt=0)
     notes: Optional[str] = Field(None, max_length=200)
     simplex_bobbin_ids: Optional[List[int]] = None
@@ -331,6 +337,7 @@ class RingframeCopOut(BaseModel):
     id: int
     label: str
     frame_number: Optional[int] = None
+    spindle_number: Optional[int] = None
     hank_value: Optional[float]
     notes: Optional[str]
     sample_length: float

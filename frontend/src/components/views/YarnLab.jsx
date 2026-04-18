@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, Fragment } from 'react'
 import {
   getLabTrials, createLabTrial, updateLabTrial, deleteLabTrial,
   setLabBenchmarks, addLabSample, deleteLabSample, getLabDashboard,
@@ -1204,6 +1204,7 @@ function SimplexCard({ bobbin, machineNum, busy, onUpdate, onDelete, bobbinFeeds
     verified: bobbin.verified_same_hank,
     sampleLength: bobbin.sample_length ?? DEFAULT_LENGTHS.simplex,
     readings: buildReadings(bobbin.readings, SIMPLEX_READING_COUNT),
+    spindleNumber: bobbin.spindle_number != null ? String(bobbin.spindle_number) : '',
   }))
 
   useEffect(() => {
@@ -1212,6 +1213,7 @@ function SimplexCard({ bobbin, machineNum, busy, onUpdate, onDelete, bobbinFeeds
       verified: bobbin.verified_same_hank,
       sampleLength: bobbin.sample_length ?? DEFAULT_LENGTHS.simplex,
       readings: buildReadings(bobbin.readings, SIMPLEX_READING_COUNT),
+      spindleNumber: bobbin.spindle_number != null ? String(bobbin.spindle_number) : '',
     })
   }, [bobbin])
 
@@ -1230,6 +1232,7 @@ function SimplexCard({ bobbin, machineNum, busy, onUpdate, onDelete, bobbinFeeds
       readings: currentReadings,
       rsb_can_ids: bobbin.rsb_can_ids || (bobbin.rsb_cans || []).map(c => c.id),
       machine_number: machineNum ?? null,
+      spindle_number: bobbin.spindle_number ?? null,
       ...overrides,
     }
   }
@@ -1249,6 +1252,7 @@ function SimplexCard({ bobbin, machineNum, busy, onUpdate, onDelete, bobbinFeeds
       verified_same_hank: form.verified,
       sample_length: form.sampleLength || DEFAULT_LENGTHS.simplex,
       readings: validWeights,
+      spindle_number: form.spindleNumber ? parseInt(form.spindleNumber, 10) : null,
     }))
   }
 
@@ -1342,6 +1346,15 @@ function SimplexCard({ bobbin, machineNum, busy, onUpdate, onDelete, bobbinFeeds
                 setForm(f => ({ ...f, sampleLength: Number.isNaN(val) || val <= 0 ? DEFAULT_LENGTHS.simplex : val }))
               }}
               style={{ ...inputStyle, width: 120 }}
+            />
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <span style={{ fontSize: 10, color: 'var(--tx-4)', fontWeight: 600 }}>Spindle #</span>
+            <input
+              type="number" step="1" min="1" placeholder="e.g. 12"
+              value={form.spindleNumber}
+              onChange={e => setForm(f => ({ ...f, spindleNumber: e.target.value }))}
+              style={{ ...inputStyle, width: 90 }}
             />
           </div>
           <span style={{ fontSize: 11, color: 'var(--tx-4)' }}>Ne = (L × 0.54) / W</span>
@@ -1533,6 +1546,7 @@ function FrameCard({ initialFrameNumber, cops, isLocal, busy, onCreateCop, onUpd
         notes: cop.notes ?? '',
         sampleLength: cop.sample_length ?? DEFAULT_LENGTHS.ringframe,
         readings: buildReadings(cop.readings, RING_READING_COUNT),
+        spindleNumber: cop.spindle_number != null ? String(cop.spindle_number) : '',
       }
     }
     return init
@@ -1548,6 +1562,7 @@ function FrameCard({ initialFrameNumber, cops, isLocal, busy, onCreateCop, onUpd
             notes: cop.notes ?? '',
             sampleLength: cop.sample_length ?? DEFAULT_LENGTHS.ringframe,
             readings: buildReadings(cop.readings, RING_READING_COUNT),
+            spindleNumber: cop.spindle_number != null ? String(cop.spindle_number) : '',
           }
         }
       }
@@ -1634,6 +1649,7 @@ function FrameCard({ initialFrameNumber, cops, isLocal, busy, onCreateCop, onUpd
           : (cop.hank_value ?? cop.mean_hank ?? null),
         notes: form.notes ? form.notes.trim() : null,
         frame_number: fn,
+        spindle_number: form.spindleNumber ? parseInt(form.spindleNumber, 10) : null,
         sample_length: form.sampleLength || DEFAULT_LENGTHS.ringframe,
         readings: validWeights,
         simplex_bobbin_ids: cop.simplex_bobbin_ids || (cop.simplex_bobbins || []).map(b => b.id),
@@ -1756,11 +1772,22 @@ function FrameCard({ initialFrameNumber, cops, isLocal, busy, onCreateCop, onUpd
                       <span style={{ fontSize: 10, color: 'var(--tx-3)' }}>
                         ← {(cop.simplex_bobbins || []).map(b =>
                           b.machine_number != null
-                            ? `${b.label} (Sx ${b.machine_number})`
+                            ? `${b.label} (Sx ${b.machine_number}${b.spindle_number != null ? '/Sp' + b.spindle_number : ''})`
                             : b.label
                         ).join(', ')}
                       </span>
                     )}
+                    {/* Spindle number for this cop */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <span style={{ fontSize: 10, color: 'var(--tx-4)', fontWeight: 600 }}>Sp#</span>
+                      <input
+                        type="number" step="1" min="1" placeholder="spindle"
+                        value={form.spindleNumber ?? ''}
+                        onChange={e => updateForm('spindleNumber', e.target.value)}
+                        style={{ ...inputStyle, width: 70, padding: '2px 6px', fontSize: 11 }}
+                        title="Spindle number within this ring frame"
+                      />
+                    </div>
                     <span style={{
                       fontSize: 10, fontWeight: 700, padding: '1px 7px', borderRadius: 8,
                       border: `1px solid ${STATUS_BORDER[status] ?? 'var(--bd)'}`,
@@ -1921,7 +1948,8 @@ function FrameCard({ initialFrameNumber, cops, isLocal, busy, onCreateCop, onUpd
  *   CV_c_ij    = cop CV%
  */
 function buildInteractionReport(raw) {
-  const { bobbins: _rawBobbins, frames, cells, benchmarks, anova } = raw
+  const { bobbins: _rawBobbins, frames, cells, benchmarks, anova,
+          hierarchy = [], variation = null } = raw
   // TASK 01 — sort bobbins chronologically by the numeric portion of their label
   const bobbins = [..._rawBobbins].sort((a, b) => {
     const na = parseInt((a.label ?? '').replace(/\D/g, ''), 10) || 0
@@ -2022,6 +2050,8 @@ function buildInteractionReport(raw) {
     nominalDraft, H_target, H_b_target,
     rfTol: benchmarks.ringframe.tolerance,
     anova: anova ?? null,
+    hierarchy,
+    variation,
   }
 }
 
@@ -2802,6 +2832,411 @@ function LineageTraceTable({ report, machineFilter }) {
   )
 }
 
+/* ── Hierarchy View ─────────────────────────────────────────────────────────── */
+function HierarchyView({ hierarchy }) {
+  const [expanded, setExpanded] = useState({})    // key: "can-N", "bob-N"
+
+  const toggle = key => setExpanded(prev => ({ ...prev, [key]: !prev[key] }))
+  const isOpen = key => expanded[key] !== false  // default open
+
+  if (!hierarchy || !hierarchy.length) {
+    return <div style={{ padding: 24, textAlign: 'center', color: 'var(--tx-3)', fontSize: 12 }}>No hierarchy data available. Ensure cans, bobbins and cops are linked.</div>
+  }
+
+  const cellStyle = { padding: '4px 10px', textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 11, whiteSpace: 'nowrap' }
+  const labelStyle = { padding: '4px 10px', fontSize: 11, color: 'var(--tx-2)' }
+
+  return (
+    <div style={{ overflowX: 'auto' }}>
+      <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: 11 }}>
+        <thead>
+          <tr style={{ borderBottom: '2px solid var(--bd-md)' }}>
+            <th style={{ ...labelStyle, textAlign: 'left', fontWeight: 700, color: 'var(--tx-4)', paddingBottom: 6 }}>Node</th>
+            <th style={{ ...cellStyle, fontWeight: 700, color: 'var(--tx-4)', paddingBottom: 6 }}>Mean Hank</th>
+            <th style={{ ...cellStyle, fontWeight: 700, color: 'var(--tx-4)', paddingBottom: 6 }}>CV%</th>
+            <th style={{ ...cellStyle, fontWeight: 700, color: 'var(--tx-4)', paddingBottom: 6 }}>N</th>
+            <th style={{ ...cellStyle, fontWeight: 700, color: 'var(--tx-4)', paddingBottom: 6 }}>Machine</th>
+            <th style={{ ...cellStyle, fontWeight: 700, color: 'var(--tx-4)', paddingBottom: 6 }}>Spindle</th>
+            <th style={{ ...cellStyle, fontWeight: 700, color: 'var(--tx-4)', paddingBottom: 6 }}>Frame</th>
+          </tr>
+        </thead>
+        <tbody>
+          {hierarchy.map((can, ci) => {
+            const canKey = `can-${ci}`
+            const canOpen = isOpen(canKey)
+            return (
+              <Fragment key={canKey}>
+                {/* Can row */}
+                <tr style={{ background: 'var(--bg-2)', borderTop: ci > 0 ? '2px solid var(--bd)' : undefined }}>
+                  <td style={{ ...labelStyle, fontWeight: 700, cursor: 'pointer', userSelect: 'none' }} onClick={() => toggle(canKey)}>
+                    <span style={{ marginRight: 6, fontSize: 10, color: 'var(--tx-4)' }}>{canOpen ? '▼' : '▶'}</span>
+                    🗂 {can.label}
+                    {can.slot != null && <span style={{ fontSize: 10, color: 'var(--tx-4)', marginLeft: 6 }}>slot {can.slot}</span>}
+                    <span style={{ fontSize: 10, color: 'var(--tx-4)', marginLeft: 8 }}>({(can.bobbins || []).length} bobbins)</span>
+                  </td>
+                  <td style={{ ...cellStyle, fontWeight: 600 }}>{can.mean_hank != null ? can.mean_hank.toFixed(4) : '—'}</td>
+                  <td style={{ ...cellStyle, color: can.cv_pct > 2 ? 'var(--bad)' : can.cv_pct > 1 ? 'var(--warn)' : 'var(--tx)' }}>{can.cv_pct != null ? can.cv_pct.toFixed(2) + '%' : '—'}</td>
+                  <td style={cellStyle}>{can.n_readings ?? '—'}</td>
+                  <td style={cellStyle}>—</td>
+                  <td style={cellStyle}>—</td>
+                  <td style={cellStyle}>—</td>
+                </tr>
+                {canOpen && (can.bobbins || []).map((bob, bi) => {
+                  const bobKey = `bob-${ci}-${bi}`
+                  const bobOpen = isOpen(bobKey)
+                  return (
+                    <Fragment key={bobKey}>
+                      {/* Bobbin row */}
+                      <tr style={{ borderTop: '1px solid var(--bd)' }}>
+                        <td style={{ ...labelStyle, paddingLeft: 28, cursor: 'pointer', userSelect: 'none' }} onClick={() => toggle(bobKey)}>
+                          <span style={{ marginRight: 6, fontSize: 10, color: 'var(--tx-4)' }}>{bobOpen ? '▼' : '▶'}</span>
+                          🧶 {bob.label}
+                        </td>
+                        <td style={{ ...cellStyle }}>{bob.mean_hank != null ? bob.mean_hank.toFixed(4) : '—'}</td>
+                        <td style={{ ...cellStyle, color: bob.cv_pct > 2 ? 'var(--bad)' : bob.cv_pct > 1 ? 'var(--warn)' : 'var(--tx)' }}>{bob.cv_pct != null ? bob.cv_pct.toFixed(2) + '%' : '—'}</td>
+                        <td style={cellStyle}>{bob.n_readings ?? '—'}</td>
+                        <td style={{ ...cellStyle, fontFamily: 'var(--mono)' }}>{bob.machine_number != null ? `Sx ${bob.machine_number}` : '—'}</td>
+                        <td style={{ ...cellStyle, fontFamily: 'var(--mono)' }}>{bob.spindle_number != null ? `Sp ${bob.spindle_number}` : '—'}</td>
+                        <td style={cellStyle}>—</td>
+                      </tr>
+                      {bobOpen && (bob.cops || []).map((cop, ki) => (
+                        <tr key={ki} style={{ borderTop: '1px solid var(--bd)', background: 'transparent' }}>
+                          <td style={{ ...labelStyle, paddingLeft: 52, color: 'var(--tx-3)' }}>
+                            🪡 {cop.label}
+                          </td>
+                          <td style={{ ...cellStyle }}>{cop.mean_hank != null ? cop.mean_hank.toFixed(4) : '—'}</td>
+                          <td style={{ ...cellStyle, color: cop.cv_pct > 3 ? 'var(--bad)' : cop.cv_pct > 1.5 ? 'var(--warn)' : 'var(--tx)' }}>{cop.cv_pct != null ? cop.cv_pct.toFixed(2) + '%' : '—'}</td>
+                          <td style={cellStyle}>{cop.n_readings ?? '—'}</td>
+                          <td style={cellStyle}>—</td>
+                          <td style={{ ...cellStyle, fontFamily: 'var(--mono)' }}>{cop.spindle_number != null ? `Sp ${cop.spindle_number}` : '—'}</td>
+                          <td style={{ ...cellStyle, fontFamily: 'var(--mono)' }}>{cop.frame_number != null ? `Fr ${cop.frame_number}` : '—'}</td>
+                        </tr>
+                      ))}
+                    </Fragment>
+                  )
+                })}
+              </Fragment>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+/* ── Matrix View ─────────────────────────────────────────────────────────────── */
+function MatrixView({ hierarchy }) {
+  if (!hierarchy || !hierarchy.length) {
+    return <div style={{ padding: 24, textAlign: 'center', color: 'var(--tx-3)', fontSize: 12 }}>No hierarchy data available.</div>
+  }
+
+  // Build Can×Bobbin matrix: rows = cans, cols = bobbins across all cans
+  // We'll show two matrices: (A) Can → Bobbin, (B) Bobbin → Cop
+
+  // Extract all cans and all bobbins
+  const allBobbins = []
+  const canBobbinMap = []  // [{ can, bobbins }]
+  hierarchy.forEach(can => {
+    const bobs = can.bobbins || []
+    canBobbinMap.push({ can, bobbins: bobs })
+    bobs.forEach(b => allBobbins.push(b))
+  })
+
+  // Matrix A: for each can, show its bobbins mean_hank
+  // Matrix B: for each bobbin that has cops, show cop mean_hanks
+
+  const thStyle = { padding: '4px 8px', fontSize: 10, fontWeight: 700, color: 'var(--tx-4)', textAlign: 'center', background: 'var(--bg-2)', border: '1px solid var(--bd)', whiteSpace: 'nowrap' }
+  const tdStyle = { padding: '4px 8px', fontSize: 11, textAlign: 'center', fontFamily: 'var(--mono)', border: '1px solid var(--bd)', whiteSpace: 'nowrap' }
+
+  const hankColor = (val, mean) => {
+    if (val == null || mean == null) return 'var(--tx-4)'
+    const pct = Math.abs((val - mean) / mean) * 100
+    if (pct > 3) return 'var(--bad)'
+    if (pct > 1.5) return 'var(--warn)'
+    return 'var(--tx)'
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
+
+      {/* Matrix A: Can → Bobbin */}
+      <div>
+        <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--tx-2)', marginBottom: 10 }}>
+          Matrix A — Can → Bobbin (mean hank per bobbin, grouped by source can)
+        </div>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ borderCollapse: 'collapse', fontSize: 11 }}>
+            <thead>
+              <tr>
+                <th style={{ ...thStyle, textAlign: 'left' }}>Can</th>
+                <th style={{ ...thStyle, textAlign: 'left' }}>Slot</th>
+                <th style={{ ...thStyle, textAlign: 'left' }}>Can Mean Hk</th>
+                {/* Dynamic bobbin columns — up to first 10 unique across all cans */}
+                {Array.from({ length: Math.max(...canBobbinMap.map(c => c.bobbins.length), 1) }, (_, i) => (
+                  <th key={i} style={thStyle}>Bobbin {i + 1}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {canBobbinMap.map(({ can, bobbins }, ri) => {
+                const canMean = can.mean_hank
+                const maxCols = Math.max(...canBobbinMap.map(c => c.bobbins.length), 1)
+                return (
+                  <tr key={ri} style={{ background: ri % 2 === 0 ? 'var(--bg)' : 'var(--bg-2)' }}>
+                    <td style={{ ...tdStyle, textAlign: 'left', fontWeight: 600 }}>{can.label}</td>
+                    <td style={{ ...tdStyle }}>{can.slot ?? '—'}</td>
+                    <td style={{ ...tdStyle, fontWeight: 600 }}>{canMean != null ? canMean.toFixed(4) : '—'}</td>
+                    {Array.from({ length: maxCols }, (_, ci) => {
+                      const b = bobbins[ci]
+                      if (!b) return <td key={ci} style={{ ...tdStyle, color: 'var(--tx-4)' }}>—</td>
+                      const mc = b.machine_number != null ? ` Sx${b.machine_number}` : ''
+                      const sp = b.spindle_number != null ? `/Sp${b.spindle_number}` : ''
+                      return (
+                        <td key={ci} style={{ ...tdStyle, color: hankColor(b.mean_hank, canMean) }}>
+                          <div style={{ fontWeight: 600 }}>{b.mean_hank != null ? b.mean_hank.toFixed(4) : '—'}</div>
+                          <div style={{ fontSize: 9, color: 'var(--tx-4)' }}>{b.label}{mc}{sp}</div>
+                        </td>
+                      )
+                    })}
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Matrix B: Bobbin → Cop */}
+      <div>
+        <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--tx-2)', marginBottom: 10 }}>
+          Matrix B — Bobbin → Cop (mean hank per cop, grouped by source bobbin)
+        </div>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ borderCollapse: 'collapse', fontSize: 11 }}>
+            <thead>
+              <tr>
+                <th style={{ ...thStyle, textAlign: 'left' }}>Bobbin</th>
+                <th style={{ ...thStyle, textAlign: 'left' }}>Machine</th>
+                <th style={{ ...thStyle, textAlign: 'left' }}>Spindle</th>
+                <th style={{ ...thStyle, textAlign: 'left' }}>Bob Mean Hk</th>
+                {Array.from({ length: Math.max(...allBobbins.map(b => (b.cops || []).length), 1) }, (_, i) => (
+                  <th key={i} style={thStyle}>Cop {i + 1}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {allBobbins.filter(b => (b.cops || []).length > 0).map((bob, ri) => {
+                const bobMean = bob.mean_hank
+                const maxCops = Math.max(...allBobbins.map(b => (b.cops || []).length), 1)
+                return (
+                  <tr key={ri} style={{ background: ri % 2 === 0 ? 'var(--bg)' : 'var(--bg-2)' }}>
+                    <td style={{ ...tdStyle, textAlign: 'left', fontWeight: 600 }}>{bob.label}</td>
+                    <td style={{ ...tdStyle }}>{bob.machine_number != null ? `Sx ${bob.machine_number}` : '—'}</td>
+                    <td style={{ ...tdStyle }}>{bob.spindle_number != null ? `Sp ${bob.spindle_number}` : '—'}</td>
+                    <td style={{ ...tdStyle, fontWeight: 600 }}>{bobMean != null ? bobMean.toFixed(4) : '—'}</td>
+                    {Array.from({ length: maxCops }, (_, ci) => {
+                      const cop = (bob.cops || [])[ci]
+                      if (!cop) return <td key={ci} style={{ ...tdStyle, color: 'var(--tx-4)' }}>—</td>
+                      const fr = cop.frame_number != null ? ` Fr${cop.frame_number}` : ''
+                      const sp = cop.spindle_number != null ? `/Sp${cop.spindle_number}` : ''
+                      return (
+                        <td key={ci} style={{ ...tdStyle, color: hankColor(cop.mean_hank, bobMean) }}>
+                          <div style={{ fontWeight: 600 }}>{cop.mean_hank != null ? cop.mean_hank.toFixed(4) : '—'}</div>
+                          <div style={{ fontSize: 9, color: 'var(--tx-4)' }}>{cop.label}{fr}{sp}</div>
+                        </td>
+                      )
+                    })}
+                  </tr>
+                )
+              })}
+              {allBobbins.filter(b => (b.cops || []).length > 0).length === 0 && (
+                <tr><td colSpan={100} style={{ ...tdStyle, color: 'var(--tx-4)', padding: 16 }}>No cops linked to bobbins yet.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+  )
+}
+
+/* ── Variation View ──────────────────────────────────────────────────────────── */
+function VariationView({ variation }) {
+  if (!variation) {
+    return <div style={{ padding: 24, textAlign: 'center', color: 'var(--tx-3)', fontSize: 12 }}>No variation data available.</div>
+  }
+  const { level1, level2, level3, level4 } = variation
+
+  const cvColor = cv => {
+    if (cv == null) return 'var(--tx-4)'
+    if (cv > 3) return 'var(--bad)'
+    if (cv > 1.5) return 'var(--warn)'
+    return 'var(--ok)'
+  }
+
+  const sectionStyle = { display: 'flex', flexDirection: 'column', gap: 12 }
+  const hdrStyle = { fontSize: 12, fontWeight: 700, color: 'var(--tx-2)', paddingBottom: 6, borderBottom: '1px solid var(--bd)' }
+  const subStyle = { fontSize: 10, color: 'var(--tx-4)', fontWeight: 400 }
+  const thStyle = { padding: '5px 10px', fontSize: 10, fontWeight: 700, color: 'var(--tx-4)', textAlign: 'left', background: 'var(--bg-2)', borderBottom: '1px solid var(--bd)' }
+  const tdStyle = { padding: '4px 10px', fontSize: 11, fontFamily: 'var(--mono)', borderBottom: '1px solid var(--bd)' }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
+
+      {/* Level 1: Between Cans */}
+      <div style={sectionStyle}>
+        <div style={hdrStyle}>Level 1 — Between-Can Variation <span style={subStyle}>(material source differences)</span></div>
+        <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', marginBottom: 8 }}>
+          {[
+            ['Cans measured', level1.n ?? '—'],
+            ['Grand mean', level1.mean != null ? level1.mean.toFixed(4) : '—'],
+            ['Range', level1.range != null ? level1.range.toFixed(4) : '—'],
+            ['CV%', level1.cv != null ? level1.cv.toFixed(2) + '%' : '—'],
+          ].map(([label, val]) => (
+            <div key={label} style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 100 }}>
+              <span style={{ fontSize: 10, color: 'var(--tx-4)', fontWeight: 600 }}>{label}</span>
+              <span style={{ fontSize: 14, fontWeight: 700, fontFamily: 'var(--mono)', color: label === 'CV%' ? cvColor(level1.cv) : 'var(--tx)' }}>{val}</span>
+            </div>
+          ))}
+        </div>
+        {(level1.cans || []).length > 0 && (
+          <table style={{ borderCollapse: 'collapse', fontSize: 11 }}>
+            <thead><tr>
+              <th style={thStyle}>Can</th><th style={{ ...thStyle, textAlign: 'right' }}>Slot</th>
+              <th style={{ ...thStyle, textAlign: 'right' }}>Mean Hank</th>
+              <th style={{ ...thStyle, textAlign: 'right' }}>CV%</th>
+              <th style={{ ...thStyle, textAlign: 'right' }}>Bobbins</th>
+            </tr></thead>
+            <tbody>
+              {level1.cans.map((c, i) => (
+                <tr key={i} style={{ background: i % 2 === 0 ? 'var(--bg)' : 'var(--bg-2)' }}>
+                  <td style={tdStyle}>{c.label}</td>
+                  <td style={{ ...tdStyle, textAlign: 'right' }}>{c.slot ?? '—'}</td>
+                  <td style={{ ...tdStyle, textAlign: 'right' }}>{c.mean != null ? c.mean.toFixed(4) : '—'}</td>
+                  <td style={{ ...tdStyle, textAlign: 'right', color: cvColor(c.cv_pct) }}>{c.cv_pct != null ? c.cv_pct.toFixed(2) + '%' : '—'}</td>
+                  <td style={{ ...tdStyle, textAlign: 'right' }}>{c.n_bobbins}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      {/* Level 2: Between Bobbins within Can */}
+      <div style={sectionStyle}>
+        <div style={hdrStyle}>Level 2 — Between-Bobbin Variation within Can <span style={subStyle}>(simplex machine / spindle effect)</span></div>
+        {(level2 || []).length === 0
+          ? <div style={{ fontSize: 12, color: 'var(--tx-4)' }}>No within-can bobbin data.</div>
+          : level2.map((canGroup, i) => (
+            <div key={i} style={{ marginBottom: 8 }}>
+              <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--tx-3)', marginBottom: 4 }}>
+                {canGroup.can_label} {canGroup.can_slot != null ? `(slot ${canGroup.can_slot})` : ''}
+                <span style={{ marginLeft: 10, fontFamily: 'var(--mono)', color: cvColor(canGroup.cv) }}>CV% {canGroup.cv != null ? canGroup.cv.toFixed(2) + '%' : '—'}</span>
+                <span style={{ marginLeft: 8, fontFamily: 'var(--mono)', color: 'var(--tx-4)' }}>Range {canGroup.range != null ? canGroup.range.toFixed(4) : '—'}</span>
+              </div>
+              <table style={{ borderCollapse: 'collapse', fontSize: 11 }}>
+                <thead><tr>
+                  <th style={thStyle}>Bobbin</th>
+                  <th style={{ ...thStyle, textAlign: 'right' }}>Machine</th>
+                  <th style={{ ...thStyle, textAlign: 'right' }}>Spindle</th>
+                  <th style={{ ...thStyle, textAlign: 'right' }}>Mean Hank</th>
+                  <th style={{ ...thStyle, textAlign: 'right' }}>CV%</th>
+                </tr></thead>
+                <tbody>
+                  {canGroup.bobbins.map((b, j) => (
+                    <tr key={j} style={{ background: j % 2 === 0 ? 'var(--bg)' : 'var(--bg-2)' }}>
+                      <td style={tdStyle}>{b.label}</td>
+                      <td style={{ ...tdStyle, textAlign: 'right' }}>{b.machine_number != null ? `Sx ${b.machine_number}` : '—'}</td>
+                      <td style={{ ...tdStyle, textAlign: 'right' }}>{b.spindle_number != null ? `Sp ${b.spindle_number}` : '—'}</td>
+                      <td style={{ ...tdStyle, textAlign: 'right' }}>{b.mean != null ? b.mean.toFixed(4) : '—'}</td>
+                      <td style={{ ...tdStyle, textAlign: 'right', color: cvColor(b.cv_pct) }}>{b.cv_pct != null ? b.cv_pct.toFixed(2) + '%' : '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ))
+        }
+      </div>
+
+      {/* Level 3: Between Cops within Bobbin */}
+      <div style={sectionStyle}>
+        <div style={hdrStyle}>Level 3 — Between-Cop Variation within Bobbin <span style={subStyle}>(ring frame effect on same roving source)</span></div>
+        {(level3 || []).length === 0
+          ? <div style={{ fontSize: 12, color: 'var(--tx-4)' }}>No within-bobbin cop data.</div>
+          : level3.map((bobGroup, i) => (
+            <div key={i} style={{ marginBottom: 8 }}>
+              <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--tx-3)', marginBottom: 4 }}>
+                {bobGroup.bobbin_label}
+                {bobGroup.machine_number != null && <span style={{ color: 'var(--tx-4)', marginLeft: 6 }}>Sx {bobGroup.machine_number}</span>}
+                {bobGroup.spindle_number != null && <span style={{ color: 'var(--tx-4)', marginLeft: 4 }}>Sp {bobGroup.spindle_number}</span>}
+                <span style={{ marginLeft: 10, fontFamily: 'var(--mono)', color: cvColor(bobGroup.cv) }}>CV% {bobGroup.cv != null ? bobGroup.cv.toFixed(2) + '%' : '—'}</span>
+                <span style={{ marginLeft: 8, fontFamily: 'var(--mono)', color: 'var(--tx-4)' }}>Range {bobGroup.range != null ? bobGroup.range.toFixed(4) : '—'}</span>
+              </div>
+              <table style={{ borderCollapse: 'collapse', fontSize: 11 }}>
+                <thead><tr>
+                  <th style={thStyle}>Cop</th>
+                  <th style={{ ...thStyle, textAlign: 'right' }}>Frame</th>
+                  <th style={{ ...thStyle, textAlign: 'right' }}>Spindle</th>
+                  <th style={{ ...thStyle, textAlign: 'right' }}>Mean Hank</th>
+                  <th style={{ ...thStyle, textAlign: 'right' }}>CV%</th>
+                </tr></thead>
+                <tbody>
+                  {bobGroup.cops.map((c, j) => (
+                    <tr key={j} style={{ background: j % 2 === 0 ? 'var(--bg)' : 'var(--bg-2)' }}>
+                      <td style={tdStyle}>{c.label}</td>
+                      <td style={{ ...tdStyle, textAlign: 'right' }}>{c.frame_number != null ? `Fr ${c.frame_number}` : '—'}</td>
+                      <td style={{ ...tdStyle, textAlign: 'right' }}>{c.spindle_number != null ? `Sp ${c.spindle_number}` : '—'}</td>
+                      <td style={{ ...tdStyle, textAlign: 'right' }}>{c.mean != null ? c.mean.toFixed(4) : '—'}</td>
+                      <td style={{ ...tdStyle, textAlign: 'right', color: cvColor(c.cv_pct) }}>{c.cv_pct != null ? c.cv_pct.toFixed(2) + '%' : '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ))
+        }
+      </div>
+
+      {/* Level 4: Within-Cop Variation */}
+      <div style={sectionStyle}>
+        <div style={hdrStyle}>Level 4 — Within-Cop Variation <span style={subStyle}>(yarn-level irregularity per cop, worst first)</span></div>
+        {(level4 || []).length === 0
+          ? <div style={{ fontSize: 12, color: 'var(--tx-4)' }}>No within-cop variation data.</div>
+          : (
+            <table style={{ borderCollapse: 'collapse', fontSize: 11 }}>
+              <thead><tr>
+                <th style={thStyle}>Cop</th><th style={thStyle}>Bobbin</th><th style={thStyle}>Can</th>
+                <th style={{ ...thStyle, textAlign: 'right' }}>Frame</th>
+                <th style={{ ...thStyle, textAlign: 'right' }}>Spindle</th>
+                <th style={{ ...thStyle, textAlign: 'right' }}>Mean Hk</th>
+                <th style={{ ...thStyle, textAlign: 'right' }}>CV%</th>
+                <th style={{ ...thStyle, textAlign: 'right' }}>Readings</th>
+              </tr></thead>
+              <tbody>
+                {level4.map((c, i) => (
+                  <tr key={i} style={{ background: i % 2 === 0 ? 'var(--bg)' : 'var(--bg-2)' }}>
+                    <td style={tdStyle}>{c.cop_label}</td>
+                    <td style={tdStyle}>{c.bobbin_label}</td>
+                    <td style={tdStyle}>{c.can_label}</td>
+                    <td style={{ ...tdStyle, textAlign: 'right' }}>{c.frame_number != null ? `Fr ${c.frame_number}` : '—'}</td>
+                    <td style={{ ...tdStyle, textAlign: 'right' }}>{c.spindle_number != null ? `Sp ${c.spindle_number}` : '—'}</td>
+                    <td style={{ ...tdStyle, textAlign: 'right' }}>{c.mean_hank != null ? c.mean_hank.toFixed(4) : '—'}</td>
+                    <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 600, color: cvColor(c.cv_pct) }}>{c.cv_pct.toFixed(2)}%</td>
+                    <td style={{ ...tdStyle, textAlign: 'right' }}>{c.n_readings}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )
+        }
+      </div>
+
+    </div>
+  )
+}
+
 /* ── Machine filter bar ──────────────────────────────────────────────────────── */
 function MachineFilerBar({ report, machineFilter, setMachineFilter }) {
   const machines = useMemo(() => {
@@ -2837,6 +3272,7 @@ function InteractionReport({ trialId }) {
   const [generating,    setGenerating]    = useState(false)
   const [error,         setError]         = useState(null)
   const [machineFilter, setMachineFilter] = useState(null)  // null = All, 1|2|3 = filter
+  const [activeTab,     setActiveTab]     = useState('hierarchy')  // 'hierarchy'|'matrices'|'variation'|'machine'|'statistical'
 
   const handleGenerate = async () => {
     setGenerating(true)
@@ -2896,7 +3332,7 @@ function InteractionReport({ trialId }) {
   const { byBobbin, frameSummary, bobbinSummary, frames, bobbins, nominalDraft, H_target, H_b_target, rfTol } = report
   const dp = H_target >= 10 ? 2 : 4
 
-  // Apply machine filter to all tables
+  // Apply machine filter to Statistical tab tables
   const visibleBobbinIds = new Set(
     bobbins
       .filter(b => machineFilter == null || b.machine_number === machineFilter)
@@ -2918,18 +3354,54 @@ function InteractionReport({ trialId }) {
     return { frame: f, count: rows.length, machines, avgCopHank: _avg(rows.map(r=>r.copHank)), avgCountDev: _avg(rows.map(r=>r.countDev)), maxCountDev: _maxAbs(rows.map(r=>r.countDev)), avgDraftError: _avg(rows.filter(r=>r.draftError!=null).map(r=>r.draftError)), avgCvAdded: _avg(rows.filter(r=>r.cvAdded!=null).map(r=>r.cvAdded)) }
   }).filter(Boolean)
 
+  // Machine View: group cops by frame number
+  const byFrameForMachineView = useMemo(() => {
+    if (!report.hierarchy) return {}
+    const map = {}
+    report.hierarchy.forEach(can => {
+      (can.bobbins || []).forEach(bob => {
+        (bob.cops || []).forEach(cop => {
+          const fr = cop.frame_number ?? 'Unassigned'
+          if (!map[fr]) map[fr] = []
+          map[fr].push({ cop, bobbin: bob, can })
+        })
+      })
+    })
+    return map
+  }, [report.hierarchy])
+
+  const tabs = [
+    { id: 'hierarchy',   label: 'Hierarchy' },
+    { id: 'matrices',    label: 'Matrices' },
+    { id: 'variation',   label: 'Variation' },
+    { id: 'machine',     label: 'Machine View' },
+    { id: 'statistical', label: 'Statistical' },
+  ]
+
+  const tabBtnStyle = (active) => ({
+    padding: '6px 16px', fontSize: 11, fontWeight: 600,
+    border: `1px solid ${active ? 'var(--claude)' : 'var(--bd)'}`,
+    borderBottom: active ? '1px solid var(--bg)' : '1px solid var(--bd)',
+    borderRadius: 'var(--r) var(--r) 0 0',
+    background: active ? 'var(--bg)' : 'var(--bg-2)',
+    color: active ? 'var(--claude)' : 'var(--tx-3)',
+    cursor: 'pointer', fontFamily: 'var(--font)',
+    marginBottom: -1, position: 'relative', zIndex: active ? 1 : 0,
+    transition: 'all .1s',
+  })
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 28 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
 
       {/* Report meta bar */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, paddingBottom: 12, borderBottom: '1px solid var(--bd)' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, paddingBottom: 12, borderBottom: '1px solid var(--bd)', marginBottom: 16 }}>
         <div>
           <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--tx)' }}>Bobbin–Frame Interaction Report</div>
           <div style={{ fontSize: 11, color: 'var(--tx-3)', marginTop: 3, fontFamily: 'var(--mono)' }}>
             RF target {_fmt(H_target, dp)} &nbsp;·&nbsp;
             Simplex target {_fmt(H_b_target, 4)} &nbsp;·&nbsp;
             Nominal RF draft {nominalDraft.toFixed(3)}× &nbsp;·&nbsp;
-            {filteredInteractions.length} interaction{filteredInteractions.length !== 1 ? 's' : ''} shown
+            {report.interactions.length} interaction{report.interactions.length !== 1 ? 's' : ''} logged
           </div>
         </div>
         <button onClick={() => setReport(null)} style={{ padding: '5px 12px', fontSize: 11, fontWeight: 500, border: '1px solid var(--bd)', borderRadius: 'var(--r)', background: 'var(--bg)', color: 'var(--tx-3)', cursor: 'pointer', fontFamily: 'var(--font)' }}>
@@ -2937,69 +3409,155 @@ function InteractionReport({ trialId }) {
         </button>
       </div>
 
-      {/* Machine filter buttons */}
-      <MachineFilerBar report={report} machineFilter={machineFilter} setMachineFilter={setMachineFilter} />
+      {/* Tab bar */}
+      <div style={{ display: 'flex', gap: 2, borderBottom: '1px solid var(--bd)', marginBottom: 24 }}>
+        {tabs.map(t => (
+          <button key={t.id} style={tabBtnStyle(activeTab === t.id)} onClick={() => setActiveTab(t.id)}>{t.label}</button>
+        ))}
+      </div>
 
-      {/* Math glossary */}
-      <MathGlossary dp={dp} nominalDraft={nominalDraft} H_target={H_target} H_b_target={H_b_target} />
+      {/* ── Tab: Hierarchy ── */}
+      {activeTab === 'hierarchy' && (
+        <IrSection title="Can → Bobbin → Cop Hierarchy" subtitle="Expand/collapse each level. Tracks full lineage from RSB can through simplex bobbin to ring frame cop.">
+          <HierarchyView hierarchy={report.hierarchy} />
+        </IrSection>
+      )}
 
-      {/* Statistical Alert Banner */}
-      <AnovaAlertBanner anova={report.anova} />
+      {/* ── Tab: Matrices ── */}
+      {activeTab === 'matrices' && (
+        <IrSection title="Interaction Matrices" subtitle="Matrix A: one row per can, one column per bobbin. Matrix B: one row per bobbin, one column per cop. Colour indicates deviation from the node's own mean.">
+          <MatrixView hierarchy={report.hierarchy} />
+        </IrSection>
+      )}
 
-      {/* ANOVA P-value metrics */}
-      <AnovaPvalueRow anova={report.anova} />
+      {/* ── Tab: Variation ── */}
+      {activeTab === 'variation' && (
+        <IrSection title="4-Level Variation Analysis" subtitle="Decomposes variance across the Can→Bobbin→Cop→Reading hierarchy. Levels with high CV% or large range indicate where defects are introduced.">
+          <VariationView variation={report.variation} />
+        </IrSection>
+      )}
 
-      {filteredInteractions.length === 0 ? (
-        <div style={{ padding: 24, textAlign: 'center', color: 'var(--tx-3)', fontSize: 13 }}>
-          {machineFilter != null ? `No interactions logged for Simplex M/c #${machineFilter}.` : 'No bobbin–cop interactions found. Log ring frame cops with bobbin links via the Flow Board.'}
+      {/* ── Tab: Machine View ── */}
+      {activeTab === 'machine' && (
+        <IrSection title="Machine View — Grouped by Ring Frame" subtitle="All cops produced by each frame, with full lineage. Reveals frame-level consistency; compare side-by-side for frame-to-frame differences.">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+            {Object.keys(byFrameForMachineView).sort((a, b) => {
+              if (a === 'Unassigned') return 1
+              if (b === 'Unassigned') return -1
+              return Number(a) - Number(b)
+            }).map(fr => {
+              const entries = byFrameForMachineView[fr]
+              const hanks = entries.map(e => e.cop.mean_hank).filter(h => h != null)
+              const mean = hanks.length ? hanks.reduce((a, b) => a + b, 0) / hanks.length : null
+              return (
+                <div key={fr}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--tx-2)', marginBottom: 6, display: 'flex', gap: 12, alignItems: 'baseline' }}>
+                    {fr === 'Unassigned' ? 'Unassigned Frame' : `Frame ${fr}`}
+                    <span style={{ fontSize: 10, fontFamily: 'var(--mono)', color: 'var(--tx-4)', fontWeight: 400 }}>
+                      {entries.length} cop{entries.length !== 1 ? 's' : ''}
+                      {mean != null ? ` · mean ${mean.toFixed(4)}` : ''}
+                    </span>
+                  </div>
+                  <table style={{ borderCollapse: 'collapse', fontSize: 11, width: '100%' }}>
+                    <thead>
+                      <tr style={{ borderBottom: '2px solid var(--bd-md)' }}>
+                        {[['Cop', 'left'], ['Mean Hank', 'right'], ['CV%', 'right'], ['Source Bobbin', 'left'], ['Sx M/c', 'right'], ['Sx Spindle', 'right'], ['Source Can', 'left']].map(([h, align]) => (
+                          <th key={h} style={{ padding: '4px 8px', fontSize: 10, fontWeight: 700, color: 'var(--tx-4)', textAlign: align, background: 'var(--bg-2)' }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {entries.map(({ cop, bobbin, can }, i) => {
+                        const dev = mean != null && cop.mean_hank != null ? Math.abs((cop.mean_hank - mean) / mean) * 100 : null
+                        const col = dev == null ? 'var(--tx)' : dev > 3 ? 'var(--bad)' : dev > 1.5 ? 'var(--warn)' : 'var(--tx)'
+                        return (
+                          <tr key={i} style={{ borderTop: '1px solid var(--bd)', background: i % 2 === 0 ? 'var(--bg)' : 'var(--bg-2)' }}>
+                            <td style={{ padding: '4px 8px', fontSize: 11 }}>{cop.label}</td>
+                            <td style={{ padding: '4px 8px', fontSize: 11, fontFamily: 'var(--mono)', textAlign: 'right', color: col, fontWeight: 600 }}>{cop.mean_hank != null ? cop.mean_hank.toFixed(4) : '—'}</td>
+                            <td style={{ padding: '4px 8px', fontSize: 11, fontFamily: 'var(--mono)', textAlign: 'right', color: cop.cv_pct > 3 ? 'var(--bad)' : cop.cv_pct > 1.5 ? 'var(--warn)' : 'var(--tx)' }}>{cop.cv_pct != null ? cop.cv_pct.toFixed(2) + '%' : '—'}</td>
+                            <td style={{ padding: '4px 8px', fontSize: 11 }}>{bobbin.label}</td>
+                            <td style={{ padding: '4px 8px', fontSize: 11, fontFamily: 'var(--mono)', textAlign: 'right' }}>{bobbin.machine_number != null ? `Sx ${bobbin.machine_number}` : '—'}</td>
+                            <td style={{ padding: '4px 8px', fontSize: 11, fontFamily: 'var(--mono)', textAlign: 'right' }}>{bobbin.spindle_number != null ? `Sp ${bobbin.spindle_number}` : '—'}</td>
+                            <td style={{ padding: '4px 8px', fontSize: 11 }}>{can.label}</td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )
+            })}
+            {Object.keys(byFrameForMachineView).length === 0 && (
+              <div style={{ padding: 24, textAlign: 'center', color: 'var(--tx-3)', fontSize: 12 }}>No cop–frame assignments found. Add ring frame cops and link them to bobbins via the Flow Board.</div>
+            )}
+          </div>
+        </IrSection>
+      )}
+
+      {/* ── Tab: Statistical ── */}
+      {activeTab === 'statistical' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 28 }}>
+
+          {/* Machine filter */}
+          <MachineFilerBar report={report} machineFilter={machineFilter} setMachineFilter={setMachineFilter} />
+
+          {/* Math glossary */}
+          <MathGlossary dp={dp} nominalDraft={nominalDraft} H_target={H_target} H_b_target={H_b_target} />
+
+          {/* Statistical Alert Banner */}
+          <AnovaAlertBanner anova={report.anova} />
+
+          {/* ANOVA P-value metrics */}
+          <AnovaPvalueRow anova={report.anova} />
+
+          {filteredInteractions.length === 0 ? (
+            <div style={{ padding: 24, textAlign: 'center', color: 'var(--tx-3)', fontSize: 13 }}>
+              {machineFilter != null ? `No interactions logged for Simplex M/c #${machineFilter}.` : 'No bobbin–cop interactions found. Log ring frame cops with bobbin links via the Flow Board.'}
+            </div>
+          ) : (<>
+
+            <IrSection title="Diagnostic Heatmap" subtitle="Cop hank at each bobbin–frame intersection. Text colour indicates deviation from target.">
+              <DiagnosticHeatmap report={{ ...report, bobbins: filteredBobbins, interactions: filteredInteractions }} />
+            </IrSection>
+
+            <IrSection
+              title="Lineage Trace — Can → Bobbin → Cop"
+              subtitle="Select a ring frame to trace Can → Bobbin → Cop for that frame. Select multiple frames to compare side-by-side — cop columns branch right. Color on cop values only; containers are neutral."
+            >
+              <LineageTraceTable report={report} machineFilter={machineFilter} />
+            </IrSection>
+
+            <IrSection title="Table 1 — Frame-wise Interaction" subtitle="How each frame performs across all bobbins it received. Consistent count deviation within a frame indicates a frame calibration issue.">
+              {frames.map(f => filteredByFrame[f]?.length ? (
+                <FrameInteractionTable key={f} frame={f} rows={filteredByFrame[f]} dp={dp} rfTol={rfTol} H_target={H_target} />
+              ) : null)}
+            </IrSection>
+
+            <IrSection title="Table 2 — Bobbin-wise Interaction" subtitle="How each bobbin performs across every frame it fed. Consistent count deviation for one bobbin across frames indicates an upstream roving quality issue.">
+              {filteredBobbins.map(b => (
+                <BobbinInteractionTable
+                  key={b.id} bobbinId={b.id}
+                  label={byBobbin[b.id]?.label ?? b.label}
+                  bobbinHank={byBobbin[b.id]?.bobbinHank}
+                  machineNumber={byBobbin[b.id]?.machineNumber ?? null}
+                  rows={byBobbin[b.id]?.rows ?? []}
+                  dp={dp} rfTol={rfTol} H_target={H_target}
+                />
+              ))}
+            </IrSection>
+
+            <IrSection title="Table 3 — Frame Summary" subtitle="Aggregated metrics per frame across all bobbins it processed.">
+              <FrameSummaryTable frameSummary={filteredFrameSummary} dp={dp} rfTol={rfTol} H_target={H_target} />
+            </IrSection>
+
+            <IrSection title="Table 4 — Bobbin Summary" subtitle="Aggregated output metrics per bobbin across all frames it fed.">
+              <BobbinSummaryTable bobbinSummary={bobbinSummary.filter(r => visibleBobbinIds.has(r.bobbinId))} dp={dp} />
+            </IrSection>
+
+          </>)}
         </div>
-      ) : (<>
+      )}
 
-        {/* Diagnostic Heatmap — filtered */}
-        <IrSection title="Diagnostic Heatmap" subtitle="Cop hank at each bobbin–frame intersection. Text colour indicates deviation from target.">
-          <DiagnosticHeatmap report={{ ...report, bobbins: filteredBobbins, interactions: filteredInteractions }} />
-        </IrSection>
-
-        {/* Lineage Trace: Can → Bobbin → Cop */}
-        <IrSection
-          title="Lineage Trace — Can → Bobbin → Cop"
-          subtitle="Select a ring frame to trace Can → Bobbin → Cop for that frame. Select multiple frames to compare side-by-side — cop columns branch right. Color on cop values only; containers are neutral."
-        >
-          <LineageTraceTable report={report} machineFilter={machineFilter} />
-        </IrSection>
-
-        {/* Table 1: Frame-wise */}
-        <IrSection title="Table 1 — Frame-wise Interaction" subtitle="How each frame performs across all bobbins it received. Consistent count deviation within a frame indicates a frame calibration issue.">
-          {frames.map(f => filteredByFrame[f]?.length ? (
-            <FrameInteractionTable key={f} frame={f} rows={filteredByFrame[f]} dp={dp} rfTol={rfTol} H_target={H_target} />
-          ) : null)}
-        </IrSection>
-
-        {/* Table 2: Bobbin-wise */}
-        <IrSection title="Table 2 — Bobbin-wise Interaction" subtitle="How each bobbin performs across every frame it fed. Consistent count deviation for one bobbin across frames indicates an upstream roving quality issue.">
-          {filteredBobbins.map(b => (
-            <BobbinInteractionTable
-              key={b.id} bobbinId={b.id}
-              label={byBobbin[b.id]?.label ?? b.label}
-              bobbinHank={byBobbin[b.id]?.bobbinHank}
-              machineNumber={byBobbin[b.id]?.machineNumber ?? null}
-              rows={byBobbin[b.id]?.rows ?? []}
-              dp={dp} rfTol={rfTol} H_target={H_target}
-            />
-          ))}
-        </IrSection>
-
-        {/* Table 3: Frame Summary */}
-        <IrSection title="Table 3 — Frame Summary" subtitle="Aggregated metrics per frame across all bobbins it processed.">
-          <FrameSummaryTable frameSummary={filteredFrameSummary} dp={dp} rfTol={rfTol} H_target={H_target} />
-        </IrSection>
-
-        {/* Table 4: Bobbin Summary */}
-        <IrSection title="Table 4 — Bobbin Summary" subtitle="Aggregated output metrics per bobbin across all frames it fed.">
-          <BobbinSummaryTable bobbinSummary={bobbinSummary.filter(r => visibleBobbinIds.has(r.bobbinId))} dp={dp} />
-        </IrSection>
-
-      </>)}
     </div>
   )
 }

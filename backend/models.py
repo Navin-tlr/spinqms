@@ -316,6 +316,7 @@ class LabSimplexBobbin(Base):
     order_index        = Column(Integer, nullable=False, default=0)
     sample_length      = Column(Float,   nullable=False, default=6.0)
     machine_number     = Column(Integer, nullable=True)   # 1–3 (Simplex machine that produced this bobbin)
+    spindle_number     = Column(Integer, nullable=True)   # spindle within that machine
     readings_json      = Column(Text,    nullable=True)
     readings_count     = Column(Integer, nullable=False, default=0)
     mean_hank          = Column(Float,   nullable=True)
@@ -352,7 +353,8 @@ class LabRingframeCop(Base):
     trial_id   = Column(Integer, ForeignKey("lab_trials.id", ondelete="CASCADE"),
                         nullable=False, index=True)
     label      = Column(String,  nullable=False)
-    frame_number = Column(Integer, nullable=True)
+    frame_number   = Column(Integer, nullable=True)
+    spindle_number = Column(Integer, nullable=True)   # spindle within the ring frame
     hank_value = Column(Float,   nullable=True)
     notes      = Column(String,  nullable=True)
     readings_json  = Column(Text,    nullable=True)

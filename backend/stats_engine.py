@@ -172,3 +172,133 @@ def run_interaction_anova(cops_data: List[Dict[str, Any]]) -> Dict[str, Any]:
 
     except Exception as exc:  # noqa: BLE001  (broad catch: LinAlgError, PerfectSeparationError, etc.)
         return {"status": "insufficient_data", "reason": str(exc)}
+
+
+# ── Hierarchical variation analysis ───────────────────────────────────────────
+
+def run_hierarchical_variation(hierarchy: list) -> dict:
+    """
+    4-level variation analysis on the Can → Bobbin → Cop hierarchy.
+
+    Input: hierarchy list as built by the interaction report endpoint.
+    Each can has .bobbins; each bobbin has .cops; each cop has mean_hank / cv_pct.
+
+    Output:
+      level1: between-can variation  (compare can means)
+      level2: between-bobbin variation within each can
+      level3: between-cop variation within each bobbin
+      level4: within-cop variation (the stored cv_pct per cop)
+    """
+
+    def _cv(vals: list) -> float | None:
+        """Population-style CV% from a list of floats (requires ≥ 2 values)."""
+        if len(vals) < 2:
+            return None
+        m = sum(vals) / len(vals)
+        if m == 0:
+            return None
+        variance = sum((v - m) ** 2 for v in vals) / (len(vals) - 1)
+        sd = variance ** 0.5
+        return round((sd / m) * 100, 4)
+
+    def _stats(vals: list) -> dict:
+        if not vals:
+            return {"n": 0, "mean": None, "range": None, "cv": None}
+        n = len(vals)
+        mean = round(sum(vals) / n, 6)
+        rng = round(max(vals) - min(vals), 6) if n >= 2 else None
+        cv = _cv(vals)
+        return {"n": n, "mean": mean, "range": rng, "cv": cv}
+
+    # ── Level 1: Between cans ────────────────────────────────────────────────
+    can_entries = []
+    for can in hierarchy:
+        if can.get("mean_hank") is not None:
+            can_entries.append({
+                "label": can["label"],
+                "slot": can.get("slot"),
+                "mean": can["mean_hank"],
+                "cv_pct": can.get("cv_pct"),
+                "n_bobbins": len(can.get("bobbins", [])),
+            })
+    can_means = [c["mean"] for c in can_entries]
+    level1 = {**_stats(can_means), "cans": can_entries}
+
+    # ── Level 2: Between bobbins within same can ─────────────────────────────
+    level2 = []
+    for can in hierarchy:
+        bobbins = can.get("bobbins", [])
+        bobbin_entries = [
+            {
+                "label": b["label"],
+                "machine_number": b.get("machine_number"),
+                "spindle_number": b.get("spindle_number"),
+                "mean": b["mean_hank"],
+                "cv_pct": b.get("cv_pct"),
+            }
+            for b in bobbins
+            if b.get("mean_hank") is not None
+        ]
+        if not bobbin_entries:
+            continue
+        vals = [b["mean"] for b in bobbin_entries]
+        level2.append({
+            "can_label": can["label"],
+            "can_slot": can.get("slot"),
+            "bobbins": bobbin_entries,
+            **_stats(vals),
+        })
+
+    # ── Level 3: Between cops within same bobbin ─────────────────────────────
+    level3 = []
+    for can in hierarchy:
+        for bobbin in can.get("bobbins", []):
+            cop_entries = [
+                {
+                    "label": c["label"],
+                    "frame_number": c.get("frame_number"),
+                    "spindle_number": c.get("spindle_number"),
+                    "mean": c["mean_hank"],
+                    "cv_pct": c.get("cv_pct"),
+                }
+                for c in bobbin.get("cops", [])
+                if c.get("mean_hank") is not None
+            ]
+            if not cop_entries:
+                continue
+            vals = [c["mean"] for c in cop_entries]
+            level3.append({
+                "bobbin_label": bobbin["label"],
+                "can_label": can["label"],
+                "machine_number": bobbin.get("machine_number"),
+                "spindle_number": bobbin.get("spindle_number"),
+                "cops": cop_entries,
+                **_stats(vals),
+            })
+
+    # ── Level 4: Within-cop reading variation (stored cv_pct) ────────────────
+    level4 = []
+    for can in hierarchy:
+        for bobbin in can.get("bobbins", []):
+            for cop in bobbin.get("cops", []):
+                if cop.get("cv_pct") is not None:
+                    level4.append({
+                        "cop_label": cop["label"],
+                        "bobbin_label": bobbin["label"],
+                        "can_label": can["label"],
+                        "frame_number": cop.get("frame_number"),
+                        "spindle_number": cop.get("spindle_number"),
+                        "mean_hank": cop.get("mean_hank"),
+                        "cv_pct": cop["cv_pct"],
+                        "n_readings": cop.get("n_readings", 0),
+                    })
+
+    # Sort level4 descending by cv_pct so worst offenders appear first
+    level4.sort(key=lambda x: x["cv_pct"], reverse=True)
+
+    return {
+        "level1": level1,
+        "level2": level2,
+        "level3": level3,
+        "level4": level4,
+    }
