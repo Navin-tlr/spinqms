@@ -1489,7 +1489,7 @@ function RingFramePanel({ trialId, cops, refreshFlow }) {
         <div>
           <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--tx)' }}>Ring Frame</div>
           <div style={{ fontSize: 11, color: 'var(--tx-4)' }}>
-            {frames.length} frame{frames.length !== 1 ? 's' : ''} · drop bobbins → cops (up to 9 per frame, 5 relays each)
+            {frames.length} frame{frames.length !== 1 ? 's' : ''} · {cops.length} cop{cops.length !== 1 ? 's' : ''} total · drop bobbins to create cops
           </div>
         </div>
         <SmBtn primary onClick={addFrame} disabled={busyId === 'new'}>
@@ -1587,7 +1587,7 @@ function FrameCard({ initialFrameNumber, cops, isLocal, busy, onCreateCop, onUpd
   // Drop a bobbin onto the frame → create a new cop associated with this frame
   const handleFrameDrop = async (e) => {
     e.preventDefault()
-    if (cops.length >= 9) return
+    if (cops.length >= 50) return
     const bobbinId = parseInt(e.dataTransfer.getData('application/x-simplex-bobbin'), 10)
     const bobbinLabel = e.dataTransfer.getData('application/x-simplex-bobbin-label') || 'Bobbin'
     if (!bobbinId) return
@@ -1674,7 +1674,7 @@ function FrameCard({ initialFrameNumber, cops, isLocal, busy, onCreateCop, onUpd
         <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--tx)', minWidth: 90 }}>
           Frame {frameNum || '?'}
         </span>
-        <span style={{ fontSize: 12, color: 'var(--tx-3)' }}>{cops.length}/9 Cops Logged</span>
+        <span style={{ fontSize: 12, color: 'var(--tx-3)' }}>{cops.length} Cops Logged</span>
         <span style={{
           padding: '3px 10px', borderRadius: 12, fontSize: 11, fontWeight: 700,
           background: vColor, color: '#fff', letterSpacing: '.04em',
@@ -1709,7 +1709,7 @@ function FrameCard({ initialFrameNumber, cops, isLocal, busy, onCreateCop, onUpd
           }}
           style={{ ...inputStyle, width: 80 }}
         />
-        <span style={{ fontSize: 11, color: 'var(--tx-4)' }}>{cops.length} / 9 Cops</span>
+        <span style={{ fontSize: 11, color: 'var(--tx-4)' }}>{cops.length} Cops</span>
         {isLocal && cops.length === 0 && (
           <button onClick={onRemoveLocal} style={{
             marginLeft: 'auto', border: 'none', background: 'transparent',
@@ -1725,23 +1725,23 @@ function FrameCard({ initialFrameNumber, cops, isLocal, busy, onCreateCop, onUpd
           onDragOver={e => e.preventDefault()}
           onDrop={handleFrameDrop}
           style={{
-            border: `1.5px dashed ${cops.length >= 9 ? 'var(--bd)' : 'var(--bd-md)'}`,
+            border: `1.5px dashed ${cops.length >= 50 ? 'var(--bd)' : 'var(--bd-md)'}`,
             borderRadius: 'var(--r)', background: 'var(--bg-2)',
             padding: cops.length === 0 ? '18px 14px' : '8px 12px',
             minHeight: 52, display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center',
-            opacity: cops.length >= 9 ? .5 : 1,
+            opacity: cops.length >= 50 ? .5 : 1,
             transition: 'opacity .15s',
           }}>
           {cops.length === 0 ? (
             <span style={{ fontSize: 12, color: 'var(--tx-3)', width: '100%', textAlign: 'center' }}>
-              Drop simplex bobbins here — each bobbin creates one cop (up to 9)
+              Drop simplex bobbins here — each bobbin creates one cop
             </span>
-          ) : cops.length < 9 ? (
+          ) : cops.length < 50 ? (
             <span style={{ fontSize: 11, color: 'var(--tx-4)' }}>
-              + Drop another bobbin ({9 - cops.length} slot{9 - cops.length !== 1 ? 's' : ''} remaining)
+              + Drop another bobbin to add a cop
             </span>
           ) : (
-            <span style={{ fontSize: 11, color: 'var(--tx-4)' }}>Frame full — 9/9 cops</span>
+            <span style={{ fontSize: 11, color: 'var(--tx-4)' }}>Frame full — 50 cops max</span>
           )}
         </div>
 
