@@ -2056,7 +2056,7 @@ const _signed = (val, dp) => val != null ? `${val > 0 ? '+' : ''}${val.toFixed(d
 const _fmt    = (val, dp) => val != null ? val.toFixed(dp) : '—'
 
 /* ── InfoTip — inline ? tooltip for jargon column headers ──────────────────── */
-/* Uses position:fixed so it escapes table overflow clipping entirely          */
+/* Renders at position:fixed so it NEVER clips inside table overflow contexts  */
 function InfoTip({ formula, explain }) {
   const [tipPos, setTipPos] = useState(null)
 
@@ -2064,15 +2064,18 @@ function InfoTip({ formula, explain }) {
     e.stopPropagation()
     if (tipPos) { setTipPos(null); return }
     const rect = e.currentTarget.getBoundingClientRect()
-    const tipW = 248
+    const tipW = 290
+    // use clientWidth to exclude scrollbar from measurement
+    const viewW = document.documentElement.clientWidth
     let left = Math.round(rect.left)
-    if (left + tipW > window.innerWidth - 12) left = window.innerWidth - tipW - 12
-    setTipPos({ top: Math.round(rect.bottom + 5), left })
+    if (left + tipW > viewW - 10) left = Math.max(10, viewW - tipW - 10)
+    setTipPos({ top: Math.round(rect.bottom + 6), left })
   }
 
   useEffect(() => {
     if (!tipPos) return
     const hide = () => setTipPos(null)
+    // capture phase so it fires before any stopPropagation in child elements
     window.addEventListener('click', hide, { capture: true, once: true })
     return () => window.removeEventListener('click', hide, { capture: true })
   }, [tipPos])
@@ -2083,7 +2086,7 @@ function InfoTip({ formula, explain }) {
         onClick={handleClick}
         style={{
           width: 13, height: 13, borderRadius: '50%',
-          border: '1px solid var(--bd-md)',
+          border: `1px solid ${tipPos ? 'var(--claude)' : 'var(--bd-md)'}`,
           background: tipPos ? 'var(--claude)' : 'var(--bg-3)',
           color: tipPos ? '#fff' : 'var(--tx-4)',
           fontSize: 8, fontWeight: 700, lineHeight: 1,
@@ -2094,13 +2097,18 @@ function InfoTip({ formula, explain }) {
       {tipPos && (
         <div style={{
           position: 'fixed', top: tipPos.top, left: tipPos.left, zIndex: 9999,
-          width: 248, padding: '9px 12px',
+          width: 290,
           background: 'var(--bg)', border: '1px solid var(--bd-md)',
-          borderRadius: 'var(--r)', boxShadow: '0 4px 20px rgba(0,0,0,.22)',
+          borderRadius: 'var(--r)', boxShadow: '0 6px 24px rgba(0,0,0,.18)',
+          overflow: 'hidden',
           pointerEvents: 'none',
         }}>
-          <code style={{ display: 'block', fontSize: 10, fontFamily: 'var(--mono)', color: 'var(--claude)', marginBottom: 6 }}>{formula}</code>
-          <div style={{ fontSize: 11, color: 'var(--tx-2)', lineHeight: 1.6, fontFamily: 'var(--font)', fontWeight: 400 }}>{explain}</div>
+          <div style={{ padding: '6px 10px', background: 'var(--bg-2)', borderBottom: '1px solid var(--bd)' }}>
+            <code style={{ fontSize: 10, fontFamily: 'var(--mono)', color: 'var(--claude)', wordBreak: 'break-all' }}>{formula}</code>
+          </div>
+          <div style={{ padding: '7px 10px', fontSize: 11, color: 'var(--tx-2)', lineHeight: 1.6, fontFamily: 'var(--font)', fontWeight: 400, wordWrap: 'break-word', whiteSpace: 'normal' }}>
+            {explain}
+          </div>
         </div>
       )}
     </span>
@@ -2566,9 +2574,16 @@ function MathGlossary({ dp, nominalDraft, H_target, H_b_target }) {
   )
 }
 
-/* ── Lineage Trace: visual chain Can → Bobbin → Cop ─────────────────────────── */
+/* ── Lineage Trace: frame-first causal grid ──────────────────────────────────── */
+/*                                                                               */
+/*  Design principles:                                                           */
+/*  • Default: ONE frame shown — clean horizontal path per bobbin                */
+/*  • Select multiple frames → cop columns branch side-by-side                  */
+/*  • Color only on DATA values that deviate (never on containers)               */
+/*  • Uniform column widths — ERP-style grid, not decorated cards                */
+/*                                                                               */
 function LineageTraceTable({ report, machineFilter }) {
-  const [frameFilter, setFrameFilter] = useState(null)
+  const [selectedFrames, setSelectedFrames] = useState([])
 
   const { bobbins, byBobbin, H_target, H_b_target, rfTol } = report
   const dp   = H_target   >= 10 ? 2 : 4
@@ -2581,11 +2596,38 @@ function LineageTraceTable({ report, machineFilter }) {
     visible.flatMap(b => (byBobbin[b.id]?.rows ?? []).map(r => r.frame))
   )].sort((a, b) => a - b)
 
+  // Keep selection valid when machine filter changes
+  useEffect(() => {
+    setSelectedFrames(prev => {
+      const valid = prev.filter(f => allFrames.includes(f))
+      return valid.length > 0 ? valid : allFrames.slice(0, 1)
+    })
+  }, [machineFilter]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Initialise to first frame on mount
+  useEffect(() => {
+    setSelectedFrames(prev => prev.length > 0 ? prev : allFrames.slice(0, 1))
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const displayFrames = (() => {
+    const valid = selectedFrames.filter(f => allFrames.includes(f))
+    return valid.length > 0 ? valid : allFrames.slice(0, 1)
+  })()
+
+  const toggleFrame = (f) => {
+    const next = displayFrames.includes(f)
+      ? displayFrames.filter(x => x !== f)
+      : [...displayFrames, f].sort((a, b) => a - b)
+    setSelectedFrames(next.length > 0 ? next : displayFrames)
+  }
+
   if (!visible.length) return (
-    <div style={{ fontSize: 12, color: 'var(--tx-4)', padding: '10px 0' }}>No bobbins match the current filter.</div>
+    <p style={{ fontSize: 12, color: 'var(--tx-4)', margin: 0 }}>No bobbins match the current filter.</p>
+  )
+  if (allFrames.length === 0) return (
+    <p style={{ fontSize: 12, color: 'var(--tx-4)', margin: 0 }}>No ring frame cops logged yet.</p>
   )
 
-  // Classify a cop hank into pass/warn/fail/pending
   const copStatus = (hank) => {
     if (hank == null) return 'pending'
     const dev = Math.abs(hank - H_target)
@@ -2594,203 +2636,168 @@ function LineageTraceTable({ report, machineFilter }) {
     return 'fail'
   }
 
-  // Arrow connector
-  const Arrow = () => (
-    <div style={{
-      alignSelf: 'center', flexShrink: 0, padding: '0 4px',
-      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1,
-    }}>
-      <div style={{ width: 28, height: 1, background: 'var(--bd-md)' }} />
-      <div style={{ fontSize: 10, color: 'var(--tx-4)', lineHeight: 1 }}>▶</div>
-    </div>
-  )
+  // Uniform column dimensions
+  const COL = 108   // data column width (all 3 stages identical)
+  const ARW = 36    // arrow column
+
+  // gridTemplateColumns: can·arrow·bobbin·arrow·cop×N
+  const gridCols = `${COL}px ${ARW}px ${COL}px ${ARW}px ${displayFrames.map(() => `${COL}px`).join(' ')}`
+
+  // Style factories
+  const hdrCell = (extra = {}) => ({
+    padding: '6px 10px', display: 'flex', alignItems: 'center',
+    background: 'var(--bg-2)', borderBottom: '2px solid var(--bd-md)',
+    fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.08em',
+    color: 'var(--tx-4)',
+    ...extra,
+  })
+  const dataCell = (extra = {}) => ({
+    padding: '9px 10px', display: 'flex', flexDirection: 'column', gap: 2, justifyContent: 'center',
+    background: 'var(--bg)', borderBottom: '1px solid var(--bd)',
+    ...extra,
+  })
+  const arrowCell = (extra = {}) => ({
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    background: 'var(--bg)', borderBottom: '1px solid var(--bd)',
+    color: 'var(--bd-md)', fontSize: 12, userSelect: 'none', letterSpacing: 0,
+    ...extra,
+  })
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
 
-      {/* Frame filter bar */}
-      {allFrames.length > 1 && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 11, color: 'var(--tx-4)', fontWeight: 600 }}>Frame:</span>
-          {[null, ...allFrames].map(f => (
-            <button key={f ?? 'all'}
-              onClick={() => setFrameFilter(prev => prev === f ? null : f)}
-              style={{
-                padding: '3px 10px', fontSize: 11, fontWeight: 600, borderRadius: 'var(--r)',
-                border: `1px solid ${frameFilter === f ? 'var(--claude)' : 'var(--bd)'}`,
-                background: frameFilter === f ? 'var(--claude)' : 'var(--bg)',
-                color: frameFilter === f ? '#fff' : 'var(--tx-3)',
-                cursor: 'pointer', fontFamily: 'var(--font)', transition: 'all .1s',
-              }}
-            >{f == null ? 'All' : `Fr ${f}`}</button>
-          ))}
+      {/* ── Frame selector ── */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
+        padding: '8px 12px', borderRadius: 'var(--r)',
+        background: 'var(--bg-2)', border: '1px solid var(--bd)',
+      }}>
+        <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--tx-3)', flexShrink: 0 }}>Ring Frame:</span>
+        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', flex: 1 }}>
+          {allFrames.map(f => {
+            const on = displayFrames.includes(f)
+            return (
+              <button key={f} onClick={() => toggleFrame(f)} style={{
+                padding: '2px 8px', fontSize: 11, fontWeight: on ? 700 : 400, borderRadius: 4,
+                border: `1px solid ${on ? 'var(--claude)' : 'var(--bd)'}`,
+                background: on ? 'var(--claude)' : 'transparent',
+                color: on ? '#fff' : 'var(--tx-3)',
+                cursor: 'pointer', fontFamily: 'var(--font)', transition: 'background .1s, color .1s',
+              }}>Fr {f}</button>
+            )
+          })}
         </div>
-      )}
+        <span style={{ fontSize: 10, color: 'var(--tx-4)', flexShrink: 0 }}>
+          {displayFrames.length === 1
+            ? 'Add more frames to compare side-by-side'
+            : `${displayFrames.length} frames — columns branch right`}
+        </span>
+      </div>
 
-      {/* One card per visible bobbin */}
-      {visible.map(b => {
-        const info       = byBobbin[b.id]
-        const allCops    = info?.rows ?? []
-        const cops       = frameFilter == null ? allCops : allCops.filter(r => r.frame === frameFilter)
-        const cans       = b.rsb_cans ?? []
-        const validCans  = cans.filter(c => c.can_hank != null)
-        const avgCanHank = validCans.length ? validCans.reduce((s, c) => s + c.can_hank, 0) / validCans.length : null
-        const avgCopHank = cops.length ? cops.reduce((s, r) => s + r.copHank, 0) / cops.length : null
-        const sxDraft    = avgCanHank && b.bobbin_hank ? b.bobbin_hank / avgCanHank : null
-        const rfDraft    = b.bobbin_hank && avgCopHank  ? avgCopHank / b.bobbin_hank : null
-        if (frameFilter != null && !cops.length) return null
+      {/* ── ERP Grid ── */}
+      <div style={{ overflowX: 'auto' }}>
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: gridCols,
+          border: '1px solid var(--bd)',
+          borderRadius: 'var(--r)',
+          overflow: 'hidden',
+          width: 'max-content',
+        }}>
 
-        // Overall card status — worst cop determines the border colour
-        const cardStatus = cops.length === 0 ? 'pending'
-          : cops.some(r => copStatus(r.copHank) === 'fail')  ? 'fail'
-          : cops.some(r => copStatus(r.copHank) === 'warn')  ? 'warn'
-          : 'pass'
-
-        return (
-          <div key={b.id} style={{
-            borderRadius: 'var(--r-lg)', overflow: 'hidden',
-            border: `1px solid ${V_BD[cardStatus]}`,
-            boxShadow: '0 1px 4px rgba(0,0,0,.06)',
-          }}>
-
-            {/* ── Card header ── */}
-            <div style={{
-              display: 'flex', alignItems: 'center', gap: 10,
-              padding: '9px 14px',
-              background: V_BG[cardStatus],
-              borderBottom: `1px solid ${V_BD[cardStatus]}`,
-            }}>
-              <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--tx)' }}>{b.label}</span>
-              {b.machine_number != null && (
-                <span style={{
-                  fontSize: 10, fontWeight: 700, padding: '1px 7px', borderRadius: 8,
-                  background: 'var(--bg-3)', border: '1px solid var(--bd)', color: 'var(--tx-2)',
-                }}>Sx {b.machine_number}</span>
-              )}
-              {/* Provenance summary */}
-              <span style={{ fontSize: 11, color: 'var(--tx-3)', fontFamily: 'var(--mono)', marginLeft: 2 }}>
-                {cans.length} can{cans.length !== 1 ? 's' : ''} → 1 bobbin → {cops.length} cop{cops.length !== 1 ? 's' : ''}
-              </span>
-              {/* Status pill */}
-              <span style={{
-                marginLeft: 'auto', fontSize: 10, fontWeight: 700,
-                padding: '2px 8px', borderRadius: 6,
-                background: V_BG[cardStatus], color: V_COLOR[cardStatus],
-                border: `1px solid ${V_BD[cardStatus]}`,
-              }}>{V_LABEL[cardStatus]}</span>
+          {/* Header row */}
+          <div style={hdrCell()}>RSB Can</div>
+          <div style={hdrCell()} />
+          <div style={hdrCell({ color: 'var(--claude)', background: 'var(--claude-bg)', borderLeft: '2px solid var(--claude-bd)' })}>Bobbin</div>
+          <div style={hdrCell()} />
+          {displayFrames.map((f, fi) => (
+            <div key={f} style={hdrCell({ borderLeft: fi > 0 ? '1px solid var(--bd)' : undefined })}>
+              Frame {f}
             </div>
+          ))}
 
-            {/* ── Flow chain ── */}
-            <div style={{
-              padding: '14px 16px',
-              background: 'var(--bg)',
-              display: 'flex', alignItems: 'flex-start', gap: 0, overflowX: 'auto',
-            }}>
+          {/* Data rows — flatMap emits 4+N cells per bobbin directly into the grid */}
+          {visible.flatMap((b, ri) => {
+            const isLast = ri === visible.length - 1
+            const last   = isLast ? { borderBottom: 'none' } : {}
+            const cans   = b.rsb_cans ?? []
+            const info   = byBobbin[b.id]
 
-              {/* Can(s) node */}
-              <div style={{
-                flexShrink: 0, minWidth: 96,
-                display: 'flex', flexDirection: 'column', gap: 0,
-                border: '1px solid var(--bd)', borderRadius: 'var(--r)',
-                overflow: 'hidden',
-              }}>
-                <div style={{ padding: '4px 10px', background: 'var(--bg-2)', borderBottom: '1px solid var(--bd)' }}>
-                  <span style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.08em', color: 'var(--tx-4)' }}>
-                    RSB Can{cans.length !== 1 ? 's' : ''}
-                  </span>
-                </div>
-                <div style={{ padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 5 }}>
-                  {cans.length === 0
-                    ? <span style={{ fontSize: 12, color: 'var(--tx-4)' }}>—</span>
-                    : cans.map(c => (
-                      <div key={c.can_id}>
-                        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--tx)', lineHeight: 1.2 }}>Can {c.can_slot}</div>
-                        <div style={{ fontSize: 11, fontFamily: 'var(--mono)', color: 'var(--tx-3)', marginTop: 1 }}>
-                          {c.can_hank != null ? c.can_hank.toFixed(b_dp) : <span style={{ color: 'var(--tx-4)' }}>—</span>}
-                        </div>
-                      </div>
-                    ))
-                  }
-                </div>
-              </div>
-
-              <Arrow />
-
-              {/* Bobbin node — accent coloured */}
-              <div style={{
-                flexShrink: 0, minWidth: 106,
-                display: 'flex', flexDirection: 'column', gap: 0,
-                border: '1px solid var(--claude-bd)', borderRadius: 'var(--r)',
-                overflow: 'hidden',
-              }}>
-                <div style={{ padding: '4px 10px', background: 'var(--claude-bg)', borderBottom: '1px solid var(--claude-bd)' }}>
-                  <span style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.08em', color: 'var(--claude)' }}>Bobbin</span>
-                </div>
-                <div style={{ padding: '8px 10px' }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--tx)', lineHeight: 1.2 }}>{b.label}</div>
-                  <div style={{ fontSize: 11, fontFamily: 'var(--mono)', color: b.bobbin_hank != null ? 'var(--tx-2)' : 'var(--tx-4)', marginTop: 1 }}>
-                    {b.bobbin_hank != null ? b.bobbin_hank.toFixed(b_dp) : 'No reading'}
-                  </div>
-                </div>
-              </div>
-
-              <Arrow />
-
-              {/* Cop(s) node */}
-              <div style={{
-                flexShrink: 0, minWidth: 120,
-                display: 'flex', flexDirection: 'column', gap: 0,
-                border: '1px solid var(--bd)', borderRadius: 'var(--r)',
-                overflow: 'hidden',
-              }}>
-                <div style={{ padding: '4px 10px', background: 'var(--bg-2)', borderBottom: '1px solid var(--bd)' }}>
-                  <span style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.08em', color: 'var(--tx-4)' }}>Ring Frame</span>
-                </div>
-                <div style={{ padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 5 }}>
-                  {cops.length === 0
-                    ? <span style={{ fontSize: 12, color: 'var(--tx-4)' }}>
-                        {frameFilter != null ? `No cop on Fr ${frameFilter}` : 'No cops logged'}
+            return [
+              /* ── RSB Can cell ── */
+              <div key={`${b.id}C`} style={dataCell(last)}>
+                {cans.length === 0
+                  ? <span style={{ fontSize: 11, color: 'var(--tx-4)' }}>—</span>
+                  : cans.map(c => (
+                    <div key={c.can_id} style={{ lineHeight: 1.35 }}>
+                      <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--tx)', display: 'block' }}>
+                        Can {c.can_slot}
                       </span>
-                    : cops.map((r, ci) => {
-                      const st  = copStatus(r.copHank)
-                      const dev = r.copHank - H_target
-                      return (
-                        <div key={ci} style={{ display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'nowrap' }}>
-                          <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--tx-3)', whiteSpace: 'nowrap' }}>Fr {r.frame}</span>
-                          <span style={{ fontSize: 13, fontFamily: 'var(--mono)', fontWeight: 700, color: V_COLOR[st], whiteSpace: 'nowrap' }}>
-                            {r.copHank.toFixed(dp)}
-                          </span>
-                          <span style={{ fontSize: 10, fontFamily: 'var(--mono)', color: V_COLOR[st], whiteSpace: 'nowrap' }}>
-                            {dev >= 0 ? '+' : ''}{dev.toFixed(dp)}
-                          </span>
-                        </div>
-                      )
-                    })
-                  }
-                </div>
-              </div>
-            </div>
+                      <span style={{ fontSize: 10, fontFamily: 'var(--mono)', color: 'var(--tx-3)', display: 'block' }}>
+                        {c.can_hank != null ? c.can_hank.toFixed(b_dp) : '—'}
+                      </span>
+                    </div>
+                  ))
+                }
+              </div>,
 
-            {/* ── Metrics footer ── */}
-            <div style={{
-              display: 'flex', gap: 24, flexWrap: 'wrap', alignItems: 'center',
-              padding: '8px 16px',
-              background: 'var(--bg-2)', borderTop: '1px solid var(--bd)',
-            }}>
-              {[
-                { label: 'Sx Draft', val: sxDraft != null ? sxDraft.toFixed(3) + '×' : '—' },
-                { label: 'RF Draft', val: rfDraft != null ? rfDraft.toFixed(3) + '×' : '—' },
-                { label: 'Cops',     val: frameFilter != null ? String(cops.length) : `${allCops.length}` },
-              ].map(m => (
-                <div key={m.label} style={{ display: 'flex', gap: 6, alignItems: 'baseline' }}>
-                  <span style={{ fontSize: 10, color: 'var(--tx-4)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.07em' }}>{m.label}</span>
-                  <span style={{ fontSize: 12, fontFamily: 'var(--mono)', color: 'var(--tx-2)', fontWeight: 600 }}>{m.val}</span>
+              /* ── Arrow ── */
+              <div key={`${b.id}A1`} style={arrowCell(last)}>→</div>,
+
+              /* ── Bobbin cell ── */
+              <div key={`${b.id}B`} style={dataCell({ ...last, background: 'var(--claude-bg)', borderLeft: '2px solid var(--claude-bd)' })}>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 5 }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--tx)' }}>{b.label}</span>
+                  {b.machine_number != null && (
+                    <span style={{ fontSize: 9, fontWeight: 600, color: 'var(--tx-4)' }}>Sx {b.machine_number}</span>
+                  )}
                 </div>
-              ))}
-            </div>
+                <span style={{ fontSize: 10, fontFamily: 'var(--mono)', color: b.bobbin_hank != null ? 'var(--tx-3)' : 'var(--tx-4)' }}>
+                  {b.bobbin_hank != null ? b.bobbin_hank.toFixed(b_dp) : '—'}
+                </span>
+              </div>,
+
+              /* ── Arrow ── */
+              <div key={`${b.id}A2`} style={arrowCell(last)}>→</div>,
+
+              /* ── Cop cell(s) — one per selected frame ── */
+              ...displayFrames.map((f, fi) => {
+                const cop = info?.rows.find(r => r.frame === f) ?? null
+                const st  = copStatus(cop?.copHank)
+                const dev = cop ? cop.copHank - H_target : null
+                return (
+                  <div key={`${b.id}F${f}`} style={dataCell({
+                    ...last,
+                    borderLeft: fi > 0 ? '1px solid var(--bd)' : undefined,
+                  })}>
+                    {cop == null
+                      ? <span style={{ fontSize: 11, color: 'var(--tx-4)' }}>—</span>
+                      : <>
+                        <span style={{ fontSize: 13, fontFamily: 'var(--mono)', fontWeight: 700, color: V_COLOR[st], lineHeight: 1 }}>
+                          {cop.copHank.toFixed(dp)}
+                        </span>
+                        <span style={{ fontSize: 10, fontFamily: 'var(--mono)', color: V_COLOR[st] }}>
+                          {dev >= 0 ? '+' : ''}{dev.toFixed(dp)}
+                        </span>
+                      </>
+                    }
+                  </div>
+                )
+              }),
+            ]
+          })}
+        </div>
+      </div>
+
+      {/* ── Legend ── */}
+      <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
+        {[['pass', 'Within ½ tol'], ['warn', 'Within tol'], ['fail', 'Exceeds tol']].map(([st, label]) => (
+          <div key={st} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+            <div style={{ width: 8, height: 8, borderRadius: 2, background: V_COLOR[st] }} />
+            <span style={{ fontSize: 10, color: 'var(--tx-4)' }}>{label}</span>
           </div>
-        )
-      })}
+        ))}
+      </div>
     </div>
   )
 }
@@ -2956,7 +2963,7 @@ function InteractionReport({ trialId }) {
         {/* Lineage Trace: Can → Bobbin → Cop */}
         <IrSection
           title="Lineage Trace — Can → Bobbin → Cop"
-          subtitle="Visual flow chain showing which RSB cans fed each Simplex bobbin, and which cops each bobbin produced. Filter by frame to isolate specific frame interactions. Sx Draft and RF Draft are shown as secondary metrics."
+          subtitle="Select a ring frame to trace Can → Bobbin → Cop for that frame. Select multiple frames to compare side-by-side — cop columns branch right. Color on cop values only; containers are neutral."
         >
           <LineageTraceTable report={report} machineFilter={machineFilter} />
         </IrSection>
