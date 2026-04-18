@@ -1587,13 +1587,16 @@ function FrameCard({ initialFrameNumber, cops, isLocal, busy, onCreateCop, onUpd
   // Drop a bobbin onto the frame → create a new cop associated with this frame
   const handleFrameDrop = async (e) => {
     e.preventDefault()
-    if (cops.length >= 50) return
+    if (cops.length >= 5000) return
     const bobbinId = parseInt(e.dataTransfer.getData('application/x-simplex-bobbin'), 10)
     const bobbinLabel = e.dataTransfer.getData('application/x-simplex-bobbin-label') || 'Bobbin'
     if (!bobbinId) return
     const fn = frameNum !== '' ? parseInt(frameNum, 10) : null
+    // Derive cop label from bobbin: "Bobbin 1-2" → "Cop 1-2"
+    const bobbinSuffix = bobbinLabel.replace(/^Bobbin\s+/i, '').trim()
+    const copLabel = bobbinSuffix ? `Cop ${bobbinSuffix}` : 'Cop'
     await onCreateCop(fn, {
-      label: `Cop from ${bobbinLabel}`,
+      label: copLabel,
       sample_length: DEFAULT_LENGTHS.ringframe,
       readings: [],
       simplex_bobbin_ids: [bobbinId],
@@ -1725,23 +1728,23 @@ function FrameCard({ initialFrameNumber, cops, isLocal, busy, onCreateCop, onUpd
           onDragOver={e => e.preventDefault()}
           onDrop={handleFrameDrop}
           style={{
-            border: `1.5px dashed ${cops.length >= 50 ? 'var(--bd)' : 'var(--bd-md)'}`,
+            border: `1.5px dashed ${cops.length >= 500 ? 'var(--bd)' : 'var(--bd-md)'}`,
             borderRadius: 'var(--r)', background: 'var(--bg-2)',
             padding: cops.length === 0 ? '18px 14px' : '8px 12px',
             minHeight: 52, display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center',
-            opacity: cops.length >= 50 ? .5 : 1,
+            opacity: cops.length >= 500 ? .5 : 1,
             transition: 'opacity .15s',
           }}>
           {cops.length === 0 ? (
             <span style={{ fontSize: 12, color: 'var(--tx-3)', width: '100%', textAlign: 'center' }}>
               Drop simplex bobbins here — each bobbin creates one cop
             </span>
-          ) : cops.length < 50 ? (
+          ) : cops.length < 500 ? (
             <span style={{ fontSize: 11, color: 'var(--tx-4)' }}>
               + Drop another bobbin to add a cop
             </span>
           ) : (
-            <span style={{ fontSize: 11, color: 'var(--tx-4)' }}>Frame full — 50 cops max</span>
+            <span style={{ fontSize: 11, color: 'var(--tx-4)' }}>Frame full — 500 cops max</span>
           )}
         </div>
 
