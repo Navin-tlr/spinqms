@@ -1485,6 +1485,25 @@ function RingFramePanel({ trialId, cops, refreshFlow }) {
     finally { setBusyId(null) }
   }
 
+  const handleDeleteFrame = async (frameKey, frameCops, localId) => {
+    // Local empty frame — just remove placeholder, no API call needed
+    if (frameCops.length === 0) {
+      setLocalFrames(lf => lf.filter(f => f.id !== localId))
+      return
+    }
+    const label = frameKey === '__none__' ? 'unassigned frame' : `Frame ${frameKey}`
+    if (!window.confirm(`Delete ${label} and all ${frameCops.length} cop${frameCops.length !== 1 ? 's' : ''} in it? This cannot be undone.`)) return
+    setBusyId('delete-frame')
+    try {
+      for (const cop of frameCops) {
+        await deleteRingframeCop(cop.id)
+      }
+      await refreshFlow()
+    } finally {
+      setBusyId(null)
+    }
+  }
+
   return (
     <div style={{ border: '1.5px solid var(--bd)', borderRadius: 'var(--r-lg)', padding: 16, background: 'var(--bg)' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
@@ -1526,6 +1545,7 @@ function RingFramePanel({ trialId, cops, refreshFlow }) {
               onCreateCop={handleCreateCop}
               onUpdateCop={handleUpdateCop}
               onDeleteCop={handleDeleteCop}
+              onDeleteFrame={() => handleDeleteFrame(frame.key, frame.cops, frame.localId)}
               onRemoveLocal={() => setLocalFrames(lf => lf.filter(f => f.id !== frame.localId))}
             />
           ))}
@@ -1797,7 +1817,7 @@ function CopAccordion({ cops, copForms, setCopForms, onDeleteCop, handleCopDrop,
    • Bobbins from Simplex can be dropped onto the frame → creates a new cop
    • A single bobbin can also be linked to multiple frames
 ══════════════════════════════════════════════════════════════════════════════ */
-function FrameCard({ initialFrameNumber, cops, isLocal, busy, forceExpanded, onCreateCop, onUpdateCop, onDeleteCop, onRemoveLocal }) {
+function FrameCard({ initialFrameNumber, cops, isLocal, busy, forceExpanded, onCreateCop, onUpdateCop, onDeleteCop, onDeleteFrame, onRemoveLocal }) {
   const [isExpanded, setIsExpanded] = useState(true)
 
   // Sync with panel-level expand/collapse toggle
@@ -1945,16 +1965,30 @@ function FrameCard({ initialFrameNumber, cops, isLocal, busy, forceExpanded, onC
         <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--tx)', minWidth: 90 }}>
           Frame {frameNum || '?'}
         </span>
-        <span style={{ fontSize: 12, color: 'var(--tx-3)' }}>{cops.length} Cops Logged</span>
+        <span style={{ fontSize: 12, color: 'var(--tx-3)' }}>{cops.length} Cop{cops.length !== 1 ? 's' : ''}</span>
         <span style={{
           padding: '3px 10px', borderRadius: 12, fontSize: 11, fontWeight: 700,
           background: vColor, color: '#fff', letterSpacing: '.04em',
         }}>{vLabel}</span>
-        <button onClick={() => setIsExpanded(true)} style={{
-          marginLeft: 'auto', border: '1px solid var(--bd-md)', background: 'var(--bg)',
-          borderRadius: 'var(--r)', padding: '5px 12px', fontSize: 12, cursor: 'pointer',
-          color: 'var(--tx-2)', fontFamily: 'var(--font)', fontWeight: 500,
-        }}>▼ Expand</button>
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+          <button
+            onClick={onDeleteFrame}
+            title={cops.length > 0 ? `Delete frame and all ${cops.length} cops` : 'Remove frame'}
+            style={{
+              border: '1px solid var(--bd)', background: 'var(--bg)',
+              borderRadius: 'var(--r)', padding: '5px 10px', fontSize: 11, cursor: 'pointer',
+              color: 'var(--tx-3)', fontFamily: 'var(--font)', fontWeight: 500,
+              transition: 'all .12s',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--bad)'; e.currentTarget.style.color = 'var(--bad)' }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--bd)';  e.currentTarget.style.color  = 'var(--tx-3)' }}
+          >✕</button>
+          <button onClick={() => setIsExpanded(true)} style={{
+            border: '1px solid var(--bd-md)', background: 'var(--bg)',
+            borderRadius: 'var(--r)', padding: '5px 12px', fontSize: 12, cursor: 'pointer',
+            color: 'var(--tx-2)', fontFamily: 'var(--font)', fontWeight: 500,
+          }}>▼ Expand</button>
+        </div>
       </div>
     )
   }
@@ -1980,13 +2014,22 @@ function FrameCard({ initialFrameNumber, cops, isLocal, busy, forceExpanded, onC
           }}
           style={{ ...inputStyle, width: 80 }}
         />
-        <span style={{ fontSize: 11, color: 'var(--tx-4)' }}>{cops.length} Cops</span>
-        {isLocal && cops.length === 0 && (
-          <button onClick={onRemoveLocal} style={{
-            marginLeft: 'auto', border: 'none', background: 'transparent',
-            cursor: 'pointer', color: 'var(--tx-4)', fontSize: 11, padding: '2px 6px',
-          }}>✕ Remove</button>
-        )}
+        <span style={{ fontSize: 11, color: 'var(--tx-4)' }}>{cops.length} Cop{cops.length !== 1 ? 's' : ''}</span>
+        <button
+          onClick={onDeleteFrame}
+          disabled={busy === 'delete-frame'}
+          title={cops.length > 0 ? `Delete frame and all ${cops.length} cops` : 'Remove frame'}
+          style={{
+            marginLeft: 'auto', border: '1px solid var(--bd)', borderRadius: 'var(--r)',
+            background: 'var(--bg)', cursor: 'pointer', color: 'var(--tx-3)',
+            fontSize: 10, fontWeight: 600, padding: '3px 8px', fontFamily: 'var(--font)',
+            transition: 'all .12s',
+          }}
+          onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--bad)'; e.currentTarget.style.color = 'var(--bad)' }}
+          onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--bd)';  e.currentTarget.style.color  = 'var(--tx-3)' }}
+        >
+          {busy === 'delete-frame' ? 'Removing…' : '✕ Remove Frame'}
+        </button>
       </div>
 
       <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>

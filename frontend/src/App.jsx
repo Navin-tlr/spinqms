@@ -140,7 +140,7 @@ export default function App() {
       )}
 
       {view === 'overview' && (
-        <Overview overview={overview} alerts={alerts} currentDept={currentDept} setCurrentDept={setCurrentDept} />
+        <Overview overview={overview} currentDept={currentDept} setCurrentDept={setCurrentDept} />
       )}
       {view === 'entry' && (
         <DataEntry depts={depts} currentDept={currentDept} setCurrentDept={setCurrentDept} onSaved={handleSaved} />
