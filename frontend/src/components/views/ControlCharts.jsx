@@ -122,10 +122,11 @@ export default function ControlCharts({ overview, currentDept, depts, machineFil
     })
   }, [allSamples, range])
 
-  /* Flatten readings + build x-axis labels */
+  /* Flatten readings + build x-axis labels (oldest → newest = left → right) */
   const { arr, labels } = useMemo(() => {
     const arr = [], labels = []
-    filtered.forEach(s => {
+    const ordered = [...filtered].reverse()   // API returns newest-first; flip to oldest-first
+    ordered.forEach(s => {
       const d = new Date(s.timestamp.endsWith('Z') ? s.timestamp : s.timestamp + 'Z')
       const lbl = range === 'shift' || range === '24h'
         ? d.toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' })
@@ -247,8 +248,9 @@ export default function ControlCharts({ overview, currentDept, depts, machineFil
         padding: 10,
         titleFont: { size: 11, weight: 600 },
         bodyFont: { size: 11, family: 'JetBrains Mono, monospace' },
+        filter: item => item.datasetIndex === 0,   // only show the Reading point
         callbacks: {
-          label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y?.toFixed(p + 2)}`,
+          label: ctx => ` ${ctx.parsed.y?.toFixed(p + 2)}`,
         },
       },
     },
