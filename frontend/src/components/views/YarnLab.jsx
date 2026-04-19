@@ -19,7 +19,7 @@ const V_ICON = { pass: '✓', warn: '▲', fail: '✕', pending: '…' }
 
 /* ── Ordered dept list ───────────────────────────────────────────────────── */
 const DEPT_ORDER = ['rsb', 'simplex', 'ringframe']
-const RSB_READING_COUNT = 3
+const RSB_READING_COUNT = 12
 const SIMPLEX_READING_COUNT = 3
 const RING_READING_COUNT = 5
 const DEFAULT_LENGTHS = {
@@ -799,10 +799,10 @@ function RSBPanel({ trialId, cans, refreshFlow, canFeedsTo }) {
   const handleSave = async () => {
     const invalid = draft.some(can => {
       const filled = can.readings.filter(v => v !== '' && !Number.isNaN(parseFloat(v)))
-      return filled.length !== 0 && filled.length !== 3
+      return filled.length > RSB_READING_COUNT
     })
     if (invalid) {
-      setErr('Enter exactly 3 readings per can (or clear all inputs).')
+      setErr(`Enter up to ${RSB_READING_COUNT} readings per can.`)
       return
     }
     setErr('')
@@ -817,7 +817,7 @@ function RSBPanel({ trialId, cans, refreshFlow, canFeedsTo }) {
           notes: c.notes ? c.notes.trim() : null,
           is_perfect: Boolean(c.is_perfect),
           sample_length: c.sample_length || 6,
-          readings: weights.length === RSB_READING_COUNT ? weights : [],
+          readings: weights,
         }
       })
       await saveLabRSB(trialId, payload)
@@ -900,7 +900,7 @@ function RSBPanel({ trialId, cans, refreshFlow, canFeedsTo }) {
                   </span>
                 </div>
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 5 }}>
                 {can.readings.map((val, idx) => {
                   const weight = parseFloat(val)
                   const hank = !Number.isNaN(weight) && weight > 0
@@ -967,7 +967,7 @@ function ReadingSummary({ can }) {
       <span>CV: {cv != null ? cv.toFixed(2) : '—'}%</span>
       <span>Len: {can.sample_length ?? 6} yds</span>
       <span style={{ color: 'var(--ok-bg)', padding: '0 4px', background: 'var(--ok)', borderRadius: 12 }}>
-        {can.readings_count ?? can.readings.filter(v => v).length}/{RSB_READING_COUNT}
+        {can.readings_count ?? can.readings.filter(v => v).length} rdgs
       </span>
     </div>
   )
@@ -1491,8 +1491,6 @@ function RingFramePanel({ trialId, cops, refreshFlow }) {
       setLocalFrames(lf => lf.filter(f => f.id !== localId))
       return
     }
-    const label = frameKey === '__none__' ? 'unassigned frame' : `Frame ${frameKey}`
-    if (!window.confirm(`Delete ${label} and all ${frameCops.length} cop${frameCops.length !== 1 ? 's' : ''} in it? This cannot be undone.`)) return
     setBusyId('delete-frame')
     try {
       for (const cop of frameCops) {
@@ -1563,6 +1561,12 @@ function RingFramePanel({ trialId, cops, refreshFlow }) {
 ══════════════════════════════════════════════════════════════════════════════ */
 function CopAccordion({ cops, copForms, setCopForms, onDeleteCop, handleCopDrop, removeBobbin }) {
   const [openIds, setOpenIds] = useState(new Set())
+  const [confirmCopId, setConfirmCopId] = useState(null)
+  useEffect(() => {
+    if (!confirmCopId) return
+    const t = setTimeout(() => setConfirmCopId(null), 3000)
+    return () => clearTimeout(t)
+  }, [confirmCopId])
 
   const toggleCop = (id) => setOpenIds(prev => {
     const next = new Set(prev)
@@ -1671,6 +1675,23 @@ function CopAccordion({ cops, copForms, setCopForms, onDeleteCop, handleCopDrop,
 
               {/* Chevron */}
               <span style={{ fontSize: 10, color: 'var(--tx-4)', flexShrink: 0, transition: 'transform .15s', transform: isOpen ? 'rotate(180deg)' : 'none' }}>▼</span>
+              {/* Trash button */}
+              <button
+                onClick={e => {
+                  e.stopPropagation()
+                  if (confirmCopId === cop.id) { setConfirmCopId(null); onDeleteCop(cop.id) }
+                  else setConfirmCopId(cop.id)
+                }}
+                title="Delete this cop"
+                style={{
+                  flexShrink: 0, border: `1px solid ${confirmCopId === cop.id ? 'var(--bad)' : 'var(--bd)'}`,
+                  borderRadius: 'var(--r)', padding: '2px 6px', fontSize: 10,
+                  background: confirmCopId === cop.id ? 'var(--bad-bg)' : 'transparent',
+                  color: confirmCopId === cop.id ? 'var(--bad)' : 'var(--tx-4)',
+                  cursor: 'pointer', fontWeight: confirmCopId === cop.id ? 700 : 400,
+                  transition: 'all .12s',
+                }}
+              >{confirmCopId === cop.id ? 'Sure?' : '🗑'}</button>
             </div>
 
             {/* ── Expanded form ── */}
@@ -1695,10 +1716,6 @@ function CopAccordion({ cops, copForms, setCopForms, onDeleteCop, handleCopDrop,
                       title="Spindle number within this ring frame"
                     />
                   </div>
-                  <button onClick={() => onDeleteCop(cop.id)} style={{
-                    marginLeft: 'auto', border: 'none', background: 'transparent',
-                    cursor: 'pointer', color: 'var(--tx-4)', fontSize: 11, padding: '2px 6px',
-                  }}>✕ Delete</button>
                 </div>
 
                 {/* 5 relay readings */}
@@ -1822,6 +1839,14 @@ function FrameCard({ initialFrameNumber, cops, isLocal, busy, forceExpanded, onC
 
   // Sync with panel-level expand/collapse toggle
   useEffect(() => { setIsExpanded(forceExpanded) }, [forceExpanded])
+
+  const [confirmDeleteFrame, setConfirmDeleteFrame] = useState(false)
+  useEffect(() => {
+    if (!confirmDeleteFrame) return
+    const t = setTimeout(() => setConfirmDeleteFrame(false), 3000)
+    return () => clearTimeout(t)
+  }, [confirmDeleteFrame])
+
   const [frameNum, setFrameNum] = useState(
     initialFrameNumber != null ? String(initialFrameNumber) : ''
   )
@@ -1969,17 +1994,17 @@ function FrameCard({ initialFrameNumber, cops, isLocal, busy, forceExpanded, onC
         }}>{vLabel}</span>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
           <button
-            onClick={onDeleteFrame}
+            onClick={() => { if (confirmDeleteFrame) { setConfirmDeleteFrame(false); onDeleteFrame() } else setConfirmDeleteFrame(true) }}
             title={cops.length > 0 ? `Delete frame and all ${cops.length} cops` : 'Remove frame'}
             style={{
-              border: '1px solid var(--bd)', background: 'var(--bg)',
+              border: `1px solid ${confirmDeleteFrame ? 'var(--bad)' : 'var(--bd)'}`,
+              background: confirmDeleteFrame ? 'var(--bad-bg)' : 'var(--bg)',
               borderRadius: 'var(--r)', padding: '5px 10px', fontSize: 11, cursor: 'pointer',
-              color: 'var(--tx-3)', fontFamily: 'var(--font)', fontWeight: 500,
-              transition: 'all .12s',
+              color: confirmDeleteFrame ? 'var(--bad)' : 'var(--tx-3)',
+              fontFamily: 'var(--font)', fontWeight: confirmDeleteFrame ? 700 : 500,
+              transition: 'all .12s', whiteSpace: 'nowrap',
             }}
-            onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--bad)'; e.currentTarget.style.color = 'var(--bad)' }}
-            onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--bd)';  e.currentTarget.style.color  = 'var(--tx-3)' }}
-          >✕</button>
+          >{confirmDeleteFrame ? 'Sure?' : '🗑'}</button>
           <button onClick={() => setIsExpanded(true)} style={{
             border: '1px solid var(--bd-md)', background: 'var(--bg)',
             borderRadius: 'var(--r)', padding: '5px 12px', fontSize: 12, cursor: 'pointer',
@@ -2013,19 +2038,22 @@ function FrameCard({ initialFrameNumber, cops, isLocal, busy, forceExpanded, onC
         />
         <span style={{ fontSize: 11, color: 'var(--tx-4)' }}>{cops.length} Cop{cops.length !== 1 ? 's' : ''}</span>
         <button
-          onClick={onDeleteFrame}
+          onClick={() => { if (confirmDeleteFrame) { setConfirmDeleteFrame(false); onDeleteFrame() } else setConfirmDeleteFrame(true) }}
           disabled={busy === 'delete-frame'}
           title={cops.length > 0 ? `Delete frame and all ${cops.length} cops` : 'Remove frame'}
           style={{
-            marginLeft: 'auto', border: '1px solid var(--bd)', borderRadius: 'var(--r)',
-            background: 'var(--bg)', cursor: 'pointer', color: 'var(--tx-3)',
-            fontSize: 10, fontWeight: 600, padding: '3px 8px', fontFamily: 'var(--font)',
-            transition: 'all .12s',
+            marginLeft: 'auto',
+            border: `1px solid ${confirmDeleteFrame ? 'var(--bad)' : 'var(--bd)'}`,
+            borderRadius: 'var(--r)',
+            background: confirmDeleteFrame ? 'var(--bad-bg)' : 'var(--bg)',
+            cursor: busy === 'delete-frame' ? 'default' : 'pointer',
+            color: confirmDeleteFrame ? 'var(--bad)' : 'var(--tx-3)',
+            fontSize: 11, fontWeight: confirmDeleteFrame ? 700 : 600,
+            padding: '3px 10px', fontFamily: 'var(--font)',
+            transition: 'all .12s', opacity: busy === 'delete-frame' ? .5 : 1,
           }}
-          onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--bad)'; e.currentTarget.style.color = 'var(--bad)' }}
-          onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--bd)';  e.currentTarget.style.color  = 'var(--tx-3)' }}
         >
-          {busy === 'delete-frame' ? 'Removing…' : '✕ Remove Frame'}
+          {busy === 'delete-frame' ? 'Removing…' : confirmDeleteFrame ? '⚠ Confirm Delete?' : '🗑 Remove Frame'}
         </button>
       </div>
 

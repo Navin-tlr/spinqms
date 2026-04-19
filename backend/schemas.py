@@ -202,8 +202,8 @@ class RSBCanBulkSave(BaseModel):
             raise ValueError("Provide between 1 and 10 cans")
         for c in self.cans:
             readings = c.readings or []
-            if len(readings) not in (0, 3):
-                raise ValueError(f"Can {c.slot}: provide exactly 3 readings or none at all")
+            if len(readings) > 12:
+                raise ValueError(f"Can {c.slot}: provide at most 12 readings per can")
             if any(r is not None and r <= 0 for r in readings):
                 raise ValueError(f"Can {c.slot}: all readings must be positive numbers")
         return self
