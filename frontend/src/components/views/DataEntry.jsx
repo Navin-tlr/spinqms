@@ -138,9 +138,9 @@ export default function DataEntry({ depts, currentDept, setCurrentDept, onSaved 
                 padding: '5px 16px', fontSize: 12, fontWeight: shift === s ? 600 : 400,
                 border: '1px solid', borderRadius: 20, cursor: 'pointer', fontFamily: 'var(--font)',
                 transition: 'all .12s', lineHeight: 1.5,
-                background:  shift === s ? 'var(--tx)' : 'transparent',
-                color:       shift === s ? 'var(--bg)' : 'var(--tx-2)',
-                borderColor: shift === s ? 'var(--tx)' : 'var(--bd-md)',
+                background:  shift === s ? 'var(--claude)' : 'transparent',
+                color:       shift === s ? '#fff' : 'var(--tx-2)',
+                borderColor: shift === s ? 'var(--claude)' : 'var(--bd-md)',
               }}>
                 Shift {s}
               </button>
@@ -629,8 +629,8 @@ function SegCtrl({ opts, value, onChange }) {
         <button key={val} onClick={() => onChange(val)} style={{
           padding: '5px 13px', fontSize: 12, fontFamily: 'var(--font)',
           fontWeight: value === val ? 600 : 400,
-          background: value === val ? 'var(--tx)' : 'transparent',
-          color:      value === val ? 'var(--bg)' : 'var(--tx-2)',
+          background: value === val ? 'var(--claude)' : 'transparent',
+          color:      value === val ? '#fff' : 'var(--tx-2)',
           border: 'none', cursor: 'pointer', transition: 'all .12s', lineHeight: 1.4,
           borderRight: i < opts.length - 1 ? '1px solid var(--bd-md)' : 'none',
         }}>{label}</button>
