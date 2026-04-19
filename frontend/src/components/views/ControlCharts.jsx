@@ -142,10 +142,30 @@ export default function ControlCharts({ overview, currentDept, depts, machineFil
     return <Card sm><Empty>Enter samples to see control chart</Empty></Card>
   }
 
-  const { mean, sd, ucl, lcl, wul, wll } = kpi
-  const target = dept?.target ?? mean
-  const flat   = v => arr.map(() => v)
+  const target = dept?.target ?? kpi.mean
   const p      = target >= 10 ? 2 : 4
+
+  /* ── Compute stats from the time-filtered readings (arr) ─────────────────
+     Fall back to kpi (all-time) values only when arr is empty.            */
+  const filteredStats = useMemo(() => {
+    if (arr.length === 0) return null
+    const n    = arr.length
+    const mean = arr.reduce((a, b) => a + b, 0) / n
+    const sd   = Math.sqrt(arr.reduce((s, v) => s + (v - mean) ** 2, 0) / n)
+    const ucl  = mean + 3 * sd
+    const lcl  = mean - 3 * sd
+    const wul  = mean + 2 * sd
+    const wll  = mean - 2 * sd
+    const cv   = sd / mean * 100
+    const usl  = dept?.usl ?? (target + 3 * sd)
+    const lsl  = dept?.lsl ?? (target - 3 * sd)
+    const cpk  = sd > 0 ? Math.min((usl - mean) / (3 * sd), (mean - lsl) / (3 * sd)) : null
+    const cp   = sd > 0 ? (usl - lsl) / (6 * sd) : null
+    return { mean, sd, ucl, lcl, wul, wll, cv, cpk, cp }
+  }, [arr, dept, target])
+
+  const { mean, sd, ucl, lcl, wul, wll } = filteredStats ?? kpi
+  const flat   = v => arr.map(() => v)
 
   /* Per-point colours based on zone */
   const ptColor = arr.map(v => {
@@ -331,15 +351,15 @@ export default function ControlCharts({ overview, currentDept, depts, machineFil
 
       {/* ═══════════════════════ Statistical Summary ═══════════════════════ */}
       <Card sm>
-        <LabelCaps>Statistical summary — {rangeObj?.label ?? 'All data'}</LabelCaps>
+        <LabelCaps>Statistical summary — {rangeObj?.label ?? 'All data'} · {arr.length} readings</LabelCaps>
         <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(90px, 1fr))', gap:8 }}>
-          <StatPill label="Mean (x̄)"   value={mean?.toFixed(p)      ?? '—'} />
-          <StatPill label="Std Dev (σ)" value={sd?.toFixed(p + 1)    ?? '—'} />
-          <StatPill label="CV%"         value={kpi.cv != null ? `${kpi.cv.toFixed(2)}%` : '—'} />
-          <StatPill label="Cpk"         value={kpi.cpk?.toFixed(3)   ?? '—'} />
-          <StatPill label="UCL (3σ)"    value={ucl?.toFixed(p)       ?? '—'} />
-          <StatPill label="LCL (3σ)"    value={lcl?.toFixed(p)       ?? '—'} />
-          <StatPill label="Target"      value={target?.toFixed(p)    ?? '—'} />
+          <StatPill label="Mean (x̄)"   value={mean?.toFixed(p)                                        ?? '—'} />
+          <StatPill label="Std Dev (σ)" value={sd?.toFixed(p + 1)                                      ?? '—'} />
+          <StatPill label="CV%"         value={filteredStats?.cv != null ? `${filteredStats.cv.toFixed(2)}%` : kpi.cv != null ? `${kpi.cv.toFixed(2)}%` : '—'} />
+          <StatPill label="Cpk"         value={(filteredStats?.cpk ?? kpi.cpk)?.toFixed(3)             ?? '—'} />
+          <StatPill label="UCL (3σ)"    value={ucl?.toFixed(p)                                         ?? '—'} />
+          <StatPill label="LCL (3σ)"    value={lcl?.toFixed(p)                                         ?? '—'} />
+          <StatPill label="Target"      value={target?.toFixed(p)                                      ?? '—'} />
         </div>
       </Card>
 
