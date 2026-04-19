@@ -1676,6 +1676,7 @@ def delete_ringframe_cop(cop_id: int, db: Session = Depends(get_db)):
     if not cop:
         raise HTTPException(404, "Ring frame cop not found")
     db.delete(cop)
+    db.commit()
 
 
 # ── Analysis Matrix ────────────────────────────────────────────────────────────
