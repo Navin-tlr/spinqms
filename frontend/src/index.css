@@ -3,9 +3,11 @@
 @tailwind utilities;
 
 /* ═══════════════════════════════════════════════════════
-   SPINQMS DESIGN TOKENS  v2
-   Reference: clean SaaS white — neutral grays, subtle
-   elevation, generous radius, Styrene B voice.
+   SPINQMS DESIGN TOKENS  v3 — Notion-inspired
+   Warm off-white surfaces · tight geometry · minimal elevation
+   Primary text: #37352F (Notion warm charcoal)
+   Body bg:      #F7F7F5 (Notion sidebar off-white)
+   Cards:        #FFFFFF  (pure white blocks)
 ═══════════════════════════════════════════════════════ */
 
 /* ── Styrene B web font ─────────────────────────────────────────────────────*/
@@ -47,69 +49,87 @@
   --font: 'Styrene B', -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
   --mono: 'JetBrains Mono', "SF Mono", "Fira Code", "Consolas", monospace;
 
-  /* ── Base surfaces — clean white ───────────────────── */
-  --bg:         #FFFFFF;
-  --bg-2:       #F9FAFB;
-  --bg-3:       #F3F4F6;
-  --sidebar-bg: #FFFFFF;
-  --bg-hover:   #F3F4F6;
-  --bg-active:  #EFF6FF;
+  /* ── Surfaces — warm off-white (Notion palette) ─── */
+  --bg:         #FFFFFF;                  /* pure white — cards, inputs, modals */
+  --bg-2:       #F7F7F5;                  /* warm off-white — body & sidebar bg  */
+  --bg-3:       #EFEEEC;                  /* slightly deeper — code blocks, tiles */
+  --sidebar-bg: #F7F7F5;                  /* sidebar = body, seamless feel       */
+  --bg-hover:   rgba(55, 53, 47, .06);   /* row / item hover                    */
+  --bg-active:  rgba(55, 53, 47, .09);   /* selected / active state             */
 
-  /* ── Borders — neutral gray ─────────────────────────── */
-  --bd:    rgba(0,0,0,.07);
-  --bd-md: rgba(0,0,0,.13);
-  --bd-hv: rgba(0,0,0,.22);
+  /* ── Borders — warm neutral ─────────────────────── */
+  --bd:    rgba(55, 53, 47, .09);
+  --bd-md: rgba(55, 53, 47, .15);
+  --bd-hv: rgba(55, 53, 47, .26);
 
-  /* ── Text — neutral charcoal ─────────────────────────── */
-  --tx:   #111827;
-  --tx-2: #4B5563;
-  --tx-3: #9CA3AF;
-  --tx-4: #D1D5DB;
+  /* ── Text — warm charcoal (Notion exact) ────────── */
+  --tx:   #37352F;
+  --tx-2: #787774;
+  --tx-3: #ACABA8;
+  --tx-4: #C7C6C3;
 
-  /* ── Status — clean, semantic ───────────────────────── */
-  --ok:   #15803D; --ok-bg:   #F0FDF4; --ok-bd:   #BBF7D0;
-  --warn: #B45309; --warn-bg: #FFFBEB; --warn-bd: #FDE68A;
-  --bad:  #B91C1C; --bad-bg:  #FEF2F2; --bad-bd:  #FECACA;
-  --info: #1D4ED8; --info-bg: #EFF6FF; --info-bd: #BFDBFE;
+  /* ── Status — clean, semantic ────────────────────── */
+  --ok:   #2D9A4E; --ok-bg:   #F0FDF4; --ok-bd:   #BBF7D0;
+  --warn: #9E6C00; --warn-bg: #FFF8EC; --warn-bd: #FDE68A;
+  --bad:  #B42626; --bad-bg:  #FEF2F2; --bad-bd:  #FECACA;
+  --info: #1559C7; --info-bg: #EFF6FF; --info-bd: #BFDBFE;
 
-  /* ── Accent — SpinQMS terracotta identity ───────────── */
-  --claude:    #D97757;
-  --claude-bg: #FFF7ED;
-  --claude-bd: #FED7AA;
+  /* ── Accent — SpinQMS warm terracotta ───────────── */
+  --claude:    #E06C47;
+  --claude-bg: #FFF3EE;
+  --claude-bd: #FCCCB5;
 
   --purple: #7C3AED; --purple-bg: #F5F3FF; --purple-bd: #DDD6FE;
 
-  /* ── Geometry — generous radius ─────────────────────── */
-  --r:    8px;
-  --r-lg: 12px;
-  --r-xl: 16px;
+  /* ── Geometry — tight, Notion-like ──────────────── */
+  --r:    4px;
+  --r-lg: 6px;
+  --r-xl: 10px;
 
-  --sidebar: 248px;
-  --hdr:     52px;
+  --sidebar: 240px;
+  --hdr:     48px;
 
-  /* ── Elevation — subtle two-layer shadow ────────────── */
-  --shadow:    0 1px 3px rgba(0,0,0,.06),  0 1px 2px rgba(0,0,0,.04);
-  --shadow-md: 0 4px 12px rgba(0,0,0,.08), 0 2px 4px rgba(0,0,0,.04);
-  --shadow-lg: 0 10px 30px rgba(0,0,0,.10), 0 4px 8px rgba(0,0,0,.04);
+  /* ── Elevation — nearly flat (Notion aesthetic) ─── */
+  --shadow:    0 1px 3px rgba(15, 15, 15, .06), 0 0 0 1px rgba(55, 53, 47, .04);
+  --shadow-md: 0 4px 16px rgba(15, 15, 15, .08), 0 1px 4px rgba(15, 15, 15, .04);
+  --shadow-lg: 0 8px 30px rgba(15, 15, 15, .12), 0 2px 6px rgba(15, 15, 15, .04);
 }
 
 /* ── Dark mode ──────────────────────────────────────── */
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg:#111827;    --bg-2:#1F2937;  --bg-3:#374151;
-    --sidebar-bg:#111827;
-    --bg-hover:#1F2937; --bg-active:#1E3A5F;
-    --bd:rgba(255,255,255,.07); --bd-md:rgba(255,255,255,.13); --bd-hv:rgba(255,255,255,.24);
-    --tx:#F9FAFB; --tx-2:#9CA3AF; --tx-3:#6B7280; --tx-4:#4B5563;
-    --ok:#4ADE80; --ok-bg:#052E16; --ok-bd:#166534;
-    --warn:#FCD34D; --warn-bg:#1C1500; --warn-bd:#854D0E;
-    --bad:#FCA5A5; --bad-bg:#1C0A0A; --bad-bd:#991B1B;
-    --info:#93C5FD; --info-bg:#0C1A3A; --info-bd:#1E40AF;
-    --claude:#F97316; --claude-bg:#1C0F05; --claude-bd:#7C2D12;
-    --purple:#A78BFA; --purple-bg:#1E1040; --purple-bd:#5B21B6;
-    --shadow:    0 1px 4px rgba(0,0,0,.4);
-    --shadow-md: 0 4px 16px rgba(0,0,0,.45), 0 2px 4px rgba(0,0,0,.3);
-    --shadow-lg: 0 10px 30px rgba(0,0,0,.5), 0 4px 8px rgba(0,0,0,.35);
+    --bg:        #1F1E1D;
+    --bg-2:      #252423;
+    --bg-3:      #2F2E2C;
+    --sidebar-bg:#252423;
+    --bg-hover:  rgba(255, 255, 255, .05);
+    --bg-active: rgba(255, 255, 255, .08);
+
+    --bd:    rgba(255, 255, 255, .07);
+    --bd-md: rgba(255, 255, 255, .12);
+    --bd-hv: rgba(255, 255, 255, .20);
+
+    --tx:   #E7E6E3;
+    --tx-2: #9B9A97;
+    --tx-3: #6F6E69;
+    --tx-4: #52504D;
+
+    --ok:   #4ADE80; --ok-bg:   #052E16; --ok-bd:   #166534;
+    --warn: #FCD34D; --warn-bg: #1C1500; --warn-bd: #854D0E;
+    --bad:  #FCA5A5; --bad-bg:  #1C0A0A; --bad-bd:  #991B1B;
+    --info: #93C5FD; --info-bg: #0C1A3A; --info-bd: #1E40AF;
+
+    --claude:    #F97316;
+    --claude-bg: #1C0F05;
+    --claude-bd: #7C2D12;
+
+    --purple:    #A78BFA;
+    --purple-bg: #1E1040;
+    --purple-bd: #5B21B6;
+
+    --shadow:    0 1px 4px rgba(0, 0, 0, .4);
+    --shadow-md: 0 4px 16px rgba(0, 0, 0, .45), 0 2px 4px rgba(0, 0, 0, .3);
+    --shadow-lg: 0 10px 30px rgba(0, 0, 0, .5), 0 4px 8px rgba(0, 0, 0, .35);
   }
 }
 
@@ -134,11 +154,11 @@ input[type="number"]::-webkit-outer-spin-button,
 input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 input[type="number"] { -moz-appearance: textfield; }
 
-/* ── Focus ring — accent inner glow ─────────────────── */
+/* ── Focus ring ─────────────────────────────────────── */
 input:focus, select:focus, textarea:focus {
   outline: none;
   border-color: var(--claude) !important;
-  box-shadow: 0 0 0 3px var(--claude-bg), inset 0 0 0 1px var(--claude-bd) !important;
+  box-shadow: 0 0 0 2px var(--claude-bg), inset 0 0 0 1px var(--claude-bd) !important;
 }
 button:focus-visible {
   outline: 2px solid var(--claude);
@@ -146,17 +166,17 @@ button:focus-visible {
 }
 
 /* ── Scrollbars — minimal ───────────────────────────── */
-::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--bd-md); border-radius: 3px; }
+::-webkit-scrollbar-thumb { background: var(--bd-md); border-radius: 4px; }
 
 /* ── Animations ─────────────────────────────────────── */
 @keyframes pulse   { 0%,100%{opacity:1} 50%{opacity:.3} }
-@keyframes slideIn { from{opacity:0;transform:translateY(-5px)} to{opacity:1;transform:translateY(0)} }
-@keyframes fadeUp  { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+@keyframes slideIn { from{opacity:0;transform:translateY(-4px)} to{opacity:1;transform:translateY(0)} }
+@keyframes fadeUp  { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
 @keyframes callout {
-  0%   { opacity:0; transform:translateY(10px) scale(.98); }
-  60%  { transform:translateY(-2px) scale(1.005); }
+  0%   { opacity:0; transform:translateY(8px) scale(.99); }
+  60%  { transform:translateY(-1px) scale(1.003); }
   100% { opacity:1; transform:translateY(0) scale(1); }
 }
 @keyframes shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-3px)} 75%{transform:translateX(3px)} }
@@ -165,29 +185,29 @@ button:focus-visible {
 /* ── Mobile nav overlay ─────────────────────────────── */
 .mob-overlay {
   display: none; position: fixed; inset: 0;
-  background: rgba(0,0,0,.4); z-index: 200;
-  backdrop-filter: blur(4px);
+  background: rgba(15, 15, 15, .35); z-index: 200;
+  backdrop-filter: blur(3px);
 }
 .mob-overlay.open { display: block; }
 
 /* ── Drag handle ────────────────────────────────────── */
 .drag-handle {
-  opacity: 0; cursor: grab; transition: opacity .15s;
+  opacity: 0; cursor: grab; transition: opacity .12s;
   display: flex; flex-direction: column; gap: 2px;
   padding: 4px 3px; border-radius: 3px;
 }
 .drag-handle > span { display: flex; gap: 2px; }
 .drag-handle > span > i {
-  width: 3px; height: 3px; border-radius: 50%;
+  width: 2.5px; height: 2.5px; border-radius: 50%;
   background: var(--tx-4);
 }
 *:hover > .drag-handle { opacity: 1; }
 .drag-handle:active { cursor: grabbing; opacity: 1; }
-.drag-handle:active > span > i { background: var(--tx-2); }
+.drag-handle:active > span > i { background: var(--tx-3); }
 
 /* Nav item being dragged */
 .nav-dragging {
-  opacity: .8;
+  opacity: .75;
   background: var(--bg-active) !important;
   box-shadow: var(--shadow-md);
   z-index: 10;

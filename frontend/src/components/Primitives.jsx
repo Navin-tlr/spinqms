@@ -1,12 +1,14 @@
 /**
- * Primitives.jsx — Design-system atoms  v2
- * Clean SaaS aesthetic: white surfaces, neutral grays,
- * subtle elevation, generous radius.
+ * Primitives.jsx — Design-system atoms  v3 — Notion-inspired
+ *
+ * Philosophy: warm off-white surfaces, tight geometry (4–6px radius),
+ * near-flat elevation, warm charcoal typography.  Blocks feel like
+ * Notion pages — white surfaces on a warm #F7F7F5 body.
  */
 
 /* ── Badge ──────────────────────────────────────────────────────────────── */
 export function Badge({ variant = 'neutral', children, className = '' }) {
-  const base = 'inline-flex items-center gap-1 text-[11px] font-semibold px-[9px] py-[3px] rounded-full leading-none whitespace-nowrap tracking-[.02em]'
+  const base = 'inline-flex items-center gap-1 text-[11px] font-medium px-[8px] py-[2px] rounded-full leading-none whitespace-nowrap tracking-[.01em]'
   const variants = {
     ok:      'bg-[var(--ok-bg)]      text-[var(--ok)]      ring-1 ring-[var(--ok-bd)]',
     warn:    'bg-[var(--warn-bg)]    text-[var(--warn)]    ring-1 ring-[var(--warn-bd)]',
@@ -31,7 +33,7 @@ export function Alert({ variant = 'info', children }) {
   }
   return (
     <div className={`${base} ${variants[variant] ?? variants.info}`}>
-      <span className="shrink-0 text-[11px] mt-px font-bold w-[16px] h-[16px] rounded-full ring-1 ring-current flex items-center justify-center leading-none">
+      <span className="shrink-0 text-[11px] mt-px font-bold w-[15px] h-[15px] rounded-full ring-1 ring-current flex items-center justify-center leading-none">
         {AL[variant]}
       </span>
       <span>{children}</span>
@@ -39,13 +41,13 @@ export function Alert({ variant = 'info', children }) {
   )
 }
 
-/* ── Card ───────────────────────────────────────────────────────────────── */
+/* ── Card — the primary "block" container ───────────────────────────────── */
 export function Card({ children, className = '', sm = false }) {
-  const pad = sm ? 'p-[14px_16px]' : 'p-[18px_20px]'
+  const pad = sm ? 'p-[12px_14px]' : 'p-[16px_18px]'
   return (
     <div
       className={`bg-[var(--bg)] rounded-[var(--r-lg)] ${pad} ${className}`}
-      style={{ border: '1px solid var(--bd-md)', boxShadow: 'var(--shadow)' }}
+      style={{ border: '1px solid var(--bd-md)' }}
     >
       {children}
     </div>
@@ -54,9 +56,9 @@ export function Card({ children, className = '', sm = false }) {
 
 export function CardHeader({ title, children }) {
   return (
-    <div className="flex items-center justify-between flex-wrap gap-2 mb-3.5">
+    <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
       {typeof title === 'string'
-        ? <span className="text-[10px] font-semibold tracking-[.1em] uppercase text-[var(--tx-3)]">{title}</span>
+        ? <span className="text-[10px] font-semibold tracking-[.09em] uppercase text-[var(--tx-3)]">{title}</span>
         : title}
       {children}
     </div>
@@ -70,16 +72,19 @@ export function Btn({
 }) {
   const base = 'inline-flex items-center gap-1.5 rounded-[var(--r)] cursor-pointer transition-all duration-100 whitespace-nowrap leading-none font-[var(--font)] font-medium disabled:opacity-40 disabled:cursor-not-allowed select-none'
   const sizes = {
-    md: 'px-[14px] py-[7px] text-[13px] min-h-[34px]',
-    sm: 'px-[10px] py-[5px] text-[12px] min-h-[28px]',
+    md: 'px-[12px] py-[6px] text-[13px] min-h-[32px]',
+    sm: 'px-[9px]  py-[4px] text-[12px] min-h-[26px]',
   }
   const variants = {
-    /* dark primary — matches reference image "Commit" button */
-    primary: 'bg-[#111827] text-white border border-[#111827] hover:bg-[#1F2937]',
-    /* accent — terracotta for filters, active pills, CTAs */
+    /* dark primary — Notion "Create" style */
+    primary: 'bg-[#37352F] text-white border border-[#37352F] hover:bg-[#1A1A18]',
+    /* accent — terracotta for CTAs */
     accent:  'bg-[var(--claude)] text-white border border-[var(--claude)] hover:opacity-85',
-    default: 'bg-[var(--bg)] text-[var(--tx)] border border-[var(--bd-md)] hover:bg-[var(--bg-2)] hover:border-[var(--bd-hv)] shadow-[var(--shadow)]',
+    /* default — clean bordered */
+    default: 'bg-[var(--bg)] text-[var(--tx)] border border-[var(--bd-md)] hover:bg-[var(--bg-hover)] hover:border-[var(--bd-hv)]',
+    /* ghost — no border, subtle hover fill */
     ghost:   'bg-transparent text-[var(--tx-2)] border border-transparent hover:bg-[var(--bg-hover)] hover:text-[var(--tx)]',
+    /* danger */
     danger:  'bg-[var(--bg)] text-[var(--bad)] border border-[var(--bd-md)] hover:bg-[var(--bad-bg)] hover:border-[var(--bad-bd)]',
   }
   return (
@@ -93,16 +98,16 @@ export function Btn({
 /* ── Metric tile ─────────────────────────────────────────────────────────── */
 export function Metric({ label, value, sub, quality, large = false }) {
   const cm = { ok: 'text-[var(--ok)]', warn: 'text-[var(--warn)]', bad: 'text-[var(--bad)]' }
-  const valSize = large ? 'text-[18px]' : 'text-[22px]'
+  const valSize = large ? 'text-[16px]' : 'text-[20px]'
   return (
     <div
-      className="rounded-[var(--r-lg)] px-4 py-3.5 flex flex-col gap-1.5 transition-all hover:-translate-y-px"
-      style={{ background: 'var(--bg-2)', border: '1px solid var(--bd)', boxShadow: 'var(--shadow)' }}
+      className="rounded-[var(--r-lg)] px-[14px] py-3 flex flex-col gap-1"
+      style={{ background: 'var(--bg)', border: '1px solid var(--bd-md)' }}
     >
       <div className={`${valSize} font-semibold tracking-tight leading-none font-[var(--mono)] ${cm[quality] ?? 'text-[var(--tx)]'}`}>
         {value ?? '—'}
       </div>
-      <div className="text-[11px] font-medium text-[var(--tx-3)] leading-tight">{label}</div>
+      <div className="text-[11px] text-[var(--tx-3)] leading-tight">{label}</div>
       {sub && <div className="text-[10px] text-[var(--tx-4)] mt-0.5">{sub}</div>}
     </div>
   )
@@ -111,7 +116,7 @@ export function Metric({ label, value, sub, quality, large = false }) {
 /* ── Section label ───────────────────────────────────────────────────────── */
 export function LabelCaps({ children, className = '' }) {
   return (
-    <div className={`text-[10.5px] font-semibold tracking-[.09em] uppercase text-[var(--tx-3)] mb-3 ${className}`}>
+    <div className={`text-[10px] font-semibold tracking-[.09em] uppercase text-[var(--tx-3)] mb-2.5 ${className}`}>
       {children}
     </div>
   )
@@ -122,7 +127,7 @@ export function FmlBox({ children, className = '' }) {
   return (
     <div
       className={`font-[var(--mono)] text-[12px] px-4 py-3 rounded-[var(--r-lg)] leading-loose text-[var(--tx-2)] ${className}`}
-      style={{ background: 'var(--bg-2)', border: '1px solid var(--bd)', boxShadow: 'inset 0 1px 3px rgba(0,0,0,.03)' }}
+      style={{ background: 'var(--bg-3)', border: '1px solid var(--bd)' }}
     >
       {children}
     </div>
@@ -132,7 +137,7 @@ export function FmlBox({ children, className = '' }) {
 /* ── Table wrapper ───────────────────────────────────────────────────────── */
 export function TblWrap({ children }) {
   return (
-    <div className="overflow-x-auto" style={{ borderRadius: 'var(--r-lg)', border: '1px solid var(--bd)' }}>
+    <div className="overflow-x-auto" style={{ borderRadius: 'var(--r-lg)', border: '1px solid var(--bd-md)' }}>
       {children}
     </div>
   )
@@ -141,12 +146,12 @@ export function TblWrap({ children }) {
 /* ── Shift selector ──────────────────────────────────────────────────────── */
 export function ShiftBar({ value, onChange, options }) {
   return (
-    <div className="flex items-center gap-2 flex-wrap">
+    <div className="flex items-center gap-1.5 flex-wrap">
       {options.map(o => (
         <button key={o.value} onClick={() => onChange(o.value)}
-          className={`px-[14px] py-[5px] text-[12px] font-medium rounded-[20px] cursor-pointer transition-all font-[var(--font)] select-none
+          className={`px-[12px] py-[4px] text-[12px] font-medium rounded-full cursor-pointer transition-all font-[var(--font)] select-none
             ${value === o.value
-              ? 'bg-[#111827] text-white border border-[#111827] font-semibold'
+              ? 'bg-[var(--tx)] text-white border border-[var(--tx)]'
               : 'bg-transparent text-[var(--tx-2)] border border-[var(--bd-md)] hover:border-[var(--bd-hv)] hover:text-[var(--tx)]'}`}>
           {o.label}
         </button>
@@ -158,14 +163,14 @@ export function ShiftBar({ value, onChange, options }) {
 /* ── Empty state ─────────────────────────────────────────────────────────── */
 export function Empty({ children = 'No data yet' }) {
   return (
-    <div className="py-12 text-center">
+    <div className="py-10 text-center">
       <div
-        className="inline-flex items-center justify-center w-10 h-10 rounded-full mb-3"
+        className="inline-flex items-center justify-center w-9 h-9 rounded-[var(--r-lg)] mb-2.5"
         style={{ background: 'var(--bg-3)', border: '1px solid var(--bd)' }}
       >
-        <span style={{ fontSize: 16, opacity: .5 }}>∅</span>
+        <span style={{ fontSize: 15, opacity: .4, color: 'var(--tx-3)' }}>∅</span>
       </div>
-      <div className="text-[13px] text-[var(--tx-3)]">{children}</div>
+      <div className="text-[12.5px] text-[var(--tx-3)]">{children}</div>
     </div>
   )
 }
@@ -173,9 +178,9 @@ export function Empty({ children = 'No data yet' }) {
 /* ── Spinner ─────────────────────────────────────────────────────────────── */
 export function Spinner() {
   return (
-    <div className="flex items-center justify-center py-12">
+    <div className="flex items-center justify-center py-10">
       <div
-        className="w-7 h-7 rounded-full"
+        className="w-6 h-6 rounded-full"
         style={{
           border: '2px solid var(--bd-md)',
           borderTopColor: 'var(--claude)',
@@ -189,3 +194,32 @@ export function Spinner() {
 /* ── Quality helpers ─────────────────────────────────────────────────────── */
 export const qualityLabel = { ok: 'In control', warn: 'Warning', bad: 'Action required' }
 export const qualityColor = { ok: 'text-[var(--ok)]', warn: 'text-[var(--warn)]', bad: 'text-[var(--bad)]' }
+
+/* ── Block divider — Notion-style horizontal rule ────────────────────────── */
+export function Divider({ className = '' }) {
+  return (
+    <hr
+      className={className}
+      style={{ border: 'none', borderTop: '1px solid var(--bd)', margin: '4px 0' }}
+    />
+  )
+}
+
+/* ── Page block — wraps a logical content section ────────────────────────── */
+export function Block({ title, actions, children, className = '' }) {
+  return (
+    <div className={`flex flex-col gap-2 ${className}`}>
+      {(title || actions) && (
+        <div className="flex items-center justify-between gap-3" style={{ marginBottom: 4 }}>
+          {title && (
+            <span className="text-[11px] font-semibold tracking-[.08em] uppercase text-[var(--tx-3)]">
+              {title}
+            </span>
+          )}
+          {actions && <div className="flex items-center gap-2">{actions}</div>}
+        </div>
+      )}
+      {children}
+    </div>
+  )
+}
