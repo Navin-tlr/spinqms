@@ -266,20 +266,17 @@ export default function DataEntry({ depts, currentDept, setCurrentDept, onSaved 
         )}
       </Block>
 
-      {/* ══ Block 3: Readings grid ════════════════════════════════════════ */}
+      {/* ══ Block 3: Readings ════════════════════════════════════════════ */}
       <Block>
-        {/* Block header */}
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
+        {/* Header row */}
+        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, marginBottom: 16 }}>
           <div>
             <FieldLabel>Readings</FieldLabel>
-            <div style={{ fontSize: 12, color: 'var(--tx-3)', marginTop: 3 }}>
+            <div style={{ fontSize: 11.5, color: 'var(--tx-3)', marginTop: 3 }}>
               {mode === 'weight' ? 'Enter grams — auto-converted to hank' : 'Enter hank count directly'}
             </div>
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
-            <span style={{ fontSize: 12, fontFamily: 'var(--mono)', color: 'var(--tx-2)', fontWeight: 500 }}>
-              Target&nbsp;{target}&nbsp;{dept?.unit}
-            </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
             {machineConf && frameNum && (
               <span style={{
                 fontSize: 10, fontWeight: 600, padding: '2px 9px', borderRadius: 20,
@@ -288,86 +285,130 @@ export default function DataEntry({ depts, currentDept, setCurrentDept, onSaved 
                 {machineConf.label} {frameNum}
               </span>
             )}
+            <span style={{ fontSize: 11.5, fontFamily: 'var(--mono)', color: 'var(--tx-3)' }}>
+              Target&nbsp;<strong style={{ color: 'var(--tx)', fontWeight: 600 }}>{target}</strong>&nbsp;{dept?.unit}
+            </span>
           </div>
         </div>
 
-        {/* 3×3 reading inputs */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 7 }}>
-          {readings.map((v, i) => {
-            const st = inputStatus(v)
-            const bdColor = st === 'ok' ? 'var(--ok-bd)' : st === 'bad' ? 'var(--bad-bd)' : 'var(--bd-md)'
-            const bgColor = st === 'ok' ? 'var(--ok-bg)' : st === 'bad' ? 'var(--bad-bg)' : v ? 'var(--bg-3)' : 'var(--bg)'
-            return (
-              <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                <label style={{ fontSize: 9.5, fontWeight: 600, letterSpacing: '.08em', color: 'var(--tx-4)', textAlign: 'center', textTransform: 'uppercase' }}>
-                  R{i + 1}
-                </label>
-                <input
-                  type="number" step={mode === 'weight' ? 0.001 : 0.0001}
-                  placeholder={placeholder} value={v}
-                  onChange={e => { const n = [...readings]; n[i] = e.target.value; setReadings(n) }}
-                  style={{
-                    padding: '10px 6px',
-                    border: `1px solid ${bdColor}`,
-                    borderRadius: 'var(--r)',
-                    fontSize: 13.5, fontFamily: 'var(--mono)', fontWeight: 500,
-                    background: bgColor,
-                    color: 'var(--tx)', textAlign: 'center',
-                    transition: 'border-color .12s, background .12s', width: '100%',
-                  }}
-                />
-              </div>
-            )
-          })}
-        </div>
+        {/* Grid + Live stats — side-by-side */}
+        <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
 
-        {/* Live stats — inline strip */}
-        {liveStats && (
+          {/* 3 × 3 input grid — fixed max-width so inputs stay compact */}
           <div style={{
-            marginTop: 12,
-            paddingTop: 12,
-            borderTop: '1px solid var(--bd)',
-            display: 'flex', alignItems: 'center', gap: 0, flexWrap: 'wrap',
+            display: 'grid',
+            gridTemplateColumns: 'repeat(3, 1fr)',
+            gap: 6,
+            flex: '0 0 auto',
+            width: '100%',
+            maxWidth: 360,
           }}>
-            {/* LIVE label */}
-            <span style={{
-              fontSize: 9, fontWeight: 700, letterSpacing: '.12em', textTransform: 'uppercase',
-              color: 'var(--claude)', fontFamily: 'var(--font)',
-              paddingRight: 14, marginRight: 14,
-              borderRight: '1px solid var(--bd-md)',
-            }}>Live</span>
+            {readings.map((v, i) => {
+              const st      = inputStatus(v)
+              const bdColor = st === 'ok'  ? 'var(--ok-bd)'  : st === 'bad' ? 'var(--bad-bd)' : 'var(--bd-md)'
+              const bgColor = st === 'ok'  ? 'var(--ok-bg)'  : st === 'bad' ? 'var(--bad-bg)' : v ? 'var(--bg-3)' : 'var(--bg)'
+              return (
+                <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                  <label style={{
+                    fontSize: 9, fontWeight: 600, letterSpacing: '.1em',
+                    color: 'var(--tx-4)', textAlign: 'center', textTransform: 'uppercase',
+                  }}>
+                    R{i + 1}
+                  </label>
+                  <input
+                    type="number"
+                    step={mode === 'weight' ? 0.001 : 0.0001}
+                    placeholder={placeholder}
+                    value={v}
+                    onChange={e => { const n = [...readings]; n[i] = e.target.value; setReadings(n) }}
+                    style={{
+                      padding: '9px 4px',
+                      border: `1px solid ${bdColor}`,
+                      borderRadius: 'var(--r)',
+                      fontSize: 13, fontFamily: 'var(--mono)', fontWeight: 500,
+                      background: bgColor, color: 'var(--tx)',
+                      textAlign: 'center', width: '100%',
+                      transition: 'border-color .12s, background .12s',
+                    }}
+                  />
+                </div>
+              )
+            })}
+          </div>
 
-            {/* Stats */}
-            {[
-              { l: 'n',    v: String(liveHanks.length),       mono: false },
-              { l: 'x̄',    v: liveStats.mean.toFixed(p + 2), mono: true  },
-              { l: 'σ',    v: liveStats.sd.toFixed(p + 3),   mono: true  },
-              { l: 'CV%',  v: `${liveStats.cv.toFixed(2)}%`, mono: true  },
-            ].map(({ l, v, mono }, i, arr) => (
-              <div key={l} style={{
-                display: 'flex', flexDirection: 'column', gap: 2,
-                paddingLeft: i === 0 ? 0 : 14, paddingRight: 14,
-                borderRight: i < arr.length - 1 ? '1px solid var(--bd)' : 'none',
+          {/* Live stats sidebar — appears as readings are entered */}
+          <div style={{
+            flex: '1 1 120px',
+            alignSelf: 'stretch',
+            border: liveStats ? '1px solid var(--bd-md)' : '1px dashed var(--bd)',
+            borderRadius: 'var(--r-lg)',
+            overflow: 'hidden',
+            transition: 'border-color .2s',
+          }}>
+            {liveStats ? (
+              <div style={{ padding: '12px 14px', height: '100%', display: 'flex', flexDirection: 'column', gap: 0 }}>
+                {/* "LIVE" header */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+                  <span style={{
+                    width: 5, height: 5, borderRadius: '50%',
+                    background: 'var(--ok)', flexShrink: 0,
+                    animation: 'pulse 2s ease-in-out infinite',
+                  }} />
+                  <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '.12em', textTransform: 'uppercase', color: 'var(--tx-3)', fontFamily: 'var(--font)' }}>
+                    Live preview
+                  </span>
+                </div>
+                {/* Stat rows */}
+                {[
+                  { l: 'Readings',  v: `${liveHanks.length} / ${readings.length}`, mono: false },
+                  { l: 'Mean (x̄)',   v: liveStats.mean.toFixed(p + 2),              mono: true  },
+                  { l: 'Std dev σ',  v: liveStats.sd.toFixed(p + 3),                mono: true  },
+                  { l: 'CV%',        v: `${liveStats.cv.toFixed(2)}%`,              mono: true  },
+                ].map(({ l, v, mono }, idx, arr) => (
+                  <div key={l} style={{
+                    display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8,
+                    padding: '6px 0',
+                    borderBottom: idx < arr.length - 1 ? '1px solid var(--bd)' : 'none',
+                  }}>
+                    <span style={{ fontSize: 11, color: 'var(--tx-3)' }}>{l}</span>
+                    <span style={{
+                      fontSize: 12, fontWeight: 600, color: 'var(--tx)',
+                      fontFamily: mono ? 'var(--mono)' : 'var(--font)',
+                    }}>
+                      {v}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div style={{
+                height: '100%', minHeight: 120,
+                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                gap: 6, padding: 16,
               }}>
-                <span style={{ fontSize: 9, fontWeight: 500, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--tx-3)', fontFamily: 'var(--font)', lineHeight: 1 }}>
-                  {l}
-                </span>
-                <span style={{ fontSize: 13.5, fontWeight: mono ? 700 : 900, lineHeight: 1, color: 'var(--tx)', fontFamily: mono ? 'var(--mono)' : 'var(--font)', letterSpacing: mono ? '-.01em' : '.01em' }}>
-                  {v}
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="var(--tx-4)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M3 3v18h18M7 16l4-6 3 4 3-5" />
+                </svg>
+                <span style={{ fontSize: 11, color: 'var(--tx-4)', textAlign: 'center', lineHeight: 1.5 }}>
+                  Enter 2+ readings<br />to see live stats
                 </span>
               </div>
-            ))}
+            )}
           </div>
-        )}
+        </div>
 
         {/* Action row */}
-        <div style={{ display: 'flex', gap: 7, alignItems: 'center', marginTop: 16, flexWrap: 'wrap' }}>
+        <div style={{
+          display: 'flex', gap: 7, alignItems: 'center',
+          marginTop: 16, paddingTop: 14, borderTop: '1px solid var(--bd)',
+          flexWrap: 'wrap',
+        }}>
           <Btn variant="primary" onClick={handleSave} disabled={loading}>
             {loading ? 'Saving…' : 'Calculate & save'}
           </Btn>
           <Btn onClick={handleClear}>Clear</Btn>
           {liveHanks.length > 0 && (
-            <span style={{ fontSize: 11.5, color: 'var(--tx-4)', marginLeft: 2 }}>
+            <span style={{ fontSize: 11, color: 'var(--tx-4)', marginLeft: 4 }}>
               {liveHanks.length} of {readings.length} filled
             </span>
           )}
@@ -579,13 +620,18 @@ function PanelHead({ children }) {
 /* Segmented control */
 function SegCtrl({ opts, value, onChange }) {
   return (
-    <div style={{ display: 'inline-flex', border: '1px solid var(--bd-md)', borderRadius: 'var(--r)', overflow: 'hidden', alignSelf: 'flex-start' }}>
+    <div style={{
+      display: 'inline-flex', border: '1px solid var(--bd-md)',
+      borderRadius: 'var(--r)', overflow: 'hidden', alignSelf: 'flex-start',
+      background: 'var(--bg-3)',
+    }}>
       {opts.map(([val, label], i) => (
         <button key={val} onClick={() => onChange(val)} style={{
-          padding: '6px 14px', fontSize: 12, fontFamily: 'var(--font)', fontWeight: value === val ? 600 : 400,
+          padding: '5px 13px', fontSize: 12, fontFamily: 'var(--font)',
+          fontWeight: value === val ? 600 : 400,
           background: value === val ? 'var(--tx)' : 'transparent',
           color:      value === val ? 'var(--bg)' : 'var(--tx-2)',
-          border: 'none', cursor: 'pointer', transition: 'all .12s', lineHeight: 1,
+          border: 'none', cursor: 'pointer', transition: 'all .12s', lineHeight: 1.4,
           borderRight: i < opts.length - 1 ? '1px solid var(--bd-md)' : 'none',
         }}>{label}</button>
       ))}
