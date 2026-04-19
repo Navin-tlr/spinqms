@@ -148,7 +148,7 @@ export default function App() {
       {view === 'charts' && (
         <ControlCharts overview={overview} currentDept={currentDept} depts={depts} machineFilter={machineFilter} />
       )}
-      {view === 'uster' && <UsterBenchmarks usterData={usterData} />}
+      {view === 'uster' && <UsterBenchmarks />}
       {view === 'report' && <ShiftReport />}
       {view === 'log' && (
         <DataLog depts={depts} refreshKey={refreshKey} currentDept={currentDept} machineFilter={machineFilter} />

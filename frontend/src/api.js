@@ -39,7 +39,10 @@ export const getLog = (params) => {
 }
 
 // ── Uster ─────────────────────────────────────────────────────────────────────
-export const getUster = () => http.get('/uster').then(r => r.data)
+export const getUster = (params = {}) => {
+  const clean = Object.fromEntries(Object.entries(params).filter(([, v]) => v != null && v !== ''))
+  return http.get('/uster', { params: clean }).then(r => r.data)
+}
 
 // ── Utility calcs ─────────────────────────────────────────────────────────────
 export const calcIrregularity = (body) => http.post('/calc/irregularity', body).then(r => r.data)

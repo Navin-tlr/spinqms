@@ -976,11 +976,16 @@ def get_log(
 
 # ── Uster benchmarks ──────────────────────────────────────────────────────────
 @app.get("/api/uster")
-def get_uster(db: Session = Depends(get_db)):
+def get_uster(
+    shift:     Optional[str]      = None,
+    date_from: Optional[datetime] = None,
+    date_to:   Optional[datetime] = None,
+    db: Session = Depends(get_db),
+):
     """Uster table driven from departments.uster_p* columns."""
     rows = []
     for dept in _ordered_depts(db):
-        batch_means = _batch_means(dept.dept_id, None, db)
+        batch_means = _batch_means(dept.dept_id, shift if shift and shift != "ALL" else None, db, date_from, date_to)
         stats = logic.calc_stats(batch_means)
         cv    = stats["cv"] if stats else None
         us    = dept.uster
