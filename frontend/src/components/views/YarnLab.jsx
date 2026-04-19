@@ -20,7 +20,7 @@ const V_ICON = { pass: '✓', warn: '▲', fail: '✕', pending: '…' }
 /* ── Ordered dept list ───────────────────────────────────────────────────── */
 const DEPT_ORDER = ['rsb', 'simplex', 'ringframe']
 const RSB_READING_COUNT = 12
-const SIMPLEX_READING_COUNT = 3
+const SIMPLEX_READING_COUNT = 10
 const RING_READING_COUNT = 5
 const DEFAULT_LENGTHS = {
   rsb: 6,
@@ -1083,7 +1083,7 @@ function SimplexPanel({ trialId, bobbins, refreshFlow, bobbinFeedsTo }) {
     <div style={{ border: '1.5px solid var(--bd)', borderRadius: 'var(--r-lg)', padding: 16, background: 'var(--bg)' }}>
       <div style={{ marginBottom: 10 }}>
         <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--tx)' }}>Simplex</div>
-        <div style={{ fontSize: 11, color: 'var(--tx-4)' }}>Grouped by machine · 3 readings per bobbin</div>
+        <div style={{ fontSize: 11, color: 'var(--tx-4)' }}>Grouped by machine · up to 10 readings per bobbin</div>
       </div>
       <FormulaNote length={DEFAULT_LENGTHS.simplex} />
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -1241,7 +1241,7 @@ function SimplexCard({ bobbin, machineNum, busy, onUpdate, onDelete, bobbinFeeds
     const weights = form.readings
       .map(v => parseFloat(v))
       .filter(v => !Number.isNaN(v) && v > 0)
-    const validWeights = weights.length === SIMPLEX_READING_COUNT ? weights : []
+    const validWeights = weights.length >= 1 ? weights : []
     const hankReadings = validWeights.length
       ? toHanks(validWeights, form.sampleLength || DEFAULT_LENGTHS.simplex)
       : []
@@ -1311,7 +1311,7 @@ function SimplexCard({ bobbin, machineNum, busy, onUpdate, onDelete, bobbinFeeds
           <SmBtn onClick={() => onDelete(bobbin.id)} disabled={busy}>✕</SmBtn>
         </div>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 6 }}>
         {form.readings.map((v, idx) => {
           const weight = parseFloat(v)
           const hank = !Number.isNaN(weight) && weight > 0

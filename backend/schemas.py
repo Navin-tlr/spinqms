@@ -234,8 +234,8 @@ class SimplexBobbinCreate(BaseModel):
     @model_validator(mode="after")
     def validate_readings(self) -> "SimplexBobbinCreate":
         readings = self.readings or []
-        if len(readings) not in (0, 3):
-            raise ValueError("Provide exactly 3 readings for Simplex bobbins")
+        if len(readings) > 10:
+            raise ValueError("Provide at most 10 readings for Simplex bobbins")
         if any(r is not None and r <= 0 for r in readings):
             raise ValueError("Simplex readings must be positive")
         return self
@@ -257,8 +257,8 @@ class SimplexBobbinUpdate(BaseModel):
     def validate_readings(self) -> "SimplexBobbinUpdate":
         if self.readings is not None:
             readings = self.readings
-            if len(readings) not in (0, 3):
-                raise ValueError("Provide exactly 3 readings for Simplex bobbins")
+            if len(readings) > 10:
+                raise ValueError("Provide at most 10 readings for Simplex bobbins")
             if any(r is not None and r <= 0 for r in readings):
                 raise ValueError("Simplex readings must be positive")
         return self

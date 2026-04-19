@@ -88,7 +88,7 @@ export default function Layout({
       {/* ── Sidebar ── */}
       <aside style={{
         display: 'flex', flexDirection: 'column',
-        borderRight: '1px solid var(--bd)', background: 'var(--bg-2)',
+        borderRight: '1px solid var(--bd)', background: 'var(--sidebar-bg)',
         overflowY: 'auto', overflowX: 'hidden', flexShrink: 0,
         ...(isMobile ? {
           position: 'fixed', top: 0, left: 0, bottom: 0,

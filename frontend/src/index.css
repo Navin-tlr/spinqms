@@ -56,6 +56,7 @@
   /* Parchment base — warm cream-white like claude.ai */
   --bg:        #FAF9F7;
   --bg-2:      #F5F3EF;
+  --sidebar-bg: #FFFDF7;
   --bg-3:      #EDEAE4;
   --bg-hover:  #EBE8E2;
   --bg-active: #E3DFD7;
@@ -98,7 +99,7 @@
 /* ── Dark mode ──────────────────────────────────────── */
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg:#1A1917; --bg-2:#22211E; --bg-3:#2B2A26;
+    --bg:#1A1917; --bg-2:#22211E; --bg-3:#2B2A26; --sidebar-bg:#1E1D1A;
     --bg-hover:#282724; --bg-active:#33322E;
     --bd:rgba(255,245,230,.06); --bd-md:rgba(255,245,230,.12); --bd-hv:rgba(255,245,230,.24);
     --tx:#E8E4DD; --tx-2:#9B958D; --tx-3:#6B6560; --tx-4:#484440;
