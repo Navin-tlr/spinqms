@@ -213,6 +213,7 @@ export default function Layout({
           justifyContent: 'space-between', padding: '0 24px',
           borderBottom: '1px solid var(--bd)', flexShrink: 0, gap: 12,
           background: 'var(--bg)',
+          boxShadow: '0 1px 0 var(--bd)',
           ...(isMobile ? { padding: '0 12px', position: 'sticky', top: 0, zIndex: 100 } : {}),
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -233,8 +234,9 @@ export default function Layout({
         </div>
 
         <div id="main-scroll-container" style={{
-          flex: 1, overflowY: 'auto', padding: '22px 24px',
-          display: 'flex', flexDirection: 'column', gap: 14,
+          flex: 1, overflowY: 'auto', padding: '20px 24px',
+          display: 'flex', flexDirection: 'column', gap: 12,
+          background: 'var(--bg-2)',
           ...(isMobile ? { padding: '14px 12px calc(68px + env(safe-area-inset-bottom,0px)) 12px' } : {}),
         }}>
           {children}

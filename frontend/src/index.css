@@ -3,17 +3,12 @@
 @tailwind utilities;
 
 /* ═══════════════════════════════════════════════════════
-   ANTHROPIC / CLAUDE DESIGN TOKENS
-   Palette drawn from claude.ai: warm parchment, soft
-   charcoal text, Styrene B typographic voice.
+   SPINQMS DESIGN TOKENS  v2
+   Reference: clean SaaS white — neutral grays, subtle
+   elevation, generous radius, Styrene B voice.
 ═══════════════════════════════════════════════════════ */
 
-/* ── Styrene B web font ─────────────────────────────────────────────────────
-   OTF files served from /public/fonts/.
-   local() checks system install first (wins if already cached by the OS);
-   url() is the guaranteed fallback served by Vite's static asset pipeline.
-   font-display: swap keeps text visible in the brief load window.
-────────────────────────────────────────────────────────────────────────── */
+/* ── Styrene B web font ─────────────────────────────────────────────────────*/
 @font-face {
   font-family: 'Styrene B';
   font-style:  normal;
@@ -48,69 +43,73 @@
 }
 
 :root {
-  /* Typography — Styrene B (self-hosted OTF) with system fallback chain */
-  --font:     'Styrene B', -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
-  --mono:     'JetBrains Mono', "SF Mono", "Fira Code", "Consolas", monospace;
+  /* Typography */
+  --font: 'Styrene B', -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --mono: 'JetBrains Mono', "SF Mono", "Fira Code", "Consolas", monospace;
 
-  /* ── Anthropic / Claude palette ──────────────────── */
-  /* Parchment base — warm cream-white like claude.ai */
-  --bg:        #FAF9F7;
-  --bg-2:      #F5F3EF;
-  --sidebar-bg: #FFFDF7;
-  --bg-3:      #EDEAE4;
-  --bg-hover:  #EBE8E2;
-  --bg-active: #E3DFD7;
+  /* ── Base surfaces — clean white ───────────────────── */
+  --bg:         #FFFFFF;
+  --bg-2:       #F9FAFB;
+  --bg-3:       #F3F4F6;
+  --sidebar-bg: #FFFFFF;
+  --bg-hover:   #F3F4F6;
+  --bg-active:  #EFF6FF;
 
-  /* Borders — warm taupe-grey */
-  --bd:        rgba(60,50,40,.08);
-  --bd-md:     rgba(60,50,40,.15);
-  --bd-hv:     rgba(60,50,40,.28);
+  /* ── Borders — neutral gray ─────────────────────────── */
+  --bd:    rgba(0,0,0,.07);
+  --bd-md: rgba(0,0,0,.13);
+  --bd-hv: rgba(0,0,0,.22);
 
-  /* Text — soft charcoal, never pure black */
-  --tx:   #313131;
-  --tx-2: #6B6560;
-  --tx-3: #9B958D;
-  --tx-4: #C4BDB4;
+  /* ── Text — neutral charcoal ─────────────────────────── */
+  --tx:   #111827;
+  --tx-2: #4B5563;
+  --tx-3: #9CA3AF;
+  --tx-4: #D1D5DB;
 
-  /* Status — muted, academic, never neon */
-  --ok:     #4A7C2E; --ok-bg:     #EEF6E6; --ok-bd:     #B5D89A;
-  --warn:   #8D6420; --warn-bg:   #FDF3E2; --warn-bd:   #E8C87A;
-  --bad:    #A03030; --bad-bg:    #FDEDED; --bad-bd:     #E8A0A0;
-  --info:   #4A6FA5; --info-bg:   #EBF1F8; --info-bd:   #A0BDE0;
+  /* ── Status — clean, semantic ───────────────────────── */
+  --ok:   #15803D; --ok-bg:   #F0FDF4; --ok-bd:   #BBF7D0;
+  --warn: #B45309; --warn-bg: #FFFBEB; --warn-bd: #FDE68A;
+  --bad:  #B91C1C; --bad-bg:  #FEF2F2; --bad-bd:  #FECACA;
+  --info: #1D4ED8; --info-bg: #EFF6FF; --info-bd: #BFDBFE;
 
-  /* Claude accent — Anthropic's signature warm terracotta-orange */
-  --claude:      #D97757;
-  --claude-bg:   #FDF2ED;
-  --claude-bd:   #E8B8A0;
+  /* ── Accent — SpinQMS terracotta identity ───────────── */
+  --claude:    #D97757;
+  --claude-bg: #FFF7ED;
+  --claude-bd: #FED7AA;
 
-  --purple: #6B52A8; --purple-bg: #F0ECF8; --purple-bd: #BEB0E0;
+  --purple: #7C3AED; --purple-bg: #F5F3FF; --purple-bd: #DDD6FE;
 
-  /* Geometry */
-  --r:    6px;
-  --r-lg: 10px;
-  --r-xl: 14px;
+  /* ── Geometry — generous radius ─────────────────────── */
+  --r:    8px;
+  --r-lg: 12px;
+  --r-xl: 16px;
 
   --sidebar: 248px;
   --hdr:     52px;
-  --shadow:  0 1px 3px rgba(60,50,40,.06);
-  --shadow-md: 0 4px 16px rgba(60,50,40,.08), 0 1px 3px rgba(60,50,40,.04);
+
+  /* ── Elevation — subtle two-layer shadow ────────────── */
+  --shadow:    0 1px 3px rgba(0,0,0,.06),  0 1px 2px rgba(0,0,0,.04);
+  --shadow-md: 0 4px 12px rgba(0,0,0,.08), 0 2px 4px rgba(0,0,0,.04);
+  --shadow-lg: 0 10px 30px rgba(0,0,0,.10), 0 4px 8px rgba(0,0,0,.04);
 }
 
 /* ── Dark mode ──────────────────────────────────────── */
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg:#1A1917; --bg-2:#22211E; --bg-3:#2B2A26; --sidebar-bg:#1E1D1A;
-    --bg-hover:#282724; --bg-active:#33322E;
-    --bd:rgba(255,245,230,.06); --bd-md:rgba(255,245,230,.12); --bd-hv:rgba(255,245,230,.24);
-    --tx:#E8E4DD; --tx-2:#9B958D; --tx-3:#6B6560; --tx-4:#484440;
-    --ok:#8DC060; --ok-bg:#1A2B0A; --ok-bd:#3E6818;
-    --warn:#E0A840; --warn-bg:#2C1E06; --warn-bd:#7A4A08;
-    --bad:#E09090; --bad-bg:#2A0E0E; --bad-bd:#803030;
-    --info:#80AAD8; --info-bg:#0E1D30; --info-bd:#3A5F8A;
-    --claude:#D97757; --claude-bg:#2C1A10; --claude-bd:#8A4A30;
-    --purple:#9888E0; --purple-bg:#1E1840; --purple-bd:#6B52A8;
-    --shadow: 0 1px 4px rgba(0,0,0,.35);
-    --shadow-md: 0 4px 16px rgba(0,0,0,.4);
+    --bg:#111827;    --bg-2:#1F2937;  --bg-3:#374151;
+    --sidebar-bg:#111827;
+    --bg-hover:#1F2937; --bg-active:#1E3A5F;
+    --bd:rgba(255,255,255,.07); --bd-md:rgba(255,255,255,.13); --bd-hv:rgba(255,255,255,.24);
+    --tx:#F9FAFB; --tx-2:#9CA3AF; --tx-3:#6B7280; --tx-4:#4B5563;
+    --ok:#4ADE80; --ok-bg:#052E16; --ok-bd:#166534;
+    --warn:#FCD34D; --warn-bg:#1C1500; --warn-bd:#854D0E;
+    --bad:#FCA5A5; --bad-bg:#1C0A0A; --bad-bd:#991B1B;
+    --info:#93C5FD; --info-bg:#0C1A3A; --info-bd:#1E40AF;
+    --claude:#F97316; --claude-bg:#1C0F05; --claude-bd:#7C2D12;
+    --purple:#A78BFA; --purple-bg:#1E1040; --purple-bd:#5B21B6;
+    --shadow:    0 1px 4px rgba(0,0,0,.4);
+    --shadow-md: 0 4px 16px rgba(0,0,0,.45), 0 2px 4px rgba(0,0,0,.3);
+    --shadow-lg: 0 10px 30px rgba(0,0,0,.5), 0 4px 8px rgba(0,0,0,.35);
   }
 }
 
@@ -123,7 +122,7 @@ html, body {
   font-size: 14px;
   line-height: 1.55;
   color: var(--tx);
-  background: var(--bg);
+  background: var(--bg-2);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
@@ -135,10 +134,8 @@ input[type="number"]::-webkit-outer-spin-button,
 input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 input[type="number"] { -moz-appearance: textfield; }
 
-/* ── Claude-style focus — warm inner glow, no blue ── */
-input:focus,
-select:focus,
-textarea:focus {
+/* ── Focus ring — accent inner glow ─────────────────── */
+input:focus, select:focus, textarea:focus {
   outline: none;
   border-color: var(--claude) !important;
   box-shadow: 0 0 0 3px var(--claude-bg), inset 0 0 0 1px var(--claude-bd) !important;
@@ -154,21 +151,22 @@ button:focus-visible {
 ::-webkit-scrollbar-thumb { background: var(--bd-md); border-radius: 3px; }
 
 /* ── Animations ─────────────────────────────────────── */
-@keyframes pulse    { 0%,100%{opacity:1} 50%{opacity:.3} }
-@keyframes slideIn  { from{opacity:0;transform:translateY(-5px)} to{opacity:1;transform:translateY(0)} }
-@keyframes fadeUp   { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
-@keyframes callout  {
+@keyframes pulse   { 0%,100%{opacity:1} 50%{opacity:.3} }
+@keyframes slideIn { from{opacity:0;transform:translateY(-5px)} to{opacity:1;transform:translateY(0)} }
+@keyframes fadeUp  { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+@keyframes callout {
   0%   { opacity:0; transform:translateY(10px) scale(.98); }
   60%  { transform:translateY(-2px) scale(1.005); }
   100% { opacity:1; transform:translateY(0) scale(1); }
 }
 @keyframes shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-3px)} 75%{transform:translateX(3px)} }
+@keyframes spin { to { transform: rotate(360deg); } }
 
 /* ── Mobile nav overlay ─────────────────────────────── */
 .mob-overlay {
   display: none; position: fixed; inset: 0;
-  background: rgba(40,35,30,.5); z-index: 200;
-  backdrop-filter: blur(3px);
+  background: rgba(0,0,0,.4); z-index: 200;
+  backdrop-filter: blur(4px);
 }
 .mob-overlay.open { display: block; }
 
@@ -178,9 +176,7 @@ button:focus-visible {
   display: flex; flex-direction: column; gap: 2px;
   padding: 4px 3px; border-radius: 3px;
 }
-.drag-handle > span {
-  display: flex; gap: 2px;
-}
+.drag-handle > span { display: flex; gap: 2px; }
 .drag-handle > span > i {
   width: 3px; height: 3px; border-radius: 50%;
   background: var(--tx-4);
