@@ -403,7 +403,7 @@ export default function DataEntry({ depts, currentDept, setCurrentDept, onSaved 
           marginTop: 16, paddingTop: 14, borderTop: '1px solid var(--bd)',
           flexWrap: 'wrap',
         }}>
-          <Btn variant="primary" onClick={handleSave} disabled={loading}>
+          <Btn variant="accent" onClick={handleSave} disabled={loading}>
             {loading ? 'Saving…' : 'Calculate & save'}
           </Btn>
           <Btn onClick={handleClear}>Clear</Btn>
