@@ -3478,6 +3478,24 @@ function InteractionReport({ trialId }) {
     }
   }
 
+  // ── Hooks must ALL be declared before any conditional return ─────────────
+  // Machine View: group cops by frame number (used only when report != null,
+  // but the hook itself must always be called to satisfy React's rules).
+  const byFrameForMachineView = useMemo(() => {
+    if (!report?.hierarchy) return {}
+    const map = {}
+    report.hierarchy.forEach(can => {
+      ;(can.bobbins || []).forEach(bob => {
+        ;(bob.cops || []).forEach(cop => {
+          const fr = cop.frame_number ?? 'Unassigned'
+          if (!map[fr]) map[fr] = []
+          map[fr].push({ cop, bobbin: bob, can })
+        })
+      })
+    })
+    return map
+  }, [report?.hierarchy])
+
   /* ── Placeholder ────────────────────────────────────────────────────────── */
   if (!report) {
     return (
@@ -3543,21 +3561,7 @@ function InteractionReport({ trialId }) {
     return { frame: f, count: rows.length, machines, avgCopHank: _avg(rows.map(r=>r.copHank)), avgCountDev: _avg(rows.map(r=>r.countDev)), maxCountDev: _maxAbs(rows.map(r=>r.countDev)), avgDraftError: _avg(rows.filter(r=>r.draftError!=null).map(r=>r.draftError)), avgCvAdded: _avg(rows.filter(r=>r.cvAdded!=null).map(r=>r.cvAdded)) }
   }).filter(Boolean)
 
-  // Machine View: group cops by frame number
-  const byFrameForMachineView = useMemo(() => {
-    if (!report.hierarchy) return {}
-    const map = {}
-    report.hierarchy.forEach(can => {
-      (can.bobbins || []).forEach(bob => {
-        (bob.cops || []).forEach(cop => {
-          const fr = cop.frame_number ?? 'Unassigned'
-          if (!map[fr]) map[fr] = []
-          map[fr].push({ cop, bobbin: bob, can })
-        })
-      })
-    })
-    return map
-  }, [report.hierarchy])
+  // (byFrameForMachineView is computed above, before the early return)
 
   const tabs = [
     { id: 'hierarchy',   label: 'Hierarchy' },

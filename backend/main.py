@@ -1573,13 +1573,16 @@ def create_ringframe_cop(
             .first()
         )
         if first_bobbin:
-            # Count cops already linked to this bobbin in this trial
+            # Count cops already linked to this bobbin ON THIS SPECIFIC FRAME.
+            # A bobbin moved to a different frame starts a new cop sequence (→ 1),
+            # while another cop on the same bobbin+frame increments it (→ 2, 3…).
             siblings = (
                 db.query(func.count(LabRingframeInput.id))
                 .join(LabRingframeCop, LabRingframeInput.cop_id == LabRingframeCop.id)
                 .filter(
                     LabRingframeInput.simplex_bobbin_id == first_bobbin.id,
                     LabRingframeCop.trial_id == trial_id,
+                    LabRingframeCop.frame_number == body.frame_number,
                 )
                 .scalar()
             ) or 0
