@@ -1592,11 +1592,16 @@ def create_ringframe_cop(
     else:
         label = f"C{count + 1}"
 
-    # Guarantee uniqueness within trial (handles gaps from deletions)
+    # Guarantee uniqueness within the same trial+frame (handles gaps from deletions).
+    # Scoped to frame so that "1-2-1" on Frame 13 and "1-2-1" on Frame 15
+    # are both valid and never collide with each other.
     existing_cop_labels = {
         row[0]
         for row in db.query(LabRingframeCop.label)
-        .filter(LabRingframeCop.trial_id == trial_id)
+        .filter(
+            LabRingframeCop.trial_id == trial_id,
+            LabRingframeCop.frame_number == body.frame_number,
+        )
         .all()
     }
     base_label = label
