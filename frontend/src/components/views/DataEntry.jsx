@@ -110,6 +110,12 @@ export default function DataEntry({ depts, currentDept, setCurrentDept, onSaved 
     } finally { setLoading(false) }
   }
 
+  const addReading    = () => setReadings(prev => [...prev, ''])
+  const removeReading = (i) => {
+    if (readings.length <= 3) return   // never drop below minimum
+    setReadings(prev => prev.filter((_, idx) => idx !== i))
+  }
+
   const handleClear = () => {
     setReadings(Array(9).fill(''))
     setResult(null)
@@ -294,46 +300,84 @@ export default function DataEntry({ depts, currentDept, setCurrentDept, onSaved 
         {/* Grid + Live stats — side-by-side */}
         <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
 
-          {/* 3 × 3 input grid — fixed max-width so inputs stay compact */}
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(3, 1fr)',
-            gap: 6,
-            flex: '0 0 auto',
-            width: '100%',
-            maxWidth: 360,
-          }}>
-            {readings.map((v, i) => {
-              const st      = inputStatus(v)
-              const bdColor = st === 'ok'  ? 'var(--ok-bd)'  : st === 'bad' ? 'var(--bad-bd)' : 'var(--bd-md)'
-              const bgColor = st === 'ok'  ? 'var(--ok-bg)'  : st === 'bad' ? 'var(--bad-bg)' : v ? 'var(--bg-3)' : 'var(--bg)'
-              return (
-                <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                  <label style={{
-                    fontSize: 9, fontWeight: 600, letterSpacing: '.1em',
-                    color: 'var(--tx-4)', textAlign: 'center', textTransform: 'uppercase',
-                  }}>
-                    R{i + 1}
-                  </label>
-                  <input
-                    type="number"
-                    step={mode === 'weight' ? 0.001 : 0.0001}
-                    placeholder={placeholder}
-                    value={v}
-                    onChange={e => { const n = [...readings]; n[i] = e.target.value; setReadings(n) }}
-                    style={{
-                      padding: '9px 4px',
-                      border: `1px solid ${bdColor}`,
-                      borderRadius: 'var(--r)',
-                      fontSize: 13, fontFamily: 'var(--mono)', fontWeight: 500,
-                      background: bgColor, color: 'var(--tx)',
-                      textAlign: 'center', width: '100%',
-                      transition: 'border-color .12s, background .12s',
-                    }}
-                  />
-                </div>
-              )
-            })}
+          {/* Dynamic reading grid — 3 columns, endless rows via "+" */}
+          <div style={{ flex: '0 0 auto', width: '100%', maxWidth: 360 }}>
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(3, 1fr)',
+              gap: 6,
+            }}>
+              {readings.map((v, i) => {
+                const st      = inputStatus(v)
+                const bdColor = st === 'ok'  ? 'var(--ok-bd)'  : st === 'bad' ? 'var(--bad-bd)' : 'var(--bd-md)'
+                const bgColor = st === 'ok'  ? 'var(--ok-bg)'  : st === 'bad' ? 'var(--bad-bg)' : v ? 'var(--bg-3)' : 'var(--bg)'
+                return (
+                  <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                    {/* Row label + remove button */}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', minHeight: 14 }}>
+                      <label style={{
+                        fontSize: 9, fontWeight: 600, letterSpacing: '.1em',
+                        color: 'var(--tx-4)', textTransform: 'uppercase',
+                      }}>
+                        R{i + 1}
+                      </label>
+                      {readings.length > 3 && (
+                        <button
+                          onClick={() => removeReading(i)}
+                          title="Remove reading"
+                          style={{
+                            width: 14, height: 14, borderRadius: '50%',
+                            border: '1px solid var(--bd-md)', background: 'var(--bg-3)',
+                            color: 'var(--tx-4)', fontSize: 10, lineHeight: 1,
+                            cursor: 'pointer', display: 'flex', alignItems: 'center',
+                            justifyContent: 'center', padding: 0, fontFamily: 'var(--font)',
+                            transition: 'background .1s, color .1s',
+                          }}
+                          onMouseEnter={e => { e.currentTarget.style.background = 'var(--bad-bg)'; e.currentTarget.style.color = 'var(--bad)' }}
+                          onMouseLeave={e => { e.currentTarget.style.background = 'var(--bg-3)';  e.currentTarget.style.color = 'var(--tx-4)' }}
+                        >×</button>
+                      )}
+                    </div>
+                    <input
+                      type="number"
+                      step={mode === 'weight' ? 0.001 : 0.0001}
+                      placeholder={placeholder}
+                      value={v}
+                      onChange={e => { const n = [...readings]; n[i] = e.target.value; setReadings(n) }}
+                      style={{
+                        padding: '9px 4px',
+                        border: `1px solid ${bdColor}`,
+                        borderRadius: 'var(--r)',
+                        fontSize: 13, fontFamily: 'var(--mono)', fontWeight: 500,
+                        background: bgColor, color: 'var(--tx)',
+                        textAlign: 'center', width: '100%',
+                        transition: 'border-color .12s, background .12s',
+                      }}
+                    />
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* Add reading button */}
+            <button
+              onClick={addReading}
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                gap: 5, width: '100%', marginTop: 8,
+                padding: '7px 0',
+                border: '1px dashed var(--bd-md)',
+                borderRadius: 'var(--r)',
+                background: 'transparent', color: 'var(--tx-3)',
+                fontSize: 12, fontFamily: 'var(--font)', fontWeight: 500,
+                cursor: 'pointer', transition: 'all .12s',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--claude)'; e.currentTarget.style.color = 'var(--claude)' }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--bd-md)';  e.currentTarget.style.color = 'var(--tx-3)' }}
+            >
+              <span style={{ fontSize: 16, lineHeight: 1, fontWeight: 300 }}>+</span>
+              Add reading
+            </button>
           </div>
 
           {/* Live stats sidebar — appears as readings are entered */}
@@ -360,7 +404,7 @@ export default function DataEntry({ depts, currentDept, setCurrentDept, onSaved 
                 </div>
                 {/* Stat rows */}
                 {[
-                  { l: 'Readings',  v: `${liveHanks.length} / ${readings.length}`, mono: false },
+                  { l: 'Readings',  v: `${liveHanks.length} / ${readings.length} slots`, mono: false },
                   { l: 'Mean (x̄)',   v: liveStats.mean.toFixed(p + 2),              mono: true  },
                   { l: 'Std dev σ',  v: liveStats.sd.toFixed(p + 3),                mono: true  },
                   { l: 'CV%',        v: `${liveStats.cv.toFixed(2)}%`,              mono: true  },
@@ -409,7 +453,7 @@ export default function DataEntry({ depts, currentDept, setCurrentDept, onSaved 
           <Btn onClick={handleClear}>Clear</Btn>
           {liveHanks.length > 0 && (
             <span style={{ fontSize: 11, color: 'var(--tx-4)', marginLeft: 4 }}>
-              {liveHanks.length} of {readings.length} filled
+              {liveHanks.length} of {readings.length} filled · min 3 required
             </span>
           )}
         </div>
