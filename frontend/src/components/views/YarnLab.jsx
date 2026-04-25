@@ -2232,6 +2232,63 @@ function buildInteractionReport(raw) {
     }
   })
 
+  // ── RSB × Simplex analysis ────────────────────────────────────────────────
+  // One entry per (can, bobbin) pair that actually exists in the flow data.
+  const H_rsb    = benchmarks.rsb?.target   ?? null
+  const rsb_tol  = benchmarks.rsb?.tolerance ?? null
+  const H_sx     = H_b_target
+  const nominalDraft_rsb_sx = H_rsb ? H_sx / H_rsb : null
+
+  const rsbSxPairs = []
+  bobbins.forEach(bobbin => {
+    ;(bobbin.rsb_cans || []).forEach(can => {
+      const cvAdded = (bobbin.bobbin_cv != null && can.can_cv != null)
+        ? Math.sqrt(Math.max(0, bobbin.bobbin_cv ** 2 - can.can_cv ** 2))
+        : null
+      const actualDraft = (bobbin.bobbin_hank && can.can_hank)
+        ? bobbin.bobbin_hank / can.can_hank
+        : null
+      rsbSxPairs.push({
+        canId: can.can_id, canSlot: can.can_slot, canLabel: `Can ${can.can_slot}`,
+        canHank: can.can_hank ?? null, canCv: can.can_cv ?? null,
+        bobbinId: bobbin.id, bobbinLabel: bobbin.label,
+        bobbinHank: bobbin.bobbin_hank ?? null, bobbinCv: bobbin.bobbin_cv ?? null,
+        machineNumber: bobbin.machine_number ?? null,
+        cvAdded,
+        actualDraft,
+        draftError: actualDraft != null && nominalDraft_rsb_sx != null
+          ? actualDraft - nominalDraft_rsb_sx : null,
+        hankGain: (bobbin.bobbin_hank && can.can_hank)
+          ? bobbin.bobbin_hank - can.can_hank : null,
+      })
+    })
+  })
+
+  // Per-can aggregate (sorted by slot)
+  const _canAgg = {}
+  rsbSxPairs.forEach(r => {
+    if (!_canAgg[r.canSlot]) _canAgg[r.canSlot] = { slot: r.canSlot, label: r.canLabel, canHank: r.canHank, canCv: r.canCv, pairs: [] }
+    _canAgg[r.canSlot].pairs.push(r)
+  })
+  const rsbCanSummary = Object.values(_canAgg).sort((a, b) => a.slot - b.slot).map(can => {
+    const hanks    = can.pairs.map(p => p.bobbinHank).filter(h => h != null)
+    const cvAddeds = can.pairs.map(p => p.cvAdded).filter(v => v != null)
+    return {
+      ...can,
+      n:            can.pairs.length,
+      avgBobbinHank: hanks.length    ? hanks.reduce((a, b) => a + b, 0) / hanks.length : null,
+      avgCvAdded:   cvAddeds.length  ? cvAddeds.reduce((a, b) => a + b, 0) / cvAddeds.length : null,
+      maxCvAdded:   cvAddeds.length  ? Math.max(...cvAddeds) : null,
+    }
+  })
+
+  // All unique bobbin labels (for matrix columns)
+  const rsbMatrixBobbins = bobbins.filter(b => (b.rsb_cans || []).length > 0)
+  // All unique can slots (for matrix rows)
+  const rsbMatrixCans = [...new Map(
+    rsbSxPairs.map(p => [p.canSlot, { slot: p.canSlot, label: p.canLabel, hank: p.canHank, cv: p.canCv }])
+  ).values()].sort((a, b) => a.slot - b.slot)
+
   return {
     interactions, byFrame, byBobbin,
     frameSummary, bobbinSummary,
@@ -2241,6 +2298,14 @@ function buildInteractionReport(raw) {
     anova: anova ?? null,
     hierarchy,
     variation,
+    rsbSimplex: {
+      pairs:       rsbSxPairs,
+      canSummary:  rsbCanSummary,
+      matrixCans:  rsbMatrixCans,
+      matrixBobbins: rsbMatrixBobbins,
+      H_rsb, rsb_tol, H_sx,
+      nominalDraft: nominalDraft_rsb_sx,
+    },
   }
 }
 
@@ -3426,6 +3491,216 @@ function VariationView({ variation }) {
   )
 }
 
+/* ══════════════════════════════════════════════════════════════════════════════
+   RSB × Simplex Analytics Tab
+══════════════════════════════════════════════════════════════════════════════ */
+function RSBSimplexView({ rsbSimplex, sxTol }) {
+  const { pairs, canSummary, matrixCans, matrixBobbins, H_rsb, H_sx, nominalDraft } = rsbSimplex
+
+  if (!pairs.length) {
+    return (
+      <div style={{ padding: 32, textAlign: 'center', color: 'var(--tx-3)', fontSize: 12 }}>
+        No RSB → Simplex links found. Link bobbins to their source cans via the Flow Board first.
+      </div>
+    )
+  }
+
+  const dp_rsb = H_rsb != null && H_rsb >= 10 ? 2 : 4
+  const dp_sx  = H_sx  != null && H_sx  >= 10 ? 2 : 4
+
+  // colour helpers
+  const cvCol = cv => {
+    if (cv == null) return 'var(--tx-4)'
+    if (cv > 3)   return 'var(--bad)'
+    if (cv > 1.5) return 'var(--warn)'
+    return 'var(--ok)'
+  }
+  const deviationCol = (val, ref, tol) => {
+    if (val == null || ref == null) return 'var(--tx-4)'
+    const dev = Math.abs(val - ref)
+    if (!tol) return 'var(--tx)'
+    if (dev > tol)       return 'var(--bad)'
+    if (dev > tol * 0.5) return 'var(--warn)'
+    return 'var(--tx)'
+  }
+
+  // Build fast lookup: `${canSlot}_${bobbinId}` → pair
+  const pairMap = {}
+  pairs.forEach(p => { pairMap[`${p.canSlot}_${p.bobbinId}`] = p })
+
+  // summary scalars
+  const validCvAdded  = pairs.map(p => p.cvAdded).filter(v => v != null)
+  const avgCvAdded    = validCvAdded.length ? validCvAdded.reduce((a, b) => a + b, 0) / validCvAdded.length : null
+  const maxCvAdded    = validCvAdded.length ? Math.max(...validCvAdded) : null
+  const validGains    = pairs.map(p => p.hankGain).filter(v => v != null)
+  const avgHankGain   = validGains.length ? validGains.reduce((a, b) => a + b, 0) / validGains.length : null
+
+  const thS = { padding: '5px 10px', fontSize: 10, fontWeight: 700, color: 'var(--tx-4)', textAlign: 'left', background: 'var(--bg-2)', borderBottom: '1px solid var(--bd-md)', whiteSpace: 'nowrap' }
+  const tdS = { padding: '5px 10px', fontSize: 11, fontFamily: 'var(--mono)', borderBottom: '1px solid var(--bd)' }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 28 }}>
+
+      {/* ── 1. Summary metric tiles ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 8 }}>
+        {[
+          { label: 'Can–Bobbin pairs',  value: pairs.length,                                  mono: false, quality: null },
+          { label: 'RSB target hank',   value: H_rsb  != null ? H_rsb.toFixed(dp_rsb)  : '—', mono: true,  quality: null },
+          { label: 'Simplex target',    value: H_sx   != null ? H_sx.toFixed(dp_sx)    : '—', mono: true,  quality: null },
+          { label: 'Nominal draft',     value: nominalDraft   != null ? `${nominalDraft.toFixed(2)}×` : '—', mono: true, quality: null },
+          { label: 'Avg CV added',      value: avgCvAdded  != null ? `${avgCvAdded.toFixed(2)}%`  : '—', mono: true, quality: avgCvAdded == null ? null : avgCvAdded > 3 ? 'bad' : avgCvAdded > 1.5 ? 'warn' : 'ok' },
+          { label: 'Max CV added',      value: maxCvAdded  != null ? `${maxCvAdded.toFixed(2)}%`  : '—', mono: true, quality: maxCvAdded  == null ? null : maxCvAdded  > 3 ? 'bad' : maxCvAdded  > 1.5 ? 'warn' : 'ok' },
+          { label: 'Avg hank gain',     value: avgHankGain != null ? (avgHankGain >= 0 ? '+' : '') + avgHankGain.toFixed(dp_sx) : '—', mono: true, quality: null },
+        ].map(({ label, value, mono, quality }) => {
+          const qc = { ok: 'var(--ok)', warn: 'var(--warn)', bad: 'var(--bad)' }
+          return (
+            <div key={label} style={{ background: 'var(--bg)', border: '1px solid var(--bd-md)', borderRadius: 'var(--r-lg)', padding: '10px 14px' }}>
+              <div style={{ fontSize: 16, fontWeight: 600, fontFamily: mono ? 'var(--mono)' : 'var(--font)', color: quality ? qc[quality] : 'var(--tx)', letterSpacing: '-.01em' }}>{value}</div>
+              <div style={{ fontSize: 10, color: 'var(--tx-3)', marginTop: 4 }}>{label}</div>
+            </div>
+          )
+        })}
+      </div>
+
+      {/* ── 2. Can × Bobbin Heatmap Matrix ── */}
+      <IrSection
+        title="Can × Bobbin Hank Matrix"
+        subtitle="Each cell shows the simplex bobbin hank for that can–bobbin link. Text colour = deviation of bobbin hank from the feeding can's hank. '—' means the can did not feed that bobbin."
+      >
+        {matrixCans.length === 0 || matrixBobbins.length === 0 ? (
+          <div style={{ fontSize: 12, color: 'var(--tx-4)' }}>No matrix data available.</div>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ borderCollapse: 'collapse', fontSize: 11, fontFamily: 'var(--mono)' }}>
+              <thead>
+                <tr>
+                  <th style={{ ...thS, textAlign: 'left', minWidth: 72 }}>Can</th>
+                  <th style={{ ...thS, textAlign: 'right', minWidth: 64 }}>Can Hank</th>
+                  <th style={{ ...thS, textAlign: 'right', minWidth: 54 }}>CV%</th>
+                  {matrixBobbins.map(b => (
+                    <th key={b.id} style={{ ...thS, textAlign: 'center', minWidth: 72 }}>
+                      {b.label}
+                      {b.machine_number != null && <div style={{ fontSize: 9, fontWeight: 400, color: 'var(--tx-4)' }}>Sx{b.machine_number}</div>}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {matrixCans.map((can, ri) => (
+                  <tr key={can.slot} style={{ background: ri % 2 === 0 ? 'var(--bg)' : 'var(--bg-2)' }}>
+                    <td style={{ ...tdS, fontWeight: 600 }}>{can.label}</td>
+                    <td style={{ ...tdS, textAlign: 'right' }}>{can.hank != null ? can.hank.toFixed(dp_rsb) : '—'}</td>
+                    <td style={{ ...tdS, textAlign: 'right', color: cvCol(can.cv) }}>{can.cv != null ? can.cv.toFixed(2) + '%' : '—'}</td>
+                    {matrixBobbins.map(b => {
+                      const p = pairMap[`${can.slot}_${b.id}`]
+                      if (!p) return <td key={b.id} style={{ ...tdS, textAlign: 'center', color: 'var(--tx-4)' }}>—</td>
+                      const col = deviationCol(p.bobbinHank, p.canHank, sxTol)
+                      return (
+                        <td key={b.id} style={{ ...tdS, textAlign: 'center' }}>
+                          <div style={{ fontWeight: 600, color: col }}>{p.bobbinHank != null ? p.bobbinHank.toFixed(dp_sx) : '—'}</div>
+                          {p.hankGain != null && (
+                            <div style={{ fontSize: 9, color: p.hankGain >= 0 ? 'var(--tx-4)' : 'var(--warn)' }}>
+                              {p.hankGain >= 0 ? '+' : ''}{p.hankGain.toFixed(dp_sx)}
+                            </div>
+                          )}
+                        </td>
+                      )
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </IrSection>
+
+      {/* ── 3. Added Irregularity Detail Table ── */}
+      <IrSection
+        title="Added Irregularity — Can → Bobbin Pairs"
+        subtitle="CV Added = √(CV_bobbin² − CV_can²). Positive values mean the simplex process introduced new variation beyond what the RSB sliver already had. Sorted worst-first."
+      >
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ borderCollapse: 'collapse', fontSize: 11, width: '100%' }}>
+            <thead>
+              <tr>
+                <th style={thS}>Can</th>
+                <th style={thS}>Bobbin</th>
+                <th style={{ ...thS, textAlign: 'right' }}>Sx M/c</th>
+                <th style={{ ...thS, textAlign: 'right' }}>Can Hank</th>
+                <th style={{ ...thS, textAlign: 'right' }}>Bobbin Hank</th>
+                <th style={{ ...thS, textAlign: 'right' }}>Hank Gain</th>
+                <th style={{ ...thS, textAlign: 'right' }}>CV% Can</th>
+                <th style={{ ...thS, textAlign: 'right' }}>CV% Bobbin</th>
+                <th style={{ ...thS, textAlign: 'right' }}>CV Added</th>
+                <th style={{ ...thS, textAlign: 'right' }}>Act. Draft</th>
+              </tr>
+            </thead>
+            <tbody>
+              {[...pairs]
+                .filter(p => p.bobbinHank != null || p.canHank != null)
+                .sort((a, b) => (b.cvAdded ?? -1) - (a.cvAdded ?? -1))
+                .map((p, i) => (
+                  <tr key={i} style={{ background: i % 2 === 0 ? 'var(--bg)' : 'var(--bg-2)' }}>
+                    <td style={tdS}>{p.canLabel}</td>
+                    <td style={tdS}>{p.bobbinLabel}</td>
+                    <td style={{ ...tdS, textAlign: 'right' }}>{p.machineNumber != null ? `Sx ${p.machineNumber}` : '—'}</td>
+                    <td style={{ ...tdS, textAlign: 'right' }}>{p.canHank    != null ? p.canHank.toFixed(dp_rsb)    : '—'}</td>
+                    <td style={{ ...tdS, textAlign: 'right' }}>{p.bobbinHank != null ? p.bobbinHank.toFixed(dp_sx) : '—'}</td>
+                    <td style={{ ...tdS, textAlign: 'right', color: p.hankGain != null ? (Math.abs(p.hankGain) > (sxTol ?? 99) ? 'var(--bad)' : 'var(--tx)') : 'var(--tx-4)' }}>
+                      {p.hankGain != null ? (p.hankGain >= 0 ? '+' : '') + p.hankGain.toFixed(dp_sx) : '—'}
+                    </td>
+                    <td style={{ ...tdS, textAlign: 'right', color: cvCol(p.canCv)    }}>{p.canCv    != null ? p.canCv.toFixed(2)    + '%' : '—'}</td>
+                    <td style={{ ...tdS, textAlign: 'right', color: cvCol(p.bobbinCv) }}>{p.bobbinCv != null ? p.bobbinCv.toFixed(2) + '%' : '—'}</td>
+                    <td style={{ ...tdS, textAlign: 'right', fontWeight: 600, color: cvCol(p.cvAdded) }}>
+                      {p.cvAdded != null ? p.cvAdded.toFixed(2) + '%' : '—'}
+                    </td>
+                    <td style={{ ...tdS, textAlign: 'right' }}>
+                      {p.actualDraft != null ? p.actualDraft.toFixed(3) + '×' : '—'}
+                    </td>
+                  </tr>
+                ))}
+            </tbody>
+          </table>
+        </div>
+      </IrSection>
+
+      {/* ── 4. Per-Can Summary ── */}
+      <IrSection
+        title="Per-Can Summary"
+        subtitle="Aggregate simplex output per RSB can. High avg CV added on one can points to a sliver quality issue upstream of simplex."
+      >
+        <table style={{ borderCollapse: 'collapse', fontSize: 11, width: '100%' }}>
+          <thead>
+            <tr>
+              <th style={thS}>Can</th>
+              <th style={{ ...thS, textAlign: 'right' }}>Can Hank</th>
+              <th style={{ ...thS, textAlign: 'right' }}>Can CV%</th>
+              <th style={{ ...thS, textAlign: 'right' }}># Bobbins</th>
+              <th style={{ ...thS, textAlign: 'right' }}>Avg Bobbin Hank</th>
+              <th style={{ ...thS, textAlign: 'right' }}>Avg CV Added</th>
+              <th style={{ ...thS, textAlign: 'right' }}>Max CV Added</th>
+            </tr>
+          </thead>
+          <tbody>
+            {canSummary.map((can, i) => (
+              <tr key={can.slot} style={{ background: i % 2 === 0 ? 'var(--bg)' : 'var(--bg-2)' }}>
+                <td style={{ ...tdS, fontWeight: 600 }}>{can.label}</td>
+                <td style={{ ...tdS, textAlign: 'right' }}>{can.canHank != null ? can.canHank.toFixed(dp_rsb) : '—'}</td>
+                <td style={{ ...tdS, textAlign: 'right', color: cvCol(can.canCv) }}>{can.canCv != null ? can.canCv.toFixed(2) + '%' : '—'}</td>
+                <td style={{ ...tdS, textAlign: 'right' }}>{can.n}</td>
+                <td style={{ ...tdS, textAlign: 'right' }}>{can.avgBobbinHank != null ? can.avgBobbinHank.toFixed(dp_sx) : '—'}</td>
+                <td style={{ ...tdS, textAlign: 'right', fontWeight: 600, color: cvCol(can.avgCvAdded) }}>{can.avgCvAdded != null ? can.avgCvAdded.toFixed(2) + '%' : '—'}</td>
+                <td style={{ ...tdS, textAlign: 'right', color: cvCol(can.maxCvAdded) }}>{can.maxCvAdded != null ? can.maxCvAdded.toFixed(2) + '%' : '—'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </IrSection>
+
+    </div>
+  )
+}
+
 /* ── Machine filter bar ──────────────────────────────────────────────────────── */
 function MachineFilerBar({ report, machineFilter, setMachineFilter }) {
   const machines = useMemo(() => {
@@ -3567,6 +3842,7 @@ function InteractionReport({ trialId }) {
     { id: 'hierarchy',   label: 'Hierarchy' },
     { id: 'matrices',    label: 'Matrices' },
     { id: 'variation',   label: 'Variation' },
+    { id: 'rsb_simplex', label: 'RSB × Simplex' },
     { id: 'machine',     label: 'Machine View' },
     { id: 'statistical', label: 'Statistical' },
   ]
@@ -3628,6 +3904,14 @@ function InteractionReport({ trialId }) {
         <IrSection title="4-Level Variation Analysis" subtitle="Decomposes variance across the Can→Bobbin→Cop→Reading hierarchy. Levels with high CV% or large range indicate where defects are introduced.">
           <VariationView variation={report.variation} />
         </IrSection>
+      )}
+
+      {/* ── Tab: RSB × Simplex ── */}
+      {activeTab === 'rsb_simplex' && (
+        <RSBSimplexView
+          rsbSimplex={report.rsbSimplex}
+          sxTol={report.rfTol}
+        />
       )}
 
       {/* ── Tab: Machine View ── */}
