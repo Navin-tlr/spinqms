@@ -338,6 +338,15 @@ class LabSimplexInput(Base):
     rsb_can_id = Column(Integer, ForeignKey("lab_rsb_cans.id", ondelete="CASCADE"),
                         nullable=False, index=True)
 
+    # Per-link readings: each (can → bobbin) link stores its own measurement
+    # independently, so the same can measured on bobbin A vs bobbin B is tracked
+    # as separate instances (mirrors the cop-per-frame independence model).
+    sample_length  = Column(Float,   nullable=True, default=6.0)
+    readings_json  = Column(Text,    nullable=True)
+    readings_count = Column(Integer, nullable=True, default=0)
+    mean_hank      = Column(Float,   nullable=True)
+    cv_pct         = Column(Float,   nullable=True)
+
     bobbin  = relationship("LabSimplexBobbin", back_populates="inputs")
     rsb_can = relationship("LabRSBCan",        back_populates="simplex_links")
 

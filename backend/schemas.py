@@ -32,7 +32,7 @@ class SettingsOut(BaseModel):
 class SampleCreate(BaseModel):
     dept_id:       str
     shift:         str = Field(..., pattern="^[ABC]$")
-    readings:      List[float] = Field(..., min_length=3, max_length=50)
+    readings:      List[float] = Field(..., min_length=3)
     avg_weight:    Optional[float] = Field(None, gt=0)  # grams; None if direct mode
     sample_length: float = Field(..., gt=0)             # yards
     frame_number:  Optional[int] = Field(None, ge=1, le=25)
@@ -52,7 +52,7 @@ class SampleCreate(BaseModel):
 
 # ── Sample update ─────────────────────────────────────────────────────────────
 class SampleUpdate(BaseModel):
-    readings:   List[float] = Field(..., min_length=3, max_length=50)
+    readings:   List[float] = Field(..., min_length=3)
     avg_weight: Optional[float] = Field(None, gt=0)
 
     @model_validator(mode="after")
@@ -167,7 +167,7 @@ class LabBenchmarkItem(BaseModel):
 
 class LabSampleCreate(BaseModel):
     dept_id:       str
-    readings:      List[float] = Field(..., min_length=3, max_length=50)
+    readings:      List[float] = Field(..., min_length=3)
     avg_weight:    Optional[float] = Field(None, gt=0)
     sample_length: float = Field(..., gt=0)
     frame_number:  Optional[int] = None
@@ -202,8 +202,6 @@ class RSBCanBulkSave(BaseModel):
             raise ValueError("Provide between 1 and 10 cans")
         for c in self.cans:
             readings = c.readings or []
-            if len(readings) > 12:
-                raise ValueError(f"Can {c.slot}: provide at most 12 readings per can")
             if any(r is not None and r <= 0 for r in readings):
                 raise ValueError(f"Can {c.slot}: all readings must be positive numbers")
         return self
@@ -234,8 +232,6 @@ class SimplexBobbinCreate(BaseModel):
     @model_validator(mode="after")
     def validate_readings(self) -> "SimplexBobbinCreate":
         readings = self.readings or []
-        if len(readings) > 10:
-            raise ValueError("Provide at most 10 readings for Simplex bobbins")
         if any(r is not None and r <= 0 for r in readings):
             raise ValueError("Simplex readings must be positive")
         return self
@@ -257,8 +253,6 @@ class SimplexBobbinUpdate(BaseModel):
     def validate_readings(self) -> "SimplexBobbinUpdate":
         if self.readings is not None:
             readings = self.readings
-            if len(readings) > 10:
-                raise ValueError("Provide at most 10 readings for Simplex bobbins")
             if any(r is not None and r <= 0 for r in readings):
                 raise ValueError("Simplex readings must be positive")
         return self
@@ -290,6 +284,29 @@ class SimplexBobbinRef(BaseModel):
     hank_value: Optional[float]
     machine_number: Optional[int] = None
     spindle_number: Optional[int] = None
+
+
+class SimplexInputUpdate(BaseModel):
+    """Update per-link (RSB can → Simplex bobbin) readings independently."""
+    readings:      List[float] = Field(..., min_length=1)
+    sample_length: float = Field(6.0, gt=0)
+
+    @model_validator(mode="after")
+    def readings_positive(self) -> "SimplexInputUpdate":
+        if any(r <= 0 for r in self.readings):
+            raise ValueError("All readings must be positive")
+        return self
+
+
+class SimplexInputOut(BaseModel):
+    id:            int
+    bobbin_id:     int
+    rsb_can_id:    int
+    sample_length: Optional[float]
+    readings:      List[float]
+    readings_count: Optional[int]
+    mean_hank:     Optional[float]
+    cv_pct:        Optional[float]
 
 
 class RingframeCopCreate(BaseModel):

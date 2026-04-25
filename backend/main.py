@@ -61,6 +61,8 @@ from schemas import (
     SimplexBobbinCreate,
     SimplexBobbinOut,
     SimplexBobbinUpdate,
+    SimplexInputUpdate,
+    SimplexInputOut,
     PredictRequest,
     SampleCreate,
     SampleOut,
@@ -302,6 +304,33 @@ def _rsb_can_payload(can: LabRSBCan, dept: Optional[Department]) -> dict:
     }
 
 
+def _rsb_can_payload_for_link(link: LabSimplexInput, rsb_dept: Optional[Department]) -> dict:
+    """
+    Build the RSB can payload enriched with per-link readings.
+    The `link` object carries independent per-(can, bobbin) measurement data
+    so that the same can measured on different bobbins has separate stats.
+    """
+    can = link.rsb_can
+    base = _rsb_can_payload(can, rsb_dept)
+    # Overlay with per-link readings when present; fall back to can-level data.
+    if link.readings_json:
+        link_readings = json.loads(link.readings_json)
+        base["link_id"]             = link.id
+        base["link_readings"]       = link_readings
+        base["link_readings_count"] = link.readings_count
+        base["link_mean_hank"]      = link.mean_hank
+        base["link_cv_pct"]         = link.cv_pct
+        base["link_sample_length"]  = link.sample_length
+    else:
+        base["link_id"]             = link.id
+        base["link_readings"]       = []
+        base["link_readings_count"] = 0
+        base["link_mean_hank"]      = None
+        base["link_cv_pct"]         = None
+        base["link_sample_length"]  = link.sample_length or can.sample_length
+    return base
+
+
 def _simplex_bobbin_payload(
     b: LabSimplexBobbin,
     simplex_dept: Optional[Department],
@@ -321,7 +350,7 @@ def _simplex_bobbin_payload(
         "doff_minutes":       b.doff_minutes,
         "sample_length":      b.sample_length,
         "rsb_can_ids":        [inp.rsb_can_id for inp in links],
-        "rsb_cans":           [_rsb_can_payload(inp.rsb_can, rsb_dept) for inp in links],
+        "rsb_cans":           [_rsb_can_payload_for_link(inp, rsb_dept) for inp in links],
         "created_at":         b.created_at,
         "readings":           readings,
         "readings_count":     b.readings_count,
@@ -1440,29 +1469,39 @@ def create_simplex_bobbin(
             .first()
         )
         if first_can:
-            # Count bobbins already linked to this specific can in this trial
-            siblings = (
+            # Count bobbins already linked to this specific can on the same
+            # machine (machine_number-scoped so each machine restarts from 1).
+            siblings_q = (
                 db.query(func.count(LabSimplexInput.id))
                 .join(LabSimplexBobbin, LabSimplexInput.bobbin_id == LabSimplexBobbin.id)
                 .filter(
                     LabSimplexInput.rsb_can_id == first_can.id,
                     LabSimplexBobbin.trial_id == trial_id,
                 )
-                .scalar()
-            ) or 0
+            )
+            if body.machine_number is not None:
+                siblings_q = siblings_q.filter(
+                    LabSimplexBobbin.machine_number == body.machine_number
+                )
+            siblings = siblings_q.scalar() or 0
             label = f"{first_can.slot}-{siblings + 1}"
         else:
             label = f"B{count + 1}"
     else:
         label = f"B{count + 1}"
 
-    # Guarantee uniqueness within trial (handles gaps from deletions)
-    existing_labels = {
-        row[0]
-        for row in db.query(LabSimplexBobbin.label)
+    # Guarantee uniqueness within the same machine context (handles gaps from
+    # deletions).  Scoped to machine_number so identical labels on different
+    # machines are intentional and allowed.
+    existing_labels_q = (
+        db.query(LabSimplexBobbin.label)
         .filter(LabSimplexBobbin.trial_id == trial_id)
-        .all()
-    }
+    )
+    if body.machine_number is not None:
+        existing_labels_q = existing_labels_q.filter(
+            LabSimplexBobbin.machine_number == body.machine_number
+        )
+    existing_labels = {row[0] for row in existing_labels_q.all()}
     base_label = label
     suffix = 2
     while label in existing_labels:
@@ -1546,6 +1585,42 @@ def delete_simplex_bobbin(bobbin_id: int, db: Session = Depends(get_db)):
         raise HTTPException(404, "Simplex bobbin not found")
     db.delete(bobbin)
     db.commit()
+
+
+@app.put("/api/lab/simplex-inputs/{input_id}", response_model=SimplexInputOut)
+def update_simplex_input_readings(
+    input_id: int,
+    body: SimplexInputUpdate,
+    db: Session = Depends(get_db),
+):
+    """
+    Store per-link readings for a specific RSB can → Simplex bobbin connection.
+
+    Each (can, bobbin) link tracks its own independent measurements so that the
+    same RSB can used across multiple bobbins is evaluated separately for each
+    bobbin — analogous to the cop-per-frame independence model.
+    """
+    link = db.query(LabSimplexInput).filter_by(id=input_id).first()
+    if not link:
+        raise HTTPException(404, "Simplex input link not found")
+
+    readings = [round(r, 6) for r in body.readings if r is not None]
+    _set_reading_fields(link, readings, body.sample_length)
+    link.sample_length = body.sample_length
+    db.commit()
+    db.refresh(link)
+
+    stored_readings = json.loads(link.readings_json) if link.readings_json else []
+    return {
+        "id":             link.id,
+        "bobbin_id":      link.bobbin_id,
+        "rsb_can_id":     link.rsb_can_id,
+        "sample_length":  link.sample_length,
+        "readings":       stored_readings,
+        "readings_count": link.readings_count,
+        "mean_hank":      link.mean_hank,
+        "cv_pct":         link.cv_pct,
+    }
 
 
 @app.post("/api/lab/trials/{trial_id}/flow/ringframe", status_code=201, response_model=RingframeCopOut)
