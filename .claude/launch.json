@@ -42,6 +42,13 @@
       "runtimeArgs": ["run", "dev"],
       "cwd": "/Users/navinsivakumar/Desktop/JD-Copilot/spark-home-2",
       "port": 8080
+    },
+    {
+      "name": "Yarn Website",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-m", "http.server", "4200"],
+      "cwd": "../yarn-website",
+      "port": 4200
     }
   ]
 }

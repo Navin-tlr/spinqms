@@ -81,3 +81,24 @@ export const hankToWeight = (hank, lengthYards) =>
   (lengthYards * 0.54) / hank
 
 export const decimalPlaces = (target) => (target >= 10 ? 2 : 4)
+
+// ── Production Module ─────────────────────────────────────────────────────────
+export const getProductionStdRates  = ()              => http.get('/production/std-rates').then(r => r.data)
+export const updateProductionStdRate = (deptId, body) => http.put(`/production/std-rates/${deptId}`, body).then(r => r.data)
+export const createProductionEntry  = (body)          => http.post('/production/entries', body).then(r => r.data)
+export const getProductionEntries   = (params)        => http.get('/production/entries', { params: clean(params) }).then(r => r.data)
+export const deleteProductionEntry  = (id)            => http.delete(`/production/entries/${id}`)
+export const getProductionDashboard = (targetDate)    => http.get('/production/dashboard', { params: clean({ target_date: targetDate }) }).then(r => r.data)
+
+// Client-side formula mirrors (for live preview before save)
+export const calcEfficiencyKg    = (stdRate, effPct, hours) =>
+  Math.round(stdRate * (effPct / 100) * hours * 1000) / 1000
+
+export const calcHankMeterKg     = (hankReading, spindleCount, ne) =>
+  Math.round((hankReading * spindleCount / ne) * 0.453592 * 1000) / 1000
+
+export const calcTheoreticalKg   = (rpm, tpi, spindles, ne, shiftMin = 480) => {
+  const deliveryYpm  = rpm / (tpi * 36)
+  const totalYards   = deliveryYpm * shiftMin * spindles
+  return Math.round(totalYards / (ne * 840) * 0.453592 * 1000) / 1000
+}

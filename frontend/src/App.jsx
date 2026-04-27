@@ -9,6 +9,9 @@ import Settings from './components/views/Settings.jsx'
 import DataLog from './components/views/DataLog.jsx'
 import OperatorGuide from './components/views/OperatorGuide.jsx'
 import YarnLab from './components/views/YarnLab.jsx'
+import ProductionDashboard from './components/views/ProductionDashboard.jsx'
+import ProductionEntry from './components/views/ProductionEntry.jsx'
+import ProductionLog from './components/views/ProductionLog.jsx'
 import { Spinner } from './components/Primitives.jsx'
 import { getDepts, getOverview, getAlerts, getUster } from './api.js'
 
@@ -81,6 +84,9 @@ export default function App() {
   const [refreshKey,    setRefreshKey]    = useState(0)
   const [loading,       setLoading]       = useState(true)
   const [machineFilter, setMachineFilter] = useState(null)
+  /* ── Module switching ─────────────────────────────────────────────────── */
+  const [currentModule,    setCurrentModule]    = useState('quality')   // 'quality' | 'production'
+  const [productionView,   setProductionView]   = useState('dashboard') // 'dashboard' | 'entry' | 'log'
 
   // Reset machine filter when department changes
   useEffect(() => { setMachineFilter(null) }, [currentDept])
@@ -130,32 +136,51 @@ export default function App() {
       view={view} setView={setView}
       currentDept={currentDept} setCurrentDept={setCurrentDept}
       depts={depts} alerts={alerts} statusTxt={statusTxt} lastSaved={lastSaved}
+      currentModule={currentModule} setCurrentModule={setCurrentModule}
+      productionView={productionView} setProductionView={setProductionView}
     >
-      {showMachineBar && (
-        <MachineFilterBar
-          currentDept={currentDept}
-          machineFilter={machineFilter}
-          setMachineFilter={setMachineFilter}
-        />
+      {/* ── Production Module ────────────────────────────────────────────── */}
+      {currentModule === 'production' && (
+        <>
+          {productionView === 'dashboard' && (
+            <ProductionDashboard setProductionView={setProductionView} />
+          )}
+          {productionView === 'entry' && (
+            <ProductionEntry onSaved={() => setProductionView('dashboard')} />
+          )}
+          {productionView === 'log' && <ProductionLog />}
+        </>
       )}
 
-      {view === 'overview' && (
-        <Overview overview={overview} currentDept={currentDept} setCurrentDept={setCurrentDept} />
+      {/* ── Quality Module ────────────────────────────────────────────────── */}
+      {currentModule === 'quality' && (
+        <>
+          {showMachineBar && (
+            <MachineFilterBar
+              currentDept={currentDept}
+              machineFilter={machineFilter}
+              setMachineFilter={setMachineFilter}
+            />
+          )}
+          {view === 'overview' && (
+            <Overview overview={overview} currentDept={currentDept} setCurrentDept={setCurrentDept} />
+          )}
+          {view === 'entry' && (
+            <DataEntry depts={depts} currentDept={currentDept} setCurrentDept={setCurrentDept} onSaved={handleSaved} />
+          )}
+          {view === 'charts' && (
+            <ControlCharts overview={overview} currentDept={currentDept} depts={depts} machineFilter={machineFilter} />
+          )}
+          {view === 'uster' && <UsterBenchmarks />}
+          {view === 'report' && <ShiftReport />}
+          {view === 'log' && (
+            <DataLog depts={depts} refreshKey={refreshKey} currentDept={currentDept} machineFilter={machineFilter} />
+          )}
+          {view === 'settings' && <Settings depts={depts} onSettingsChanged={handleSettingsChanged} />}
+          {view === 'guide' && <OperatorGuide />}
+          {view === 'lab'   && <YarnLab depts={depts.filter(d => ['rsb', 'simplex', 'ringframe'].includes(d.id))} />}
+        </>
       )}
-      {view === 'entry' && (
-        <DataEntry depts={depts} currentDept={currentDept} setCurrentDept={setCurrentDept} onSaved={handleSaved} />
-      )}
-      {view === 'charts' && (
-        <ControlCharts overview={overview} currentDept={currentDept} depts={depts} machineFilter={machineFilter} />
-      )}
-      {view === 'uster' && <UsterBenchmarks />}
-      {view === 'report' && <ShiftReport />}
-      {view === 'log' && (
-        <DataLog depts={depts} refreshKey={refreshKey} currentDept={currentDept} machineFilter={machineFilter} />
-      )}
-      {view === 'settings' && <Settings depts={depts} onSettingsChanged={handleSettingsChanged} />}
-      {view === 'guide' && <OperatorGuide />}
-      {view === 'lab'   && <YarnLab depts={depts.filter(d => ['rsb', 'simplex', 'ringframe'].includes(d.id))} />}
     </Layout>
   )
 }

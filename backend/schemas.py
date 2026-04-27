@@ -4,7 +4,7 @@ schemas.py — Pydantic v2 request / response models
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field, model_validator
@@ -394,6 +394,119 @@ class LabFlowResponse(BaseModel):
     rsb: RSBSection
     simplex: SimplexSection
     ringframe: RingframeSection
+
+
+# ── Production Module ─────────────────────────────────────────────────────────
+
+class ProductionStdRateOut(BaseModel):
+    id:                 int
+    dept_id:            str
+    machine_number:     Optional[int]
+    std_rate_kg_per_hr: float
+    label:              Optional[str]
+    updated_at:         Optional[datetime]
+
+    model_config = {"from_attributes": True}
+
+
+class ProductionStdRateUpdate(BaseModel):
+    std_rate_kg_per_hr: float = Field(..., gt=0, description="kg/hr per machine")
+    label:              Optional[str] = Field(None, max_length=80)
+    machine_number:     Optional[int] = Field(None, ge=1)
+
+
+class ProductionEntryCreate(BaseModel):
+    dept_id:        str
+    shift:          str = Field(..., pattern="^[ABC]$")
+    entry_date:     date
+    machine_number: Optional[int] = Field(None, ge=1)
+    calc_method:    str = Field(..., pattern="^(efficiency|hank_meter)$")
+    notes:          Optional[str] = None
+    recorded_at:    Optional[datetime] = None
+
+    # Efficiency method inputs
+    efficiency_pct:     Optional[float] = Field(None, gt=0, le=110,
+                                                description="Machine efficiency %")
+    running_hours:      Optional[float] = Field(None, gt=0, le=12,
+                                                description="Shift running hours")
+    std_rate_kg_per_hr: Optional[float] = Field(None, gt=0,
+                                                description="Standard rate kg/hr (overrides stored)")
+
+    # Hank meter method inputs
+    hank_reading:   Optional[float] = Field(None, gt=0,
+                                            description="Shift hank counter reading per spindle")
+    spindle_count:  Optional[int]   = Field(None, ge=1,
+                                            description="Working spindles this shift")
+    ne_count:       Optional[float] = Field(None, gt=0,
+                                            description="Yarn count (Ne)")
+
+    # Optional secondary (theoretical)
+    spindle_rpm: Optional[float] = Field(None, gt=0)
+    tpi:         Optional[float] = Field(None, gt=0, description="Turns per inch")
+
+    @model_validator(mode="after")
+    def validate_method_inputs(self) -> "ProductionEntryCreate":
+        if self.calc_method == "efficiency":
+            missing = [f for f in ["efficiency_pct", "running_hours"]
+                       if getattr(self, f) is None]
+            if missing:
+                raise ValueError(f"Efficiency method requires: {', '.join(missing)}")
+        elif self.calc_method == "hank_meter":
+            missing = [f for f in ["hank_reading", "spindle_count", "ne_count"]
+                       if getattr(self, f) is None]
+            if missing:
+                raise ValueError(f"Hank meter method requires: {', '.join(missing)}")
+        return self
+
+
+class ProductionEntryOut(BaseModel):
+    id:             int
+    dept_id:        str
+    shift:          str
+    entry_date:     date
+    machine_number: Optional[int]
+    calc_method:    str
+
+    # Efficiency method
+    efficiency_pct:     Optional[float]
+    running_hours:      Optional[float]
+    std_rate_kg_per_hr: Optional[float]
+
+    # Hank meter method
+    hank_reading:   Optional[float]
+    spindle_count:  Optional[int]
+    ne_count:       Optional[float]
+
+    # Optional secondary
+    spindle_rpm:    Optional[float]
+    tpi:            Optional[float]
+
+    # Results
+    primary_kg:     float
+    theoretical_kg: Optional[float]
+
+    notes:       Optional[str]
+    recorded_at: datetime
+    created_at:  datetime
+
+    model_config = {"from_attributes": True}
+
+
+class ProductionDeptSummary(BaseModel):
+    dept_id:    str
+    dept_name:  str
+    calc_method: str
+    today_kg:   float
+    shift_a_kg: float
+    shift_b_kg: float
+    shift_c_kg: float
+    entry_count: int
+
+
+class ProductionDashboardOut(BaseModel):
+    date:      str
+    depts:     List[ProductionDeptSummary]
+    total_kg:  float
 
 
 # ── Error response (used by global exception handler) ────────────────────────

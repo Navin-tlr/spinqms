@@ -19,7 +19,7 @@ import io
 import json
 import logging
 import os
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Dict, List, Optional
 
 from fastapi import Depends, FastAPI, HTTPException, Request
@@ -39,6 +39,8 @@ from models import (
     LabSimplexBobbin,
     LabSimplexInput,
     LabTrial,
+    ProductionEntry,
+    ProductionStdRate,
     Sample,
     SettingsVersion,
 )
@@ -64,6 +66,12 @@ from schemas import (
     SimplexInputUpdate,
     SimplexInputOut,
     PredictRequest,
+    ProductionDashboardOut,
+    ProductionDeptSummary,
+    ProductionEntryCreate,
+    ProductionEntryOut,
+    ProductionStdRateOut,
+    ProductionStdRateUpdate,
     SampleCreate,
     SampleOut,
     SampleUpdate,
@@ -2021,3 +2029,264 @@ def get_interaction_report(trial_id: int, db: Session = Depends(get_db)):
         "hierarchy":  hierarchy,
         "variation":  variation,
     }
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  PRODUCTION MODULE
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# Department config: which departments exist in the production module
+_PROD_DEPT_CONFIG = {
+    "carding":   {"name": "Carding",    "method": "efficiency",  "machines": 3},
+    "breaker":   {"name": "Breaker",    "method": "efficiency",  "machines": 1},
+    "rsb":       {"name": "RSB",        "method": "efficiency",  "machines": 2},
+    "simplex":   {"name": "Simplex",    "method": "hank_meter",  "machines": 3},
+    "ringframe": {"name": "Ring Frame", "method": "hank_meter",  "machines": 25},
+}
+
+
+def _calc_efficiency(std_rate: float, efficiency_pct: float, running_hours: float) -> float:
+    """primary_kg = std_rate × (efficiency / 100) × hours"""
+    return round(std_rate * (efficiency_pct / 100.0) * running_hours, 3)
+
+
+def _calc_hank_meter(hank_reading: float, spindle_count: int, ne_count: float) -> float:
+    """
+    primary_kg = (hank_reading × spindle_count / ne_count) × 0.453592
+    Derivation:
+      1 hank = 840 yards
+      Ne = (yards per lb) / 840  →  1 lb = Ne × 840 yards
+      total_yards = hank_reading × 840 × spindle_count
+      weight_lb   = total_yards / (ne_count × 840)
+                  = hank_reading × spindle_count / ne_count
+      weight_kg   = weight_lb × 0.453592
+    """
+    return round((hank_reading * spindle_count / ne_count) * 0.453592, 3)
+
+
+def _calc_theoretical(spindle_rpm: float, tpi: float,
+                       spindle_count: int, ne_count: float,
+                       shift_minutes: float = 480.0) -> float:
+    """
+    Theoretical production from speed inputs (secondary, validation only).
+      delivery_speed (yards/min) = spindle_rpm / (tpi × 36)
+      total_yards = delivery_speed × shift_minutes × spindle_count
+      weight_kg   = total_yards / (ne_count × 840) × 0.453592
+    """
+    delivery_ypm = spindle_rpm / (tpi * 36.0)
+    total_yards  = delivery_ypm * shift_minutes * spindle_count
+    return round(total_yards / (ne_count * 840.0) * 0.453592, 3)
+
+
+# ── Standard Rates ────────────────────────────────────────────────────────────
+
+@app.get("/api/production/std-rates", response_model=List[ProductionStdRateOut])
+def get_production_std_rates(db: Session = Depends(get_db)):
+    """Return all stored standard production rates."""
+    return db.query(ProductionStdRate).order_by(
+        ProductionStdRate.dept_id, ProductionStdRate.machine_number
+    ).all()
+
+
+@app.put("/api/production/std-rates/{dept_id}", response_model=ProductionStdRateOut)
+def update_production_std_rate(
+    dept_id: str,
+    body: ProductionStdRateUpdate,
+    db: Session = Depends(get_db),
+):
+    """Upsert a standard rate for (dept_id, machine_number). machine_number=None = dept default."""
+    machine_number = body.machine_number
+
+    row = (
+        db.query(ProductionStdRate)
+        .filter(
+            ProductionStdRate.dept_id == dept_id,
+            ProductionStdRate.machine_number == machine_number,
+        )
+        .first()
+    )
+
+    if not row:
+        row = ProductionStdRate(dept_id=dept_id, machine_number=machine_number)
+        db.add(row)
+
+    row.std_rate_kg_per_hr = body.std_rate_kg_per_hr
+    if body.label is not None:
+        row.label = body.label
+    row.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+# ── Production Entries ────────────────────────────────────────────────────────
+
+@app.post("/api/production/entries", response_model=ProductionEntryOut, status_code=201)
+def create_production_entry(body: ProductionEntryCreate, db: Session = Depends(get_db)):
+    """
+    Submit a shift production entry.  Calculates primary_kg server-side so the
+    formula is always authoritative regardless of client-side JS.
+    """
+    dept_cfg = _PROD_DEPT_CONFIG.get(body.dept_id)
+    if not dept_cfg:
+        raise HTTPException(400, f"Unknown production department: {body.dept_id}")
+
+    now = datetime.now(timezone.utc)
+    recorded_at = body.recorded_at or now
+
+    entry = ProductionEntry(
+        dept_id        = body.dept_id,
+        shift          = body.shift,
+        entry_date     = body.entry_date,
+        machine_number = body.machine_number,
+        calc_method    = body.calc_method,
+        notes          = body.notes,
+        recorded_at    = recorded_at,
+        created_at     = now,
+    )
+
+    if body.calc_method == "efficiency":
+        # Fetch std rate: prefer machine-specific, fall back to dept default
+        std_rate_row = None
+        if body.machine_number is not None:
+            std_rate_row = (
+                db.query(ProductionStdRate)
+                .filter_by(dept_id=body.dept_id, machine_number=body.machine_number)
+                .first()
+            )
+        if std_rate_row is None:
+            std_rate_row = (
+                db.query(ProductionStdRate)
+                .filter(
+                    ProductionStdRate.dept_id == body.dept_id,
+                    ProductionStdRate.machine_number == None,
+                )
+                .first()
+            )
+
+        # Body can override the stored rate
+        std_rate = (
+            body.std_rate_kg_per_hr
+            if body.std_rate_kg_per_hr is not None
+            else (std_rate_row.std_rate_kg_per_hr if std_rate_row else 0.0)
+        )
+
+        entry.efficiency_pct     = body.efficiency_pct
+        entry.running_hours      = body.running_hours
+        entry.std_rate_kg_per_hr = std_rate
+        entry.primary_kg         = _calc_efficiency(std_rate, body.efficiency_pct, body.running_hours)
+
+    else:  # hank_meter
+        entry.hank_reading  = body.hank_reading
+        entry.spindle_count = body.spindle_count
+        entry.ne_count      = body.ne_count
+        entry.primary_kg    = _calc_hank_meter(body.hank_reading, body.spindle_count, body.ne_count)
+
+        # Optional theoretical
+        if body.spindle_rpm is not None and body.tpi is not None:
+            entry.spindle_rpm    = body.spindle_rpm
+            entry.tpi            = body.tpi
+            entry.theoretical_kg = _calc_theoretical(
+                body.spindle_rpm, body.tpi, body.spindle_count, body.ne_count
+            )
+
+    db.add(entry)
+    db.commit()
+    db.refresh(entry)
+    return entry
+
+
+@app.get("/api/production/entries", response_model=List[ProductionEntryOut])
+def list_production_entries(
+    dept_id:        Optional[str]  = None,
+    shift:          Optional[str]  = None,
+    entry_date:     Optional[date] = None,
+    machine_number: Optional[int]  = None,
+    limit:          int            = 200,
+    db: Session = Depends(get_db),
+):
+    q = db.query(ProductionEntry)
+    if dept_id:
+        q = q.filter(ProductionEntry.dept_id == dept_id)
+    if shift:
+        q = q.filter(ProductionEntry.shift == shift)
+    if entry_date:
+        q = q.filter(ProductionEntry.entry_date == entry_date)
+    if machine_number is not None:
+        q = q.filter(ProductionEntry.machine_number == machine_number)
+    return (
+        q.order_by(ProductionEntry.entry_date.desc(), ProductionEntry.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+
+
+@app.delete("/api/production/entries/{entry_id}", status_code=204)
+def delete_production_entry(entry_id: int, db: Session = Depends(get_db)):
+    entry = db.query(ProductionEntry).filter_by(id=entry_id).first()
+    if not entry:
+        raise HTTPException(404, "Production entry not found")
+    db.delete(entry)
+    db.commit()
+
+
+# ── Dashboard summary ─────────────────────────────────────────────────────────
+
+@app.get("/api/production/dashboard", response_model=ProductionDashboardOut)
+def production_dashboard(
+    target_date: Optional[date] = None,
+    db: Session = Depends(get_db),
+):
+    """
+    Today's (or target_date's) production summary per department — total kg and
+    shift breakdown.  Used by the Production Dashboard KPI tiles.
+    """
+    d = target_date or date.today()
+
+    rows = (
+        db.query(
+            ProductionEntry.dept_id,
+            ProductionEntry.shift,
+            func.sum(ProductionEntry.primary_kg).label("total_kg"),
+        )
+        .filter(ProductionEntry.entry_date == d)
+        .group_by(ProductionEntry.dept_id, ProductionEntry.shift)
+        .all()
+    )
+
+    # Aggregate into dept → shift buckets
+    by_dept: Dict[str, Dict[str, float]] = {}
+    for row in rows:
+        if row.dept_id not in by_dept:
+            by_dept[row.dept_id] = {"A": 0.0, "B": 0.0, "C": 0.0}
+        by_dept[row.dept_id][row.shift] = round(row.total_kg or 0.0, 2)
+
+    entry_counts = (
+        db.query(ProductionEntry.dept_id, func.count(ProductionEntry.id))
+        .filter(ProductionEntry.entry_date == d)
+        .group_by(ProductionEntry.dept_id)
+        .all()
+    )
+    count_map = {r[0]: r[1] for r in entry_counts}
+
+    dept_summaries: List[ProductionDeptSummary] = []
+    for dept_id, cfg in _PROD_DEPT_CONFIG.items():
+        shifts = by_dept.get(dept_id, {"A": 0.0, "B": 0.0, "C": 0.0})
+        today_kg = shifts["A"] + shifts["B"] + shifts["C"]
+        dept_summaries.append(ProductionDeptSummary(
+            dept_id     = dept_id,
+            dept_name   = cfg["name"],
+            calc_method = cfg["method"],
+            today_kg    = round(today_kg, 2),
+            shift_a_kg  = shifts["A"],
+            shift_b_kg  = shifts["B"],
+            shift_c_kg  = shifts["C"],
+            entry_count = count_map.get(dept_id, 0),
+        ))
+
+    total_kg = sum(d.today_kg for d in dept_summaries)
+    return ProductionDashboardOut(
+        date     = str(d),
+        depts    = dept_summaries,
+        total_kg = round(total_kg, 2),
+    )

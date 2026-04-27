@@ -35,7 +35,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from sqlalchemy import (
-    Column, Integer, String, Float, Text, DateTime, Boolean,
+    Column, Date, Integer, String, Float, Text, DateTime, Boolean,
     ForeignKey, Index, UniqueConstraint,
 )
 from sqlalchemy.orm import relationship
@@ -392,4 +392,77 @@ class LabRingframeInput(Base):
 
     __table_args__ = (
         UniqueConstraint("cop_id", "simplex_bobbin_id", name="uq_ringframe_input"),
+    )
+
+
+# ── 12. Production Module — Standard Rates ──────────────────────────────────
+class ProductionStdRate(Base):
+    """
+    Editable standard production rate (kg/hr) per department (or per machine).
+    Used exclusively by the efficiency-based calculation method (Carding, Breaker, RSB).
+    machine_number = NULL means dept-wide default.
+    """
+    __tablename__ = "production_std_rates"
+
+    id                = Column(Integer, primary_key=True)
+    dept_id           = Column(String(50), nullable=False, index=True)
+    machine_number    = Column(Integer,    nullable=True)    # NULL = dept default
+    std_rate_kg_per_hr = Column(Float,    nullable=False, default=0.0)
+    label             = Column(String(80), nullable=True)
+    updated_at        = Column(DateTime,   nullable=True)
+
+
+# ── 13. Production Module — Shift Entries ───────────────────────────────────
+class ProductionEntry(Base):
+    """
+    One production entry per (dept, machine, shift, date).
+
+    Two calculation methods:
+      'efficiency'  — Carding, Breaker, RSB
+          primary_kg = std_rate × (efficiency_pct / 100) × running_hours
+
+      'hank_meter'  — Simplex, Ring Frame
+          primary_kg = (hank_reading × spindle_count / ne_count) × 0.453592
+          (1 hank = 840 yards; Ne = yards per pound / 840)
+
+    Optional secondary theoretical (hank_meter depts only):
+          delivery_speed_ypm = spindle_rpm / (tpi × 36)
+          theoretical_kg = delivery_speed_ypm × 480 × spindle_count / (ne_count × 840) × 0.453592
+          (480 = shift minutes; override if needed)
+    """
+    __tablename__ = "production_entries"
+
+    id             = Column(Integer,    primary_key=True)
+    dept_id        = Column(String(50), nullable=False, index=True)
+    shift          = Column(String(1),  nullable=False)       # 'A' | 'B' | 'C'
+    entry_date     = Column(Date,       nullable=False, index=True)
+    machine_number = Column(Integer,    nullable=True)
+    calc_method    = Column(String(20), nullable=False)       # 'efficiency' | 'hank_meter'
+
+    # Efficiency method
+    efficiency_pct     = Column(Float, nullable=True)
+    running_hours      = Column(Float, nullable=True)
+    std_rate_kg_per_hr = Column(Float, nullable=True)         # snapshot at save time
+
+    # Hank meter method
+    hank_reading  = Column(Float,   nullable=True)            # hanks / spindle (shift total)
+    spindle_count = Column(Integer, nullable=True)            # working spindles
+    ne_count      = Column(Float,   nullable=True)            # yarn count
+
+    # Optional secondary inputs
+    spindle_rpm = Column(Float, nullable=True)
+    tpi         = Column(Float, nullable=True)                # turns per inch
+
+    # Computed results
+    primary_kg     = Column(Float, nullable=False)
+    theoretical_kg = Column(Float, nullable=True)
+
+    notes      = Column(Text,     nullable=True)
+    recorded_at = Column(DateTime, nullable=False)
+    created_at  = Column(DateTime, nullable=False,
+                         default=lambda: datetime.now(timezone.utc))
+
+    __table_args__ = (
+        Index("ix_prod_entries_dept_date", "dept_id", "entry_date"),
+        Index("ix_prod_entries_date_shift", "entry_date", "shift"),
     )

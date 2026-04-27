@@ -30,11 +30,20 @@ const ICONS = {
   guide:    'M4 2h8a1 1 0 011 1v10a1 1 0 01-1 1H4a1 1 0 01-1-1V3a1 1 0 011-1zM8 2v12M4 6h4M4 9h4',
 }
 
+/* ── Production sidebar nav ───────────────────────────────────────────── */
+const PRODUCTION_NAV = [
+  { id: 'dashboard', label: 'Dashboard',   icon: 'M2 2h5.5v5.5H2V2zM8.5 2H14v5.5H8.5V2zM2 8.5h5.5V14H2V8.5zM8.5 8.5H14V14H8.5V8.5z' },
+  { id: 'entry',     label: 'Enter Output', icon: 'M3 13h2.6L13 5.6 10.4 3 3 10.4V13zm8.8-9.5L13.5 5.2a.6.6 0 000 .9L12 7.5' },
+  { id: 'log',       label: 'Production Log', icon: 'M2 4h12M2 4v8a1 1 0 001 1h10a1 1 0 001-1V4M2 8.5h12M6 4v9M10 4v9' },
+]
+
 /* ── Layout ───────────────────────────────────────────────────────────── */
 export default function Layout({
   view, setView,
   currentDept, setCurrentDept,
   depts, alerts, statusTxt, lastSaved,
+  currentModule, setCurrentModule,
+  productionView, setProductionView,
   children,
 }) {
   const [menuOpen, setMenuOpen] = useState(false)
@@ -134,6 +143,41 @@ export default function Layout({
           </div>
         </div>
 
+        {/* ── Production sidebar nav (shown when in production module) ── */}
+        {currentModule === 'production' && (
+          <div style={{ padding: '12px 8px', flex: 1 }}>
+            <SideLabel>Production</SideLabel>
+            {PRODUCTION_NAV.map(item => {
+              const active = productionView === item.id
+              return (
+                <div key={item.id}
+                  onClick={() => { setProductionView && setProductionView(item.id); if (isMobile) setMenuOpen(false) }}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 7,
+                    padding: '5px 8px',
+                    borderRadius: 'var(--r)',
+                    cursor: 'pointer', fontSize: 13,
+                    fontWeight: active ? 500 : 400,
+                    color: active ? 'var(--tx)' : 'var(--tx-2)',
+                    background: active ? 'var(--bg-active)' : 'transparent',
+                    userSelect: 'none', transition: 'background .1s, color .1s',
+                  }}
+                  onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'var(--bg-hover)' }}
+                  onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent' }}
+                >
+                  <span style={{ width: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <NavIcon d={item.icon} active={active} />
+                  </span>
+                  <span>{item.label}</span>
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        {/* ── Quality sidebar (shown when in quality module) ── */}
+        {currentModule !== 'production' && (<>
+
         {/* ── Departments ── */}
         <div style={{ padding: '12px 8px 4px' }}>
           <SideLabel>Departments</SideLabel>
@@ -156,7 +200,6 @@ export default function Layout({
                   userSelect: 'none', transition: 'background .1s, color .1s',
                   textAlign: 'left',
                 }}>
-                {/* Department quality dot */}
                 <span style={{
                   width: 5, height: 5, borderRadius: '50%', flexShrink: 0,
                   background: qC ?? 'var(--tx-4)',
@@ -238,10 +281,60 @@ export default function Layout({
           </div>
           <div style={{ fontSize: 10.5, color: 'var(--tx-4)', marginTop: 3, fontFamily: 'var(--mono)' }}>{lastSaved}</div>
         </div>
+
+        {/* Close quality-only block */}
+        </>)}
       </aside>
 
       {/* ── Main area ── */}
       <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', background: 'var(--bg-2)' }}>
+
+        {/* ── SAP-style Module Shell Bar ── */}
+        <div style={{
+          height: 40,
+          background: '#354a5e',
+          display: 'flex',
+          alignItems: 'center',
+          padding: '0 0 0 20px',
+          flexShrink: 0,
+          gap: 0,
+        }}>
+          {/* Shell brand */}
+          <div style={{
+            fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,.55)',
+            letterSpacing: '.06em', textTransform: 'uppercase', paddingRight: 20,
+            borderRight: '1px solid rgba(255,255,255,.12)',
+            marginRight: 4,
+          }}>SpinQMS</div>
+
+          {/* Module tabs */}
+          {[
+            { id: 'quality',    label: 'Quality',              badge: null },
+            { id: 'production', label: 'Production & Inventory', badge: null },
+          ].map(mod => {
+            const active = currentModule === mod.id
+            return (
+              <button
+                key={mod.id}
+                onClick={() => setCurrentModule && setCurrentModule(mod.id)}
+                style={{
+                  height: 40,
+                  padding: '0 18px',
+                  fontSize: 12, fontWeight: active ? 600 : 400,
+                  border: 'none', borderBottom: active ? '2px solid #fff' : '2px solid transparent',
+                  background: active ? 'rgba(255,255,255,.10)' : 'transparent',
+                  color: active ? '#fff' : 'rgba(255,255,255,.6)',
+                  cursor: 'pointer',
+                  fontFamily: 'var(--font)',
+                  transition: 'all .15s',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {mod.label}
+              </button>
+            )
+          })}
+        </div>
 
         {/* ── Header ── */}
         <header style={{
@@ -265,30 +358,38 @@ export default function Layout({
                   borderRadius: 'var(--r)', flexShrink: 0,
                 }}>☰</button>
             )}
-            {/* Breadcrumb-style label */}
+            {/* Breadcrumb */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span style={{ fontSize: 11, color: 'var(--tx-3)' }}>SpinQMS</span>
+              <span style={{ fontSize: 11, color: 'var(--tx-3)' }}>
+                {currentModule === 'production' ? 'Production' : 'Quality'}
+              </span>
               <span style={{ fontSize: 11, color: 'var(--tx-4)' }}>/</span>
               <span style={{ fontSize: 13.5, fontWeight: 500, color: 'var(--tx)', letterSpacing: '-.01em' }}>
-                {currentLabel}
+                {currentModule === 'production'
+                  ? (PRODUCTION_NAV.find(n => n.id === productionView)?.label ?? 'Production')
+                  : currentLabel}
               </span>
             </div>
           </div>
 
           {!isMobile && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <HeaderBtn onClick={() => window.open('/api/export/csv', '_blank')}>
-                <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M8 2v8M5 7l3 3 3-3M2.5 11v1a1 1 0 001 1h9a1 1 0 001-1v-1" />
-                </svg>
-                Export CSV
-              </HeaderBtn>
-              <HeaderBtn onClick={() => window.print()}>
-                <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M4 5V2h8v3M3 11H2a1 1 0 01-1-1V7a1 1 0 011-1h12a1 1 0 011 1v3a1 1 0 01-1 1h-1M4 9h8v5H4V9z" />
-                </svg>
-                Print
-              </HeaderBtn>
+              {currentModule === 'quality' && (
+                <>
+                  <HeaderBtn onClick={() => window.open('/api/export/csv', '_blank')}>
+                    <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M8 2v8M5 7l3 3 3-3M2.5 11v1a1 1 0 001 1h9a1 1 0 001-1v-1" />
+                    </svg>
+                    Export CSV
+                  </HeaderBtn>
+                  <HeaderBtn onClick={() => window.print()}>
+                    <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M4 5V2h8v3M3 11H2a1 1 0 01-1-1V7a1 1 0 011-1h12a1 1 0 011 1v3a1 1 0 01-1 1h-1M4 9h8v5H4V9z" />
+                    </svg>
+                    Print
+                  </HeaderBtn>
+                </>
+              )}
             </div>
           )}
         </header>
