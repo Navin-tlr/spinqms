@@ -573,14 +573,16 @@ export default function InventoryPlanning({ mode = 'stock' }) {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const [overview, materialRows, ledger] = await Promise.all([
+      // allSettled so each call resolves independently — a failing overview
+      // never prevents materials from populating the dropdowns.
+      const [overviewRes, materialsRes, movementsRes] = await Promise.allSettled([
         getInventoryOverview(),
         getMaterials(),
         getInventoryMovements({ limit: 200 }),
       ])
-      setRows(overview)
-      setMaterials(materialRows)
-      setMovements(ledger)
+      if (overviewRes.status  === 'fulfilled') setRows(overviewRes.value)
+      if (materialsRes.status === 'fulfilled') setMaterials(materialsRes.value)
+      if (movementsRes.status === 'fulfilled') setMovements(movementsRes.value)
     } finally {
       setLoading(false)
     }

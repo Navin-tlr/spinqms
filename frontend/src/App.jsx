@@ -164,12 +164,9 @@ export default function App() {
             <ProductionEntry onSaved={() => setProductionView('production-log')} />
           )}
           {productionView === 'production-log' && <ProductionLog />}
-          {productionView === 'inventory-materials'  && <InventoryPlanning mode="materials" />}
-          {productionView === 'inventory-stock'     && <InventoryPlanning mode="stock" />}
-          {productionView === 'inventory-issue'     && <InventoryPlanning mode="issue" />}
-          {productionView === 'inventory-receipt'   && <InventoryPlanning mode="receipt" />}
-          {productionView === 'inventory-movements' && <InventoryPlanning mode="movements" />}
-          {productionView === 'inventory-planning'  && <InventoryPlanning mode="planning" />}
+          {['inventory-materials','inventory-stock','inventory-issue','inventory-receipt','inventory-movements','inventory-planning'].includes(productionView) && (
+            <InventoryPlanning mode={productionView.replace('inventory-', '')} />
+          )}
           {productionView === 'purchase-requisitions' && <PurchaseFlow mode="requisitions" />}
           {productionView === 'purchase-orders' && <PurchaseFlow mode="orders" />}
         </>

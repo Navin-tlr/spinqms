@@ -2592,18 +2592,30 @@ def inventory_overview(db: Session = Depends(get_db)):
     )
     out = []
     for material in materials:
-        rec = _evaluate_mrp(db, material)
-        stock = material.stock.quantity_on_hand if material.stock else 0.0
-        params = material.planning_params
-        avg = _avg_consumption(db, material.id, 7)
-        daily = _daily_consumption(db, material.id, 1).get(date.today(), 0.0)
-        lead = params.lead_time_days if params else 5.0
-        safety = params.safety_stock_qty if params else 0.0
-        reorder_qty = params.reorder_qty if params else 0.0
-        reorder_level = round(avg * lead + safety, 3)
-        days_left = round(stock / avg, 1) if avg > 0 else None
-        status = "BELOW REORDER LEVEL" if stock < reorder_level else ("SAFE (CLOSE)" if stock <= reorder_level * 1.15 and reorder_level > 0 else "SAFE")
-        action = "ORDER NOW" if stock < reorder_level else "MONITOR"
+        try:
+            # _evaluate_mrp may write to purchase_recommendations; guard so one
+            # failing material never crashes the entire overview response.
+            rec = _evaluate_mrp(db, material)
+        except Exception:
+            rec = None
+        try:
+            stock = material.stock.quantity_on_hand if material.stock else 0.0
+            params = material.planning_params
+            avg = _avg_consumption(db, material.id, 7)
+            daily = _daily_consumption(db, material.id, 1).get(date.today(), 0.0)
+            lead = params.lead_time_days if params else 5.0
+            safety = params.safety_stock_qty if params else 0.0
+            reorder_qty = params.reorder_qty if params else 0.0
+            reorder_level = round(avg * lead + safety, 3)
+            days_left = round(stock / avg, 1) if avg > 0 else None
+            status = "BELOW REORDER LEVEL" if stock < reorder_level else ("SAFE (CLOSE)" if stock <= reorder_level * 1.15 and reorder_level > 0 else "SAFE")
+            action = "ORDER NOW" if stock < reorder_level else "MONITOR"
+            price_trend = _price_trend(db, material.id)
+        except Exception:
+            # Return a safe placeholder row so the material still appears in the UI
+            stock = 0.0; avg = 0.0; daily = 0.0; lead = 5.0; safety = 0.0
+            reorder_qty = 0.0; reorder_level = 0.0; days_left = None
+            status = "SAFE"; action = "MONITOR"; price_trend = "stable"
         out.append({
             "material_id": material.id,
             "material_code": material.code,
@@ -2619,10 +2631,13 @@ def inventory_overview(db: Session = Depends(get_db)):
             "reorder_level": reorder_level,
             "status": status,
             "action": action,
-            "price_trend": _price_trend(db, material.id),
+            "price_trend": price_trend,
             "recommendation": _recommendation_payload(rec) if rec else None,
         })
-    db.commit()
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
     return out
 
 
