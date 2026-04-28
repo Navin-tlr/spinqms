@@ -549,7 +549,7 @@ class MaterialIssueLineCreate(BaseModel):
 
 class MaterialIssueCreate(BaseModel):
     issue_date: date
-    shift: str = Field(..., pattern="^[ABC]$")
+    shift: Optional[str] = Field(None, max_length=1)   # deprecated — daily issues only; stored as 'D'
     reference: Optional[str] = Field("Daily Production", max_length=120)
     notes: Optional[str] = None
     lines: List[MaterialIssueLineCreate] = Field(..., min_length=1)

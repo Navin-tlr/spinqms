@@ -81,7 +81,6 @@ function StockOverview({ rows, loading }) {
 function MaterialIssue({ materials, onPosted }) {
   const today = new Date().toISOString().slice(0, 10)
   const [issueDate, setIssueDate] = useState(today)
-  const [shift, setShift] = useState('A')
   const [reference, setReference] = useState('Daily Production')
   const [lines, setLines] = useState([{ material_id: '', quantity: '' }])
   const [posting, setPosting] = useState(false)
@@ -100,7 +99,6 @@ function MaterialIssue({ materials, onPosted }) {
     try {
       const doc = await createMaterialIssue({
         issue_date: issueDate,
-        shift,
         reference,
         lines: lines.map(row => ({ material_id: Number(row.material_id), quantity: Number(row.quantity) })),
       })
@@ -117,18 +115,10 @@ function MaterialIssue({ materials, onPosted }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
       <div style={{ background: '#fff', border: '1px solid #d9dadb', borderBottom: 'none', padding: '14px 16px' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '180px 220px 1fr', gap: 16, alignItems: 'end' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '180px 1fr', gap: 16, alignItems: 'end' }}>
           <div>
             <div style={{ fontSize: 11, color: '#6a6d70', marginBottom: 4 }}>Date</div>
             <input type="date" value={issueDate} max={today} onChange={e => setIssueDate(e.target.value)} style={{ ...inputStyle, width: '100%' }} />
-          </div>
-          <div>
-            <div style={{ fontSize: 11, color: '#6a6d70', marginBottom: 4 }}>Shift</div>
-            <div style={{ display: 'flex' }}>
-              {['A', 'B', 'C'].map((s, i) => (
-                <button key={s} onClick={() => setShift(s)} style={{ flex: 1, padding: '6px 0', fontSize: 12, border: `1px solid ${shift === s ? SAP_BLUE : SAP_BORDER}`, borderLeft: i > 0 ? 'none' : undefined, background: shift === s ? SAP_BLUE : '#fff', color: shift === s ? '#fff' : '#32363a', cursor: 'pointer' }}>Shift {s}</button>
-              ))}
-            </div>
           </div>
           <div>
             <div style={{ fontSize: 11, color: '#6a6d70', marginBottom: 4 }}>Reference</div>

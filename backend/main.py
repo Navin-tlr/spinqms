@@ -156,6 +156,36 @@ async def _http_handler(request: Request, exc: HTTPException) -> JSONResponse:
     )
 
 
+# ── Health / debug endpoint ───────────────────────────────────────────────────
+@app.get("/api/health")
+def health(db: Session = Depends(get_db)):
+    """Returns DB type and live row counts — use this to verify Render is hitting Supabase."""
+    from database import DATABASE_URL
+    db_type = "sqlite" if DATABASE_URL.startswith("sqlite") else "postgres"
+    # Mask credentials — show only scheme + host
+    try:
+        from urllib.parse import urlparse
+        p = urlparse(DATABASE_URL)
+        db_display = f"{p.scheme}://{p.hostname}:{p.port}{p.path}"
+    except Exception:
+        db_display = db_type
+
+    try:
+        material_count  = db.query(Material).count()
+        movement_count  = db.query(InventoryMovement).count()
+        stock_count     = db.query(InventoryStock).count()
+    except Exception as e:
+        return {"db_type": db_type, "db": db_display, "error": str(e)}
+
+    return {
+        "db_type": db_type,
+        "db": db_display,
+        "materials": material_count,
+        "inventory_movements": movement_count,
+        "inventory_stock_rows": stock_count,
+    }
+
+
 # ── Startup: run Alembic migrations ──────────────────────────────────────────
 @app.on_event("startup")
 def startup() -> None:
@@ -2677,7 +2707,7 @@ def post_material_issue(body: MaterialIssueCreate, db: Session = Depends(get_db)
     doc = MaterialIssueDocument(
         document_number=f"GI-{now.strftime('%Y%m%d%H%M%S')}",
         issue_date=body.issue_date,
-        shift=body.shift,
+        shift=body.shift or "D",   # 'D' = daily (no shift distinction)
         reference=body.reference or "Daily Production",
         status="posted",
         notes=body.notes,
