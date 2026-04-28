@@ -96,6 +96,7 @@ export const deactivateVendor = (id)        => http.delete(`/vendors/${id}`)
 // ── Materials / Inventory / MRP / Purchasing ─────────────────────────────────
 export const getMaterials           = ()              => http.get('/materials').then(r => r.data)
 export const createMaterial         = (body)          => http.post('/materials', body).then(r => r.data)
+export const updateMaterial         = (id, body)      => http.put(`/materials/${id}`, body).then(r => r.data)
 export const deactivateMaterial     = (id)            => http.delete(`/materials/${id}`)
 export const getInventoryOverview   = ()              => http.get('/inventory/overview').then(r => r.data)
 export const getInventoryMovements  = (params = {})   => http.get('/inventory/movements', { params: clean(params) }).then(r => r.data)

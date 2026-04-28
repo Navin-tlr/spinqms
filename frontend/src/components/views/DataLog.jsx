@@ -128,6 +128,7 @@ function EditModal({ row, onClose, onSaved }) {
 export default function DataLog({ depts, refreshKey, currentDept, machineFilter }) {
   const [rows,       setRows]       = useState([])
   const [total,      setTotal]      = useState(0)
+  const [truncated,  setTruncated]  = useState(false)
   const [loading,    setLoading]    = useState(false)
   const [editRow,    setEditRow]    = useState(null)   // full sample being edited
   const [editLoading, setEditLoading] = useState(null) // id of row being fetched
@@ -157,7 +158,7 @@ export default function DataLog({ depts, refreshKey, currentDept, machineFilter 
     if (dateFrom) params.date_from = new Date(dateFrom + 'T00:00:00').toISOString()
     if (dateTo)   params.date_to   = new Date(dateTo   + 'T23:59:59').toISOString()
     getLog(params)
-      .then(d => { setRows(d.rows); setTotal(d.total) })
+      .then(d => { setRows(d.rows); setTotal(d.total); setTruncated(d.truncated ?? false) })
       .catch(() => {})
       .finally(() => setLoading(false))
   }, [deptFilter, shiftFilter, sortCol, sortDir, machineFilter, machineConf, dateFrom, dateTo])
@@ -262,6 +263,19 @@ export default function DataLog({ depts, refreshKey, currentDept, machineFilter 
             </span>
           </div>
         </div>
+
+        {truncated && (
+          <div style={{
+            margin: '0 0 8px', padding: '8px 14px',
+            background: '#fff8e6', border: '1px solid #f5c842', borderRadius: 'var(--r)',
+            fontSize: 12, color: '#7a5800', display: 'flex', alignItems: 'center', gap: 8,
+          }}>
+            <span style={{ fontSize: 16 }}>⚠</span>
+            <span>
+              Showing the most recent <strong>{total}</strong> batches. There are more records — use the date filter above to narrow results and see older data.
+            </span>
+          </div>
+        )}
 
         <TblWrap>
           <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13 }}>

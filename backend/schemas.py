@@ -553,6 +553,15 @@ class MaterialCreate(BaseModel):
     description: Optional[str] = None
 
 
+class MaterialUpdate(BaseModel):
+    """All fields optional — only provided fields are updated."""
+    code:        Optional[str] = Field(None, min_length=1, max_length=40)
+    name:        Optional[str] = Field(None, min_length=1, max_length=120)
+    base_unit:   Optional[str] = Field(None, min_length=1, max_length=20)
+    category:    Optional[str] = Field(None, max_length=60)
+    description: Optional[str] = None
+
+
 class MaterialOut(BaseModel):
     id:          int
     code:        str

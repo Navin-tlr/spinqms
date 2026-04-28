@@ -99,6 +99,7 @@ from schemas import (
     MaterialIssueOut,
     MaterialCreate,
     MaterialOut,
+    MaterialUpdate,
     MaterialPlanningParamUpdate,
     PurchaseOrderCreate,
     PurchaseOrderOut,
@@ -1037,13 +1038,21 @@ def get_log(
     date_to:      Optional[datetime] = None,   # ISO-8601, inclusive (end of day)
     sort_col:     str = "timestamp",
     sort_dir:     str = "desc",
+    limit:        int = 500,                   # hard cap — never unbounded
     db: Session = Depends(get_db),
 ):
     """
     Data log with stored cv_pct / readings_count — no readings_json parsing
     required for any column rendered in the table.  The join to settings_versions
     retrieves snapshot target/usl/lsl without touching the samples row's JSON.
+
+    limit is capped server-side at 2 000 rows regardless of what the caller sends.
+    When the result is truncated, the response includes truncated=True so the UI
+    can prompt the user to narrow their date range.
     """
+    MAX_ROWS = 2000
+    effective_limit = min(max(limit, 1), MAX_ROWS)
+
     col_map = {
         "timestamp":  Sample.timestamp,
         "mean_hank":  Sample.mean_hank,
@@ -1069,7 +1078,10 @@ def get_log(
     if date_to is not None:
         q = q.filter(Sample.timestamp <= date_to)
 
-    samples = q.all()
+    # Fetch one extra row so we can detect truncation without a separate COUNT query
+    samples_raw = q.limit(effective_limit + 1).all()
+    truncated   = len(samples_raw) > effective_limit
+    samples     = samples_raw[:effective_limit]
     rows = []
     for s in samples:
         sv   = s.settings_version
@@ -1106,7 +1118,7 @@ def get_log(
             "measurement_type": s.measurement_type,
         })
 
-    return {"total": len(rows), "rows": rows}
+    return {"total": len(rows), "truncated": truncated, "rows": rows}
 
 
 # ── Uster benchmarks ──────────────────────────────────────────────────────────
@@ -2689,13 +2701,49 @@ def create_material(body: MaterialCreate, db: Session = Depends(get_db)):
     return material
 
 
+@app.put("/api/materials/{material_id}", response_model=MaterialOut)
+def update_material(material_id: int, body: MaterialUpdate, db: Session = Depends(get_db)):
+    """Edit material metadata. Code uniqueness is re-checked on rename."""
+    material = _material_or_404(db, material_id)
+    if body.code is not None:
+        new_code = body.code.strip().upper()
+        if new_code != material.code:
+            clash = db.query(Material).filter(
+                Material.code.ilike(new_code),
+                Material.id != material_id,
+            ).first()
+            if clash:
+                raise HTTPException(409, f"Material code '{new_code}' already exists")
+        material.code = new_code
+    if body.name is not None:
+        material.name = body.name.strip()
+    if body.base_unit is not None:
+        material.base_unit = body.base_unit.strip()
+    if body.category is not None:
+        material.category = body.category or None
+    if body.description is not None:
+        material.description = body.description or None
+    material.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(material)
+    return material
+
+
 @app.delete("/api/materials/{material_id}", status_code=204)
-def deactivate_material(material_id: int, db: Session = Depends(get_db)):
-    """Soft-delete. Blocked if stock on hand > 0."""
+def archive_material(material_id: int, db: Session = Depends(get_db)):
+    """
+    Soft-archive — sets is_active=False.  Historical movements / GR lines that
+    reference this material are untouched; they carry the material name inline.
+    Blocked if physical stock on hand > 0 (would create invisible inventory).
+    """
     material = _material_or_404(db, material_id)
     stock = db.query(InventoryStock).filter_by(material_id=material.id).first()
     if stock and stock.quantity_on_hand > 0:
-        raise HTTPException(400, f"Cannot deactivate '{material.name}' — stock on hand: {stock.quantity_on_hand:g} {material.base_unit}")
+        raise HTTPException(
+            400,
+            f"Cannot archive '{material.name}' — {stock.quantity_on_hand:g} {material.base_unit} "
+            f"still on hand. Issue or adjust stock to zero first.",
+        )
     material.is_active = False
     material.updated_at = datetime.now(timezone.utc)
     db.commit()
