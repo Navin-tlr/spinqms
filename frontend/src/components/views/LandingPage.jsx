@@ -1,338 +1,377 @@
 /* ──────────────────────────────────────────────────────────────────────────
-   SAP Fiori–style Launchpad — module tile navigation
+   SAP Fiori Launchpad — tile-based home screen (Image 03 / 04 reference)
+   - Light grey background (#f2f2f2)
+   - Tab bar with active underline (no pill buttons)
+   - Square white tiles, 1px border, 0px radius — exactly SAP
+   - Section headers bold, no decoration
 ────────────────────────────────────────────────────────────────────────── */
 
-const MODULES = [
+import { useState } from 'react'
+
+/* ── SAP primary blue (unified — no per-module colours) ──────────────── */
+const SAP_BLUE = '#0854a0'
+
+/* ── App tiles (active modules) ──────────────────────────────────────── */
+const APP_TILES = [
   {
     id: 'quality',
     title: 'Quality Management',
-    subtitle: 'SQC · Control Charts · Uster Benchmarks · Yarn Lab',
-    desc: 'Monitor spinning quality KPIs, analyse control charts, manage alerts, and capture batch readings across all departments.',
-    color: '#0064d9',
-    colorBg: '#ebf4ff',
+    subtitle: 'SQC',
     icon: (
-      <svg viewBox="0 0 40 40" width="40" height="40" fill="none" stroke="#0064d9" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-        <rect x="5" y="5"  width="13" height="13" rx="2" />
-        <rect x="22" y="5"  width="13" height="13" rx="2" />
-        <rect x="5" y="22" width="13" height="13" rx="2" />
-        <rect x="22" y="22" width="13" height="13" rx="2" />
-        {/* chart spark in bottom-right tile */}
-        <polyline points="24,31 27,27.5 30,29.5 33,25" />
+      <svg viewBox="0 0 36 36" width="36" height="36" fill="none" stroke={SAP_BLUE} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="4" y="4"  width="12" height="12" />
+        <rect x="20" y="4"  width="12" height="12" />
+        <rect x="4" y="20" width="12" height="12" />
+        <rect x="20" y="20" width="12" height="12" />
+        <polyline points="22,28 25,24.5 28,26.5 31,22" />
       </svg>
     ),
-    badge: 'ACTIVE',
-    badgeColor: '#188f36',
-    badgeBg: '#f0faf2',
-    badgeBd: '#abe2bc',
   },
   {
     id: 'production',
-    title: 'Production & Inventory',
-    subtitle: 'Shift Output · Efficiency · Hank Meter · Machine-wise Log',
-    desc: 'Record and review daily production output per department and shift. Supports efficiency-based and hank-meter calculation methods.',
-    color: '#0e7a4a',
-    colorBg: '#f0faf5',
+    title: 'Production &\nInventory',
+    subtitle: 'Output',
     icon: (
-      <svg viewBox="0 0 40 40" width="40" height="40" fill="none" stroke="#0e7a4a" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-        {/* factory / machine icon */}
-        <rect x="6" y="18" width="10" height="16" rx="1.5" />
-        <rect x="20" y="12" width="14" height="22" rx="1.5" />
-        {/* chimney */}
-        <line x1="10" y1="18" x2="10" y2="13" />
-        <line x1="14" y1="18" x2="14" y2="15" />
-        {/* speed lines */}
-        <line x1="23" y1="20" x2="31" y2="20" />
-        <line x1="23" y1="24" x2="31" y2="24" />
-        <line x1="23" y1="28" x2="28" y2="28" />
+      <svg viewBox="0 0 36 36" width="36" height="36" fill="none" stroke={SAP_BLUE} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="5" y="18" width="10" height="13" />
+        <rect x="19" y="11" width="12" height="20" />
+        <line x1="9"  y1="18" x2="9"  y2="12" />
+        <line x1="13" y1="18" x2="13" y2="14" />
+        <line x1="22" y1="18" x2="28" y2="18" />
+        <line x1="22" y1="22" x2="28" y2="22" />
+        <line x1="22" y1="26" x2="26" y2="26" />
       </svg>
     ),
-    badge: 'ACTIVE',
-    badgeColor: '#188f36',
-    badgeBg: '#f0faf2',
-    badgeBd: '#abe2bc',
   },
 ]
 
-/* ── future placeholder tiles ─────────────────────────────────────────── */
-const FUTURE_MODULES = [
+/* ── Planned tiles ────────────────────────────────────────────────────── */
+const FUTURE_TILES = [
   {
     id: 'maintenance',
     title: 'Maintenance',
-    subtitle: 'Preventive · Breakdown · Lubrication',
-    color: '#6d2ac4',
-    colorBg: '#f3ecfb',
+    subtitle: 'Planned',
     icon: (
-      <svg viewBox="0 0 40 40" width="40" height="40" fill="none" stroke="#6d2ac4" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M30 10l-4 4-3-3 4-4a6 6 0 00-8 8L8 26a3 3 0 004 4l11-11a6 6 0 008-8z" />
+      <svg viewBox="0 0 36 36" width="36" height="36" fill="none" stroke="#89919a" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M27 9l-4 4-3-3 4-4a5.5 5.5 0 00-7 7L7 23a2.8 2.8 0 003.5 3.5L20 17a5.5 5.5 0 007-7z" />
       </svg>
     ),
-    badge: 'COMING SOON',
-    badgeColor: '#6d2ac4',
-    badgeBg: '#f3ecfb',
-    badgeBd: '#c4a4e6',
   },
   {
     id: 'hr',
     title: 'Human Resources',
-    subtitle: 'Attendance · Shifts · Payroll',
-    color: '#b45309',
-    colorBg: '#fff8f0',
+    subtitle: 'Planned',
     icon: (
-      <svg viewBox="0 0 40 40" width="40" height="40" fill="none" stroke="#b45309" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="20" cy="14" r="6" />
-        <path d="M8 34a12 12 0 0124 0" />
+      <svg viewBox="0 0 36 36" width="36" height="36" fill="none" stroke="#89919a" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="18" cy="13" r="5.5" />
+        <path d="M7 31a11 11 0 0122 0" />
       </svg>
     ),
-    badge: 'COMING SOON',
-    badgeColor: '#b45309',
-    badgeBg: '#fff8f0',
-    badgeBd: '#fec27c',
+  },
+  {
+    id: 'inventory',
+    title: 'Inventory',
+    subtitle: 'Planned',
+    icon: (
+      <svg viewBox="0 0 36 36" width="36" height="36" fill="none" stroke="#89919a" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="5" y="5" width="26" height="26" />
+        <line x1="5"  y1="13" x2="31" y2="13" />
+        <line x1="5"  y1="21" x2="31" y2="21" />
+        <line x1="14" y1="5"  x2="14" y2="31" />
+      </svg>
+    ),
   },
 ]
 
-/* ── ModuleTile ───────────────────────────────────────────────────────── */
-function ModuleTile({ mod, onClick, disabled }) {
+/* ── Tab configuration ────────────────────────────────────────────────── */
+const TABS = [
+  { id: 'apps',     label: 'My Applications' },
+  { id: 'settings', label: 'Settings'         },
+]
+
+/* ── SAP Tile component ───────────────────────────────────────────────── */
+function SapTile({ title, subtitle, icon, onClick, disabled, metric, metricLabel }) {
+  const [hovered, setHovered] = useState(false)
+
   return (
-    <button
+    <div
       onClick={disabled ? undefined : onClick}
+      onMouseEnter={() => !disabled && setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
       style={{
-        display: 'flex', flexDirection: 'column', alignItems: 'flex-start',
-        gap: 14,
-        background: '#fff',
-        border: `1px solid #e8eaed`,
-        borderRadius: 8,
-        padding: '24px 24px 20px',
+        width: 176,
+        height: 176,
+        background: '#ffffff',
+        border: hovered ? `1px solid ${SAP_BLUE}` : '1px solid #d9dadb',
+        borderRadius: 0,
+        padding: '16px 14px 14px',
+        display: 'flex',
+        flexDirection: 'column',
         cursor: disabled ? 'default' : 'pointer',
-        textAlign: 'left',
-        fontFamily: 'var(--font)',
-        transition: 'box-shadow .15s, border-color .15s, transform .12s',
-        boxShadow: '0 1px 4px rgba(0,0,0,.07)',
-        opacity: disabled ? .6 : 1,
         position: 'relative',
-        overflow: 'hidden',
-      }}
-      onMouseEnter={e => {
-        if (disabled) return
-        e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,100,217,.12), 0 1px 4px rgba(0,0,0,.08)'
-        e.currentTarget.style.borderColor = mod.color + '80'
-        e.currentTarget.style.transform = 'translateY(-1px)'
-      }}
-      onMouseLeave={e => {
-        e.currentTarget.style.boxShadow = '0 1px 4px rgba(0,0,0,.07)'
-        e.currentTarget.style.borderColor = '#e8eaed'
-        e.currentTarget.style.transform = 'translateY(0)'
+        outline: hovered && !disabled ? `2px solid ${SAP_BLUE}` : 'none',
+        outlineOffset: -1,
+        boxShadow: hovered && !disabled ? '0 2px 8px rgba(8,84,160,.15)' : 'none',
+        transition: 'border-color .1s, box-shadow .1s, outline .1s',
+        userSelect: 'none',
+        opacity: disabled ? .6 : 1,
       }}
     >
-      {/* Colour accent strip */}
+      {/* Title — top left, SAP standard */}
       <div style={{
-        position: 'absolute', top: 0, left: 0, right: 0,
-        height: 3, background: mod.color, borderRadius: '8px 8px 0 0',
-      }} />
-
-      {/* Icon */}
-      <div style={{
-        width: 56, height: 56,
-        background: mod.colorBg,
-        borderRadius: 10,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        flexShrink: 0,
+        fontSize: 13.5,
+        fontWeight: 400,
+        color: disabled ? '#6a6d70' : '#32363a',
+        lineHeight: 1.35,
+        whiteSpace: 'pre-line',
       }}>
-        {mod.icon}
+        {title}
       </div>
 
-      {/* Title + subtitle */}
-      <div style={{ flex: 1 }}>
-        <div style={{ fontSize: 15, fontWeight: 600, color: '#32363a', letterSpacing: '-.01em', lineHeight: 1.3 }}>
-          {mod.title}
-        </div>
-        <div style={{ fontSize: 11, color: '#6a6d70', marginTop: 4, lineHeight: 1.5 }}>
-          {mod.subtitle}
-        </div>
+      {/* Icon or metric — vertically centred */}
+      <div style={{
+        flex: 1,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}>
+        {metric !== undefined ? (
+          <div style={{ textAlign: 'center' }}>
+            <div style={{
+              fontFamily: 'var(--mono)',
+              fontSize: 40,
+              fontWeight: 300,
+              color: disabled ? '#89919a' : SAP_BLUE,
+              lineHeight: 1,
+            }}>
+              {metric}
+            </div>
+            {metricLabel && (
+              <div style={{ fontSize: 11, color: '#6a6d70', marginTop: 4 }}>{metricLabel}</div>
+            )}
+          </div>
+        ) : icon}
       </div>
 
-      {/* Desc */}
-      {mod.desc && (
-        <div style={{ fontSize: 12, color: '#6a6d70', lineHeight: 1.6, borderTop: '1px solid #f0f0f0', paddingTop: 12, width: '100%' }}>
-          {mod.desc}
-        </div>
-      )}
-
-      {/* Badge + arrow */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
-        <span style={{
-          fontSize: 10, fontWeight: 600, letterSpacing: '.06em',
-          padding: '2px 8px', borderRadius: 4,
-          color: mod.badgeColor, background: mod.badgeBg,
-          border: `1px solid ${mod.badgeBd}`,
-        }}>
-          {mod.badge}
-        </span>
-        {!disabled && (
-          <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke={mod.color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: .7 }}>
-            <path d="M3 8h10M9 4l4 4-4 4" />
-          </svg>
-        )}
-      </div>
-    </button>
-  )
-}
-
-/* ── Stat chip ──────────────────────────────────────────────────────────── */
-function StatChip({ label, value, color }) {
-  return (
-    <div style={{
-      background: '#fff', border: '1px solid #e8eaed',
-      borderRadius: 6, padding: '10px 16px',
-      display: 'flex', alignItems: 'center', gap: 10,
-      boxShadow: '0 1px 3px rgba(0,0,0,.06)',
-    }}>
-      <div style={{ width: 3, height: 24, borderRadius: 2, background: color, flexShrink: 0 }} />
-      <div>
-        <div style={{ fontSize: 11, color: '#6a6d70', lineHeight: 1 }}>{label}</div>
-        <div style={{ fontFamily: 'var(--mono)', fontSize: 16, fontWeight: 600, color: '#32363a', marginTop: 3, lineHeight: 1 }}>{value}</div>
+      {/* Footer — bottom, subtitle / source label */}
+      <div style={{
+        fontSize: 11,
+        color: '#6a6d70',
+        borderTop: '1px solid #e8e8e8',
+        paddingTop: 8,
+        marginTop: 6,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+      }}>
+        <span>{disabled ? 'Coming Soon' : 'SpinQMS'}</span>
+        <span style={{ color: '#89919a' }}>{subtitle}</span>
       </div>
     </div>
   )
 }
 
-/* ── LandingPage ────────────────────────────────────────────────────────── */
+/* ── LandingPage ─────────────────────────────────────────────────────── */
 export default function LandingPage({ setCurrentModule, overview, alerts, depts }) {
-  const hour    = new Date().getHours()
-  const greeting = hour < 5 ? 'Good night' : hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'
+  const [activeTab, setActiveTab] = useState('apps')
+
+  const hour     = new Date().getHours()
+  const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'
   const dateStr  = new Date().toLocaleDateString('en-IN', {
     weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
   })
 
-  const hasBad  = alerts.some(a => a.severity === 'bad')
-  const hasWarn = alerts.some(a => a.severity === 'warn')
-  const alertCount = alerts.filter(a => a.severity === 'bad' || a.severity === 'warn').length
-
-  const totalDepts = depts.length
-  const goodDepts  = depts.filter(d => d.quality === 'ok').length
+  const hasBad    = alerts.some(a => a.severity === 'bad')
+  const hasWarn   = alerts.some(a => a.severity === 'warn')
+  const goodDepts = depts.filter(d => d.quality === 'ok').length
+  const totalKpi  = overview.reduce((s, o) => s + (o.batch_count || 0), 0)
 
   return (
-    <div style={{ minHeight: '100%', background: '#f5f6f8' }}>
+    <div style={{ height: '100%', background: '#f2f2f2', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 
-      {/* ── Shell / top bar ─────────────────────────────────────────────── */}
+      {/* ── Shell bar ─────────────────────────────────────────────────── */}
       <div style={{
-        height: 40, background: '#354a5e',
-        display: 'flex', alignItems: 'center',
-        padding: '0 24px', gap: 0, flexShrink: 0,
+        height: 44,
+        background: '#354a5e',
+        display: 'flex',
+        alignItems: 'center',
+        padding: '0 16px',
+        gap: 12,
+        flexShrink: 0,
+        boxShadow: '0 2px 4px rgba(0,0,0,.2)',
       }}>
-        <div style={{
-          fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,.55)',
-          letterSpacing: '.06em', textTransform: 'uppercase',
-          paddingRight: 20, borderRight: '1px solid rgba(255,255,255,.12)', marginRight: 16,
-        }}>SpinQMS</div>
-        <div style={{ fontSize: 12, color: 'rgba(255,255,255,.8)', fontWeight: 500 }}>
-          Home
+        {/* Grid icon + brand */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingRight: 16, borderRight: '1px solid rgba(255,255,255,.15)' }}>
+          <svg viewBox="0 0 16 16" width="14" height="14" fill="rgba(255,255,255,.7)">
+            <rect x="1" y="1" width="4" height="4" rx="0.5" />
+            <rect x="6" y="1" width="4" height="4" rx="0.5" />
+            <rect x="11" y="1" width="4" height="4" rx="0.5" />
+            <rect x="1" y="6" width="4" height="4" rx="0.5" />
+            <rect x="6" y="6" width="4" height="4" rx="0.5" />
+            <rect x="11" y="6" width="4" height="4" rx="0.5" />
+            <rect x="1" y="11" width="4" height="4" rx="0.5" />
+            <rect x="6" y="11" width="4" height="4" rx="0.5" />
+            <rect x="11" y="11" width="4" height="4" rx="0.5" />
+          </svg>
+          <span style={{ fontSize: 13, fontWeight: 600, color: '#fff', letterSpacing: '.01em' }}>SpinQMS</span>
+        </div>
+
+        {/* Page title */}
+        <span style={{ fontSize: 12, color: 'rgba(255,255,255,.75)' }}>Home</span>
+
+        {/* Right: system status chip + user */}
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 14 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'rgba(255,255,255,.65)' }}>
+            <span style={{
+              width: 6, height: 6, borderRadius: '50%',
+              background: hasBad ? '#ff6b6b' : hasWarn ? '#ff8f3c' : '#3dd68c',
+              display: 'inline-block',
+            }} />
+            {hasBad ? 'Action required' : hasWarn ? 'Warnings active' : 'All systems normal'}
+          </div>
+          <div style={{
+            width: 28, height: 28, borderRadius: '50%',
+            background: 'rgba(255,255,255,.15)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,.8)',
+          }}>SVS</div>
         </div>
       </div>
 
-      {/* ── Hero band ──────────────────────────────────────────────────── */}
+      {/* ── SAP Fiori tab bar ─────────────────────────────────────────── */}
       <div style={{
-        background: 'linear-gradient(135deg, #354a5e 0%, #27384a 100%)',
-        padding: '36px 48px 40px',
-        color: '#fff',
+        background: '#fff',
+        borderBottom: '1px solid #d9dadb',
+        padding: '0 24px',
+        display: 'flex',
+        alignItems: 'flex-end',
+        gap: 0,
+        flexShrink: 0,
       }}>
-        <div style={{ maxWidth: 1100, margin: '0 auto' }}>
-          <div style={{ fontSize: 11, color: 'rgba(255,255,255,.5)', letterSpacing: '.08em', textTransform: 'uppercase', marginBottom: 8 }}>
-            {dateStr}
-          </div>
-          <div style={{ fontSize: 28, fontWeight: 700, letterSpacing: '-.02em', lineHeight: 1.2 }}>
-            {greeting}
-          </div>
-          <div style={{ fontSize: 14, color: 'rgba(255,255,255,.65)', marginTop: 6 }}>
-            SpinQMS Enterprise · Textile Mill Management Platform
-          </div>
-
-          {/* Quick status row */}
-          <div style={{ display: 'flex', gap: 16, marginTop: 24, flexWrap: 'wrap' }}>
-            <div style={{
-              display: 'flex', alignItems: 'center', gap: 8,
-              background: 'rgba(255,255,255,.1)', borderRadius: 6,
-              padding: '8px 14px', fontSize: 12,
-            }}>
-              <span style={{
-                width: 7, height: 7, borderRadius: '50%',
-                background: hasBad ? '#ff6b6b' : hasWarn ? '#ff8f3c' : '#3dd68c',
-                flexShrink: 0,
-              }} />
-              <span style={{ color: 'rgba(255,255,255,.85)' }}>
-                {hasBad ? 'Action required' : hasWarn ? `${alertCount} warning${alertCount !== 1 ? 's' : ''}` : 'All systems normal'}
-              </span>
-            </div>
-            <div style={{
-              background: 'rgba(255,255,255,.1)', borderRadius: 6,
-              padding: '8px 14px', fontSize: 12, color: 'rgba(255,255,255,.85)',
-            }}>
-              {goodDepts}/{totalDepts} depts in control
-            </div>
-          </div>
+        {/* Greeting left-aligned */}
+        <div style={{ fontSize: 12, color: '#6a6d70', padding: '12px 24px 12px 0', borderRight: '1px solid #d9dadb', marginRight: 8 }}>
+          {greeting} — <span style={{ color: '#32363a', fontWeight: 500 }}>{dateStr}</span>
         </div>
+
+        {TABS.map(tab => {
+          const active = activeTab === tab.id
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              style={{
+                padding: '12px 20px 10px',
+                fontSize: 13,
+                fontWeight: active ? 600 : 400,
+                border: 'none',
+                borderBottom: active ? `3px solid ${SAP_BLUE}` : '3px solid transparent',
+                background: 'transparent',
+                color: active ? SAP_BLUE : '#6a6d70',
+                cursor: 'pointer',
+                fontFamily: 'var(--font)',
+                transition: 'color .1s, border-color .1s',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {tab.label}
+            </button>
+          )
+        })}
       </div>
 
       {/* ── Content ────────────────────────────────────────────────────── */}
-      <div style={{ maxWidth: 1100, margin: '0 auto', padding: '32px 48px 48px' }}>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '28px 32px 40px' }}>
 
-        {/* ── Overview stats strip ─────────────────────────────────────── */}
-        {overview.length > 0 && (
-          <div style={{ display: 'flex', gap: 12, marginBottom: 36, flexWrap: 'wrap' }}>
-            {overview.slice(0, 4).map(ov => {
-              const dept = depts.find(d => d.id === ov.dept_id)
-              if (!ov.last_mean_hank) return null
-              return (
-                <StatChip
-                  key={ov.dept_id}
-                  label={dept?.name ?? ov.dept_id}
-                  value={ov.last_mean_hank?.toFixed(ov.last_mean_hank >= 10 ? 1 : 3) ?? '—'}
-                  color={ov.quality === 'ok' ? '#188f36' : ov.quality === 'warn' ? '#e6600d' : ov.quality === 'bad' ? '#bb0000' : '#0064d9'}
-                />
-              )
-            })}
+        {activeTab === 'apps' && (
+          <>
+            {/* ── Quick KPI bar (SAP analytics strip) ─────────────────── */}
+            {overview.length > 0 && (
+              <div style={{
+                display: 'flex', gap: 0,
+                background: '#fff', border: '1px solid #d9dadb',
+                marginBottom: 24,
+              }}>
+                {[
+                  { label: 'Departments in control', value: `${goodDepts} / ${depts.length}`, color: '#188f36' },
+                  { label: 'Total batches recorded',  value: totalKpi,                          color: '#0854a0' },
+                  { label: 'Active alerts',            value: alerts.filter(a => a.severity !== 'ok').length, color: hasBad ? '#bb0000' : hasWarn ? '#e6600d' : '#188f36' },
+                  { label: 'Departments tracked',      value: depts.length,                      color: '#0854a0' },
+                ].map((kpi, i, arr) => (
+                  <div key={kpi.label} style={{
+                    flex: 1,
+                    padding: '14px 20px',
+                    borderRight: i < arr.length - 1 ? '1px solid #d9dadb' : 'none',
+                  }}>
+                    <div style={{ fontSize: 11, color: '#6a6d70', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '.07em' }}>
+                      {kpi.label}
+                    </div>
+                    <div style={{ fontFamily: 'var(--mono)', fontSize: 28, fontWeight: 300, color: kpi.color, lineHeight: 1 }}>
+                      {kpi.value}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* ── Active Applications ──────────────────────────────────── */}
+            <div style={{ marginBottom: 20 }}>
+              <div style={{
+                fontSize: 14, fontWeight: 600, color: '#32363a',
+                marginBottom: 12, paddingBottom: 8,
+                borderBottom: '1px solid #d9dadb',
+              }}>
+                My Applications
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                {APP_TILES.map(tile => (
+                  <SapTile
+                    key={tile.id}
+                    title={tile.title}
+                    subtitle={tile.subtitle}
+                    icon={tile.icon}
+                    onClick={() => setCurrentModule(tile.id)}
+                  />
+                ))}
+              </div>
+            </div>
+
+            {/* ── Planned Modules ──────────────────────────────────────── */}
+            <div style={{ marginTop: 32 }}>
+              <div style={{
+                fontSize: 14, fontWeight: 600, color: '#32363a',
+                marginBottom: 12, paddingBottom: 8,
+                borderBottom: '1px solid #d9dadb',
+              }}>
+                Planned Modules
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                {FUTURE_TILES.map(tile => (
+                  <SapTile
+                    key={tile.id}
+                    title={tile.title}
+                    subtitle={tile.subtitle}
+                    icon={tile.icon}
+                    disabled
+                  />
+                ))}
+              </div>
+            </div>
+          </>
+        )}
+
+        {activeTab === 'settings' && (
+          <div style={{ background: '#fff', border: '1px solid #d9dadb', padding: '24px' }}>
+            <div style={{ fontSize: 14, fontWeight: 600, color: '#32363a', marginBottom: 4 }}>System Settings</div>
+            <div style={{ fontSize: 12, color: '#6a6d70' }}>
+              Navigate to Quality Management → Settings to configure department targets and tolerances.
+            </div>
           </div>
         )}
 
-        {/* ── Active Applications ──────────────────────────────────────── */}
-        <div style={{ marginBottom: 10 }}>
-          <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.08em', color: '#6a6d70', marginBottom: 14 }}>
-            My Applications
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
-            {MODULES.map(mod => (
-              <ModuleTile
-                key={mod.id}
-                mod={mod}
-                onClick={() => setCurrentModule(mod.id)}
-              />
-            ))}
-          </div>
-        </div>
-
-        {/* ── Upcoming / future modules ────────────────────────────────── */}
-        <div style={{ marginTop: 32 }}>
-          <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.08em', color: '#6a6d70', marginBottom: 14 }}>
-            Planned Modules
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
-            {FUTURE_MODULES.map(mod => (
-              <ModuleTile key={mod.id} mod={mod} disabled />
-            ))}
-          </div>
-        </div>
-
-        {/* ── System info footer ──────────────────────────────────────── */}
-        <div style={{
-          marginTop: 48, paddingTop: 20, borderTop: '1px solid #e8eaed',
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          flexWrap: 'wrap', gap: 8,
-        }}>
-          <div style={{ fontSize: 11, color: '#a9abad' }}>
-            SpinQMS Enterprise v2.0 · SVS Branch
-          </div>
-          <div style={{ fontSize: 11, color: '#a9abad', fontFamily: 'var(--mono)' }}>
-            backend: localhost:8000 · frontend: localhost:5173
-          </div>
+        {/* System footer */}
+        <div style={{ marginTop: 48, display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 11, color: '#89919a', borderTop: '1px solid #d9dadb', paddingTop: 16 }}>
+          <span>SpinQMS Enterprise · SVS Branch · v2.0</span>
+          <span style={{ fontFamily: 'var(--mono)' }}>:8000 backend · :5173 frontend</span>
         </div>
       </div>
     </div>

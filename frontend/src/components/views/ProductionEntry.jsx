@@ -1,3 +1,12 @@
+/* ──────────────────────────────────────────────────────────────────────────
+   ProductionEntry — SAP Fiori Data Entry Form (Image 05 reference)
+   - Flat white panel, 1px border, 0px radius
+   - SAP form pattern: label (grey, 12px) above input (13px)
+   - Unified SAP blue (#0854a0) — no per-department colours
+   - Section headers: small uppercase grey
+   - Submit: SAP primary button
+────────────────────────────────────────────────────────────────────────── */
+
 import { useState, useEffect, useCallback } from 'react'
 import {
   getProductionStdRates, updateProductionStdRate,
@@ -5,30 +14,33 @@ import {
   calcEfficiencyKg, calcHankMeterKg, calcTheoreticalKg,
 } from '../../api.js'
 
-/* ── Department configuration ───────────────────────────────────────────── */
+const SAP_BLUE   = '#0854a0'
+const SAP_BORDER = '#89919a'
+const SAP_BG     = '#f2f2f2'
+
+/* ── Department configuration ─────────────────────────────────────────── */
 const DEPTS = [
-  { id: 'carding',   name: 'Carding',    method: 'efficiency',  machines: 3,  color: '#1b5e9e' },
-  { id: 'breaker',   name: 'Breaker',    method: 'efficiency',  machines: 1,  color: '#0e7a4a' },
-  { id: 'rsb',       name: 'RSB',        method: 'efficiency',  machines: 2,  color: '#6b3a8a' },
-  { id: 'simplex',   name: 'Simplex',    method: 'hank_meter',  machines: 3,  color: '#b45309' },
-  { id: 'ringframe', name: 'Ring Frame', method: 'hank_meter',  machines: 25, color: '#b42626', ne_default: 47 },
+  { id: 'carding',   name: 'Carding',    method: 'efficiency',  machines: 3  },
+  { id: 'breaker',   name: 'Breaker',    method: 'efficiency',  machines: 1  },
+  { id: 'rsb',       name: 'RSB',        method: 'efficiency',  machines: 2  },
+  { id: 'simplex',   name: 'Simplex',    method: 'hank_meter',  machines: 3  },
+  { id: 'ringframe', name: 'Ring Frame', method: 'hank_meter',  machines: 25, ne_default: 47 },
 ]
 
-/* ── UI atom helpers ────────────────────────────────────────────────────── */
-function Label({ children, required }) {
+/* ── SAP form atoms ────────────────────────────────────────────────────── */
+function SapLabel({ children, required }) {
   return (
     <label style={{
-      fontSize: 11, fontWeight: 600, color: '#555',
-      textTransform: 'uppercase', letterSpacing: '.07em',
-      display: 'block', marginBottom: 6,
+      fontSize: 12, fontWeight: 400, color: '#6a6d70',
+      display: 'block', marginBottom: 4,
     }}>
       {children}
-      {required && <span style={{ color: '#bb0000', marginLeft: 3 }}>*</span>}
+      {required && <span style={{ color: '#bb0000', marginLeft: 2 }}>*</span>}
     </label>
   )
 }
 
-function Input({ value, onChange, type = 'text', placeholder, min, max, step, disabled, style }) {
+function SapInput({ value, onChange, type = 'text', placeholder, min, max, step, disabled }) {
   return (
     <input
       type={type}
@@ -39,121 +51,116 @@ function Input({ value, onChange, type = 'text', placeholder, min, max, step, di
       disabled={disabled}
       style={{
         width: '100%',
-        padding: '9px 12px',
+        padding: '7px 10px',
         fontSize: 13,
-        border: '1px solid #d8d8d5',
-        borderRadius: 6,
-        background: disabled ? '#f7f7f5' : '#fff',
-        color: disabled ? '#acaba8' : '#37352F',
+        border: `1px solid ${disabled ? '#d9dadb' : SAP_BORDER}`,
+        borderRadius: 2,
+        background: disabled ? '#f2f2f2' : '#fff',
+        color: disabled ? '#89919a' : '#32363a',
         fontFamily: 'var(--mono)',
         outline: 'none',
-        transition: 'border-color .15s',
-        ...style,
+        boxSizing: 'border-box',
       }}
-      onFocus={e => { if (!disabled) e.target.style.borderColor = '#1b5e9e' }}
-      onBlur={e => { e.target.style.borderColor = '#d8d8d5' }}
+      onFocus={e => { if (!disabled) { e.target.style.borderColor = SAP_BLUE; e.target.style.outline = `2px solid rgba(8,84,160,.2)`; e.target.style.outlineOffset = 0 }}}
+      onBlur={e => { e.target.style.borderColor = disabled ? '#d9dadb' : SAP_BORDER; e.target.style.outline = 'none' }}
     />
   )
 }
 
-function FieldGroup({ label, required, hint, children }) {
+function Field({ label, required, hint, children }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-      <Label required={required}>{label}</Label>
+    <div>
+      <SapLabel required={required}>{label}</SapLabel>
       {children}
-      {hint && (
-        <div style={{ fontSize: 11, color: '#acaba8', marginTop: 4 }}>{hint}</div>
-      )}
+      {hint && <div style={{ fontSize: 11, color: '#89919a', marginTop: 3 }}>{hint}</div>}
     </div>
   )
 }
 
-/* ── Formula display panel ──────────────────────────────────────────────── */
+/* ── SAP-style section divider with title ──────────────────────────────── */
+function SectionTitle({ children }) {
+  return (
+    <div style={{
+      fontSize: 11, fontWeight: 600, textTransform: 'uppercase',
+      letterSpacing: '.09em', color: '#6a6d70',
+      paddingBottom: 8, marginBottom: 14,
+      borderBottom: '1px solid #d9dadb',
+    }}>
+      {children}
+    </div>
+  )
+}
+
+/* ── Live Calculation panel ─────────────────────────────────────────────── */
 function FormulaPanel({ dept, fields, result, theoretical }) {
   const empty = result === null || result === undefined || isNaN(result)
 
   return (
     <div style={{
-      background: '#f0f4fa',
-      border: '1.5px solid #c6d8f0',
-      borderRadius: 8,
-      padding: '18px 20px',
-      display: 'flex',
-      flexDirection: 'column',
-      gap: 12,
+      background: '#fff',
+      border: '1px solid #d9dadb',
+      borderLeft: `3px solid ${SAP_BLUE}`,
     }}>
-      <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.12em', color: '#1b5e9e' }}>
+      <div style={{
+        padding: '10px 16px',
+        borderBottom: '1px solid #d9dadb',
+        background: '#f5f5f5',
+        fontSize: 11, fontWeight: 600, textTransform: 'uppercase',
+        letterSpacing: '.09em', color: '#6a6d70',
+      }}>
         Live Calculation
       </div>
 
-      {dept.method === 'efficiency' ? (
-        <>
-          <div style={{ fontSize: 12, color: '#555', lineHeight: 1.7, fontFamily: 'var(--mono)' }}>
-            <div style={{ color: '#888', fontSize: 11, marginBottom: 4 }}>Formula:</div>
-            output = std_rate × (efficiency / 100) × hours
+      <div style={{ padding: '16px' }}>
+        {/* Formula text */}
+        <div style={{ fontFamily: 'var(--mono)', fontSize: 11, color: '#89919a', marginBottom: 8, lineHeight: 1.6 }}>
+          {dept.method === 'efficiency' ? (
+            <>output = std_rate × (eff% / 100) × hours<br />
+            = {fields.stdRate ?? '?'} × ({fields.effPct ?? '?'} / 100) × {fields.hours ?? '?'}</>
+          ) : (
+            <>primary = (hank × spindles / Ne) × 0.453592<br />
+            = ({fields.hankReading ?? '?'} × {fields.spindles ?? '?'} / {fields.ne ?? '?'}) × 0.453592</>
+          )}
+        </div>
+
+        {/* Theoretical line */}
+        {dept.method === 'hank_meter' && theoretical !== null && !isNaN(theoretical) && (
+          <div style={{ fontFamily: 'var(--mono)', fontSize: 11, color: '#89919a', marginBottom: 8, lineHeight: 1.6 }}>
+            theoretical = rpm / (tpi × 36) × mins × spindles / (Ne × 840) × 0.453592<br />
+            = <span style={{ color: '#32363a' }}>{theoretical.toLocaleString('en-IN', { maximumFractionDigits: 1 })} kg</span>
           </div>
-          <div style={{ fontSize: 12, color: '#333', lineHeight: 1.7, fontFamily: 'var(--mono)' }}>
-            = {fields.stdRate ?? '?'} × ({fields.effPct ?? '?'} / 100) × {fields.hours ?? '?'}
+        )}
+
+        {/* Result — SAP large number style */}
+        <div style={{ borderTop: '1px solid #d9dadb', paddingTop: 14, marginTop: 6 }}>
+          <div style={{ fontSize: 11, color: '#6a6d70', marginBottom: 4 }}>Primary Output</div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+            <span style={{
+              fontFamily: 'var(--mono)',
+              fontSize: empty ? 24 : 38,
+              fontWeight: 300,
+              color: empty ? '#d9dadb' : SAP_BLUE,
+              lineHeight: 1,
+            }}>
+              {empty ? '—' : result.toLocaleString('en-IN', { maximumFractionDigits: 1 })}
+            </span>
+            {!empty && <span style={{ fontSize: 14, color: '#6a6d70', fontWeight: 400 }}>kg</span>}
           </div>
-        </>
-      ) : (
-        <>
-          <div style={{ fontSize: 12, color: '#555', lineHeight: 1.7, fontFamily: 'var(--mono)' }}>
-            <div style={{ color: '#888', fontSize: 11, marginBottom: 4 }}>Primary formula:</div>
-            output = (hank_reading × spindles / Ne) × 0.453592
-          </div>
-          <div style={{ fontSize: 12, color: '#333', lineHeight: 1.7, fontFamily: 'var(--mono)' }}>
-            = ({fields.hankReading ?? '?'} × {fields.spindles ?? '?'} / {fields.ne ?? '?'}) × 0.453592
-          </div>
-          {theoretical !== null && theoretical !== undefined && !isNaN(theoretical) && (
-            <div style={{ borderTop: '1px solid #c6d8f0', paddingTop: 10, marginTop: 2 }}>
-              <div style={{ fontSize: 11, color: '#888', marginBottom: 4 }}>
-                Theoretical (validation):
-              </div>
-              <div style={{ fontFamily: 'var(--mono)', fontSize: 12, color: '#555' }}>
-                delivery = rpm / (tpi × 36) = {fields.rpm ?? '?'} / ({fields.tpi ?? '?'} × 36)
-              </div>
-              <div style={{ fontFamily: 'var(--mono)', fontSize: 12, color: '#333', marginTop: 2 }}>
-                → <strong>{theoretical.toLocaleString('en-IN', { maximumFractionDigits: 1 })} kg</strong>
-              </div>
+          {!empty && (
+            <div style={{ fontSize: 11, color: '#89919a', marginTop: 4 }}>
+              {dept.name} · Shift output
             </div>
           )}
-        </>
-      )}
-
-      <div style={{
-        borderTop: '1.5px solid #c6d8f0',
-        paddingTop: 12,
-        display: 'flex',
-        alignItems: 'baseline',
-        gap: 8,
-      }}>
-        <div style={{
-          fontFamily: 'var(--mono)',
-          fontSize: empty ? 22 : 32,
-          fontWeight: 700,
-          color: empty ? '#acaba8' : '#1b5e9e',
-          lineHeight: 1,
-        }}>
-          {empty ? '—' : result.toLocaleString('en-IN', { maximumFractionDigits: 1 })}
         </div>
-        {!empty && (
-          <div style={{ fontSize: 14, color: '#555', fontWeight: 500 }}>kg</div>
-        )}
       </div>
-      {!empty && (
-        <div style={{ fontSize: 11, color: '#1b5e9e', marginTop: -6 }}>
-          Primary output · {dept.name}
-        </div>
-      )}
     </div>
   )
 }
 
-/* ── Std Rate editor inline ─────────────────────────────────────────────── */
+/* ── Std Rate editor ────────────────────────────────────────────────────── */
 function StdRateEditor({ deptId, machineNumber, rates, onRateUpdated }) {
-  const key   = `${deptId}:${machineNumber ?? 'null'}`
-  const rate  = rates[key]
+  const key    = `${deptId}:${machineNumber ?? 'null'}`
+  const rate   = rates[key]
   const [editing, setEditing] = useState(false)
   const [val,     setVal]     = useState('')
   const [saving,  setSaving]  = useState(false)
@@ -165,65 +172,81 @@ function StdRateEditor({ deptId, machineNumber, rates, onRateUpdated }) {
         std_rate_kg_per_hr: parseFloat(val),
         machine_number: machineNumber || null,
       })
-      onRateUpdated()
-      setEditing(false)
+      onRateUpdated(); setEditing(false)
     } catch (e) {
       alert(e?.response?.data?.detail || 'Failed to save')
-    } finally {
-      setSaving(false)
-    }
+    } finally { setSaving(false) }
   }
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
       {editing ? (
         <>
           <input
-            type="number"
-            value={val}
-            onChange={e => setVal(e.target.value)}
+            type="number" value={val} onChange={e => setVal(e.target.value)}
             style={{
-              width: 80, padding: '5px 8px', fontSize: 12,
-              border: '1px solid #1b5e9e', borderRadius: 5,
-              fontFamily: 'var(--mono)',
+              width: 80, padding: '6px 8px', fontSize: 12,
+              border: `1px solid ${SAP_BLUE}`, borderRadius: 2,
+              fontFamily: 'var(--mono)', outline: 'none',
             }}
             autoFocus
           />
-          <span style={{ fontSize: 11, color: '#555' }}>kg/hr</span>
-          <button
-            onClick={save}
-            disabled={saving || !val}
-            style={{
-              padding: '4px 10px', fontSize: 11, fontWeight: 500,
-              background: '#1b5e9e', color: '#fff', border: 'none',
-              borderRadius: 4, cursor: 'pointer', fontFamily: 'var(--font)',
-            }}
-          >{saving ? '…' : 'Save'}</button>
-          <button
-            onClick={() => setEditing(false)}
-            style={{
-              padding: '4px 10px', fontSize: 11,
-              background: '#f0f0ef', color: '#555', border: 'none',
-              borderRadius: 4, cursor: 'pointer', fontFamily: 'var(--font)',
-            }}
-          >Cancel</button>
+          <span style={{ fontSize: 11, color: '#6a6d70' }}>kg/hr</span>
+          <SapPrimaryBtn onClick={save} disabled={saving || !val} small>
+            {saving ? 'Saving' : 'Save'}
+          </SapPrimaryBtn>
+          <SapGhostBtn onClick={() => setEditing(false)} small>Cancel</SapGhostBtn>
         </>
       ) : (
         <>
-          <span style={{ fontFamily: 'var(--mono)', fontSize: 14, fontWeight: 600, color: '#37352F' }}>
+          <span style={{ fontFamily: 'var(--mono)', fontSize: 14, color: '#32363a' }}>
             {rate?.std_rate_kg_per_hr ?? '—'} kg/hr
           </span>
-          <button
-            onClick={() => { setVal(rate?.std_rate_kg_per_hr ?? ''); setEditing(true) }}
-            style={{
-              padding: '3px 9px', fontSize: 10, fontWeight: 500,
-              border: '1px solid #d8d8d5', borderRadius: 4, background: '#fff',
-              color: '#555', cursor: 'pointer', fontFamily: 'var(--font)',
-            }}
-          >Edit</button>
+          <SapGhostBtn onClick={() => { setVal(rate?.std_rate_kg_per_hr ?? ''); setEditing(true) }} small>
+            Edit
+          </SapGhostBtn>
         </>
       )}
     </div>
+  )
+}
+
+/* ── SAP Button atoms ────────────────────────────────────────────────────── */
+function SapPrimaryBtn({ children, onClick, disabled, small }) {
+  return (
+    <button onClick={onClick} disabled={disabled}
+      style={{
+        padding: small ? '5px 12px' : '8px 20px',
+        fontSize: small ? 11 : 13,
+        fontWeight: 400,
+        border: `1px solid ${disabled ? '#d9dadb' : SAP_BLUE}`,
+        borderRadius: 2,
+        background: disabled ? '#f2f2f2' : SAP_BLUE,
+        color: disabled ? '#89919a' : '#fff',
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        fontFamily: 'var(--font)',
+      }}
+    >{children}</button>
+  )
+}
+
+function SapGhostBtn({ children, onClick, disabled, small }) {
+  return (
+    <button onClick={onClick} disabled={disabled}
+      style={{
+        padding: small ? '5px 12px' : '8px 20px',
+        fontSize: small ? 11 : 13,
+        fontWeight: 400,
+        border: `1px solid ${SAP_BORDER}`,
+        borderRadius: 2,
+        background: '#fff',
+        color: '#32363a',
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        fontFamily: 'var(--font)',
+      }}
+      onMouseEnter={e => { e.currentTarget.style.background = '#e8f0fb'; e.currentTarget.style.borderColor = SAP_BLUE; e.currentTarget.style.color = SAP_BLUE }}
+      onMouseLeave={e => { e.currentTarget.style.background = '#fff'; e.currentTarget.style.borderColor = SAP_BORDER; e.currentTarget.style.color = '#32363a' }}
+    >{children}</button>
   )
 }
 
@@ -240,20 +263,16 @@ export default function ProductionEntry({ onSaved }) {
   const [saved,      setSaved]      = useState(false)
   const [error,      setError]      = useState('')
 
-  // Efficiency fields
   const [effPct,  setEffPct]  = useState('')
   const [hours,   setHours]   = useState('')
 
-  // Hank meter fields
   const [hankReading, setHankReading] = useState('')
   const [spindles,    setSpindles]    = useState('')
   const [ne,          setNe]          = useState('')
 
-  // Optional secondary
   const [rpm, setRpm] = useState('')
   const [tpi, setTpi] = useState('')
 
-  // Std rates cache
   const [stdRates, setStdRates] = useState({})
   const loadRates = useCallback(async () => {
     try {
@@ -267,31 +286,24 @@ export default function ProductionEntry({ onSaved }) {
 
   const dept = DEPTS.find(d => d.id === selDeptId)
 
-  // Compute live preview
   const getStdRate = () => {
-    const machKey = `${selDeptId}:${machineNum ?? 'null'}`
-    const deptKey = `${selDeptId}:null`
-    return stdRates[machKey]?.std_rate_kg_per_hr ?? stdRates[deptKey]?.std_rate_kg_per_hr ?? null
+    const mk = `${selDeptId}:${machineNum ?? 'null'}`
+    const dk = `${selDeptId}:null`
+    return stdRates[mk]?.std_rate_kg_per_hr ?? stdRates[dk]?.std_rate_kg_per_hr ?? null
   }
 
-  let liveResult = null
+  let liveResult      = null
   let liveTheoretical = null
-
   if (dept.method === 'efficiency') {
     const rate = getStdRate()
-    if (rate && effPct && hours)
-      liveResult = calcEfficiencyKg(parseFloat(rate), parseFloat(effPct), parseFloat(hours))
+    if (rate && effPct && hours) liveResult = calcEfficiencyKg(parseFloat(rate), parseFloat(effPct), parseFloat(hours))
   } else {
-    if (hankReading && spindles && ne)
-      liveResult = calcHankMeterKg(parseFloat(hankReading), parseInt(spindles), parseFloat(ne))
-    if (rpm && tpi && spindles && ne)
-      liveTheoretical = calcTheoreticalKg(parseFloat(rpm), parseFloat(tpi), parseInt(spindles), parseFloat(ne))
+    if (hankReading && spindles && ne) liveResult = calcHankMeterKg(parseFloat(hankReading), parseInt(spindles), parseFloat(ne))
+    if (rpm && tpi && spindles && ne) liveTheoretical = calcTheoreticalKg(parseFloat(rpm), parseFloat(tpi), parseInt(spindles), parseFloat(ne))
   }
 
-  // Reset fields when dept changes
   const switchDept = (id) => {
-    setSelDeptId(id)
-    setMachineNum(null)
+    setSelDeptId(id); setMachineNum(null)
     setEffPct(''); setHours('')
     setHankReading(''); setSpindles('')
     setNe(DEPTS.find(d => d.id === id)?.ne_default ?? '')
@@ -303,18 +315,14 @@ export default function ProductionEntry({ onSaved }) {
     setSaving(true); setError(''); setSaved(false)
     try {
       const body = {
-        dept_id:     selDeptId,
-        shift,
-        entry_date:  entryDate,
+        dept_id: selDeptId, shift, entry_date: entryDate,
         machine_number: machineNum || null,
-        calc_method: dept.method,
-        notes:       notes || null,
+        calc_method: dept.method, notes: notes || null,
       }
       if (dept.method === 'efficiency') {
-        const rate = getStdRate()
-        body.efficiency_pct     = parseFloat(effPct)
-        body.running_hours      = parseFloat(hours)
-        body.std_rate_kg_per_hr = rate
+        body.efficiency_pct = parseFloat(effPct)
+        body.running_hours  = parseFloat(hours)
+        body.std_rate_kg_per_hr = getStdRate()
       } else {
         body.hank_reading  = parseFloat(hankReading)
         body.spindle_count = parseInt(spindles)
@@ -324,308 +332,253 @@ export default function ProductionEntry({ onSaved }) {
       }
       await createProductionEntry(body)
       setSaved(true)
-      // Reset input fields, keep selections
-      setEffPct(''); setHours('')
-      setHankReading(''); setSpindles('')
-      setRpm(''); setTpi('')
-      setNotes('')
+      setEffPct(''); setHours(''); setHankReading(''); setSpindles('')
+      setRpm(''); setTpi(''); setNotes('')
       if (onSaved) onSaved()
       setTimeout(() => setSaved(false), 3000)
     } catch (e) {
       setError(e?.response?.data?.detail || JSON.stringify(e?.response?.data) || 'Save failed')
-    } finally {
-      setSaving(false)
-    }
+    } finally { setSaving(false) }
   }
 
   const canSubmit = dept.method === 'efficiency'
-    ? (effPct && hours && getStdRate())
-    : (hankReading && spindles && ne)
+    ? !!(effPct && hours && getStdRate())
+    : !!(hankReading && spindles && ne)
+
+  const today = new Date().toISOString().slice(0, 10)
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 20, maxWidth: 960 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 0, maxWidth: 1040 }}>
 
-      {/* Page header */}
-      <div>
-        <div style={{ fontSize: 20, fontWeight: 700, color: '#37352F', letterSpacing: '-.01em' }}>
+      {/* ── SAP action bar (Image 05 top bar) ───────────────────────── */}
+      <div style={{
+        background: '#fff',
+        border: '1px solid #d9dadb',
+        borderBottom: 'none',
+        padding: '8px 16px',
+        display: 'flex', alignItems: 'center', gap: 20,
+        flexShrink: 0,
+      }}>
+        <button
+          onClick={onSaved}
+          style={{ background: 'none', border: 'none', fontSize: 12, color: SAP_BLUE, cursor: 'pointer', fontFamily: 'var(--font)', padding: 0 }}
+        >
+          ← Back to Dashboard
+        </button>
+        <div style={{ width: 1, height: 16, background: '#d9dadb' }} />
+        <span style={{ fontSize: 12, color: '#6a6d70' }}>Production Entry</span>
+      </div>
+
+      {/* ── Page title strip ────────────────────────────────────────── */}
+      <div style={{
+        background: '#fff',
+        border: '1px solid #d9dadb',
+        borderBottom: 'none',
+        padding: '14px 16px',
+        borderTop: '1px solid #d9dadb',
+      }}>
+        <div style={{ fontSize: 16, fontWeight: 400, color: '#32363a' }}>
           Production Entry
         </div>
-        <div style={{ fontSize: 12, color: '#9b9b9b', marginTop: 2 }}>
-          Record shift output for each department
+        <div style={{ fontSize: 12, color: '#6a6d70', marginTop: 2 }}>
+          Record shift output per department
         </div>
       </div>
 
-      {/* Dept tabs */}
+      {/* ── SAP Fiori horizontal dept tabs (like Image 05 segment bar) ── */}
       <div style={{
-        display: 'flex',
-        gap: 0,
-        background: '#f7f7f5',
-        border: '1px solid #e0e2e6',
-        borderRadius: 8,
-        padding: 4,
+        background: '#fff',
+        border: '1px solid #d9dadb',
+        borderBottom: 'none',
+        padding: '0 16px',
+        display: 'flex', alignItems: 'flex-end', gap: 0,
       }}>
-        {DEPTS.map(d => (
-          <button
-            key={d.id}
-            onClick={() => switchDept(d.id)}
-            style={{
-              flex: 1,
-              padding: '9px 8px',
-              fontSize: 12, fontWeight: selDeptId === d.id ? 700 : 400,
-              border: 'none', borderRadius: 6, cursor: 'pointer',
-              fontFamily: 'var(--font)',
-              background: selDeptId === d.id ? '#fff' : 'transparent',
-              color: selDeptId === d.id ? d.color : '#787774',
-              boxShadow: selDeptId === d.id ? '0 1px 3px rgba(0,0,0,.12)' : 'none',
-              transition: 'all .15s',
-            }}
-          >
-            <div>{d.name}</div>
-            <div style={{
-              fontSize: 9, fontWeight: 400, marginTop: 1,
-              textTransform: 'uppercase', letterSpacing: '.07em',
-              color: selDeptId === d.id ? d.color + 'aa' : '#acaba8',
-            }}>
-              {d.method === 'efficiency' ? 'Efficiency' : 'Hank Meter'}
-            </div>
-          </button>
-        ))}
+        {DEPTS.map(d => {
+          const active = selDeptId === d.id
+          return (
+            <button
+              key={d.id}
+              onClick={() => switchDept(d.id)}
+              style={{
+                padding: '10px 18px 8px',
+                fontSize: 13, fontWeight: active ? 600 : 400,
+                border: 'none',
+                borderBottom: active ? `3px solid ${SAP_BLUE}` : '3px solid transparent',
+                background: 'transparent',
+                color: active ? SAP_BLUE : '#6a6d70',
+                cursor: 'pointer', fontFamily: 'var(--font)',
+                transition: 'color .1s, border-color .1s',
+              }}
+              onMouseEnter={e => { if (!active) e.currentTarget.style.color = '#32363a' }}
+              onMouseLeave={e => { if (!active) e.currentTarget.style.color = '#6a6d70' }}
+            >
+              {d.name}
+              <div style={{ fontSize: 10, color: active ? SAP_BLUE + '99' : '#89919a', marginTop: 1 }}>
+                {d.method === 'efficiency' ? 'Efficiency' : 'Hank Meter'}
+              </div>
+            </button>
+          )
+        })}
       </div>
 
-      {/* Two-column layout: form + formula */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 20, alignItems: 'start' }}>
+      {/* ── Two-column form + calculation ───────────────────────────── */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 0, alignItems: 'start' }}>
 
-        {/* ── Entry Form ─────────────────────────────────────── */}
+        {/* ── Left: Data Entry Form ───────────────────────────────── */}
         <div style={{
           background: '#fff',
-          border: '1px solid #e0e2e6',
-          borderRadius: 8,
-          overflow: 'hidden',
-          boxShadow: '0 1px 4px rgba(0,0,0,.06)',
+          border: '1px solid #d9dadb',
         }}>
-          {/* Form header */}
-          <div style={{
-            padding: '14px 20px',
-            borderBottom: '1px solid #f0f0ef',
-            display: 'flex', alignItems: 'center', gap: 10,
-          }}>
-            <div style={{
-              width: 8, height: 8, borderRadius: '50%', background: dept.color,
-            }} />
-            <span style={{ fontSize: 13, fontWeight: 700, color: '#37352F' }}>
-              {dept.name}
-            </span>
-            <span style={{
-              fontSize: 10, padding: '2px 8px', borderRadius: 10,
-              background: dept.color + '14', color: dept.color,
-              fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.07em',
-              marginLeft: 4,
-            }}>
-              {dept.method === 'efficiency' ? 'Efficiency Method' : 'Hank Meter Method'}
-            </span>
-          </div>
 
-          <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 18 }}>
+          {/* Form content */}
+          <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 0 }}>
 
-            {/* Shift + Date row */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-              <FieldGroup label="Shift" required>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  {['A', 'B', 'C'].map(s => (
+            {/* Section 1: General Information */}
+            <SectionTitle>General Information</SectionTitle>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16, marginBottom: 20 }}>
+
+              <Field label="Shift" required>
+                <div style={{ display: 'flex', gap: 0 }}>
+                  {['A', 'B', 'C'].map((s, i) => (
                     <button
                       key={s}
                       onClick={() => setShift(s)}
                       style={{
-                        flex: 1, padding: '8px 0', fontSize: 13, fontWeight: 700,
-                        border: `2px solid ${shift === s ? dept.color : '#e0e2e6'}`,
-                        borderRadius: 6, cursor: 'pointer',
-                        background: shift === s ? dept.color : '#fff',
-                        color: shift === s ? '#fff' : '#787774',
-                        fontFamily: 'var(--font)', transition: 'all .12s',
+                        flex: 1, padding: '7px 0', fontSize: 13,
+                        border: `1px solid ${shift === s ? SAP_BLUE : SAP_BORDER}`,
+                        borderLeft: i > 0 ? 'none' : undefined,
+                        background: shift === s ? SAP_BLUE : '#fff',
+                        color: shift === s ? '#fff' : '#32363a',
+                        cursor: 'pointer', fontFamily: 'var(--font)',
+                        fontWeight: shift === s ? 600 : 400,
                       }}
                     >{s}</button>
                   ))}
                 </div>
-              </FieldGroup>
+              </Field>
 
-              <FieldGroup label="Date" required>
-                <Input
-                  type="date"
-                  value={entryDate}
-                  onChange={setEntryDate}
-                  max={new Date().toISOString().slice(0, 10)}
-                />
-              </FieldGroup>
+              <Field label="Date" required>
+                <SapInput type="date" value={entryDate} onChange={setEntryDate} max={today} />
+              </Field>
+
+              <Field label="Department">
+                <div style={{
+                  padding: '7px 10px', fontSize: 13, color: '#32363a',
+                  border: '1px solid #d9dadb', background: '#f2f2f2',
+                  borderRadius: 2,
+                }}>
+                  {dept.name}
+                </div>
+              </Field>
             </div>
 
-            {/* Machine number (if applicable) */}
+            {/* Machine selector */}
             {dept.machines > 1 && (
-              <FieldGroup label={dept.id === 'ringframe' ? 'Frame Number (optional)' : 'Machine Number (optional)'}>
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              <div style={{ marginBottom: 20 }}>
+                <SapLabel>{dept.id === 'ringframe' ? 'Frame Number' : 'Machine Number'} (optional)</SapLabel>
+                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center' }}>
                   <button
                     onClick={() => setMachineNum(null)}
                     style={{
-                      padding: '6px 14px', fontSize: 11, fontWeight: machineNum === null ? 700 : 400,
-                      border: `1.5px solid ${machineNum === null ? dept.color : '#e0e2e6'}`,
-                      borderRadius: 4, cursor: 'pointer',
-                      background: machineNum === null ? dept.color + '14' : '#fff',
-                      color: machineNum === null ? dept.color : '#787774',
+                      padding: '5px 12px', fontSize: 12,
+                      border: `1px solid ${machineNum === null ? SAP_BLUE : SAP_BORDER}`,
+                      borderRadius: 2, cursor: 'pointer',
+                      background: machineNum === null ? '#e8f0fb' : '#fff',
+                      color: machineNum === null ? SAP_BLUE : '#32363a',
                       fontFamily: 'var(--font)',
                     }}
                   >All / Dept</button>
-                  {Array.from({ length: Math.min(dept.machines, 10) }, (_, i) => i + 1).map(n => (
+                  {Array.from({ length: Math.min(dept.machines, 12) }, (_, i) => i + 1).map(n => (
                     <button
                       key={n}
                       onClick={() => setMachineNum(n)}
                       style={{
-                        padding: '6px 12px', fontSize: 11, fontWeight: machineNum === n ? 700 : 400,
-                        border: `1.5px solid ${machineNum === n ? dept.color : '#e0e2e6'}`,
-                        borderRadius: 4, cursor: 'pointer',
-                        background: machineNum === n ? dept.color + '14' : '#fff',
-                        color: machineNum === n ? dept.color : '#787774',
+                        padding: '5px 10px', fontSize: 12, minWidth: 36,
+                        border: `1px solid ${machineNum === n ? SAP_BLUE : SAP_BORDER}`,
+                        borderRadius: 2, cursor: 'pointer',
+                        background: machineNum === n ? '#e8f0fb' : '#fff',
+                        color: machineNum === n ? SAP_BLUE : '#32363a',
                         fontFamily: 'var(--mono)',
                       }}
                     >#{n}</button>
                   ))}
-                  {dept.machines > 10 && (
+                  {dept.machines > 12 && (
                     <input
-                      type="number"
-                      placeholder={`1–${dept.machines}`}
+                      type="number" placeholder={`1–${dept.machines}`}
                       min={1} max={dept.machines}
                       value={machineNum ?? ''}
                       onChange={e => setMachineNum(e.target.value ? parseInt(e.target.value) : null)}
                       style={{
-                        width: 80, padding: '6px 10px', fontSize: 12,
-                        border: '1.5px solid #e0e2e6', borderRadius: 4,
+                        width: 80, padding: '6px 8px', fontSize: 12,
+                        border: `1px solid ${SAP_BORDER}`, borderRadius: 2,
                         fontFamily: 'var(--mono)',
                       }}
                     />
                   )}
                 </div>
-              </FieldGroup>
+              </div>
             )}
 
-            <div style={{ borderTop: '1px solid #f0f0ef', marginTop: 4, paddingTop: 18 }}>
+            {/* Section 2: Method-specific inputs */}
+            <div style={{ borderTop: '1px solid #d9dadb', paddingTop: 20, marginTop: 4 }}>
 
-              {/* ── EFFICIENCY METHOD ─────────────────────────────── */}
               {dept.method === 'efficiency' && (
                 <>
-                  <div style={{
-                    fontSize: 10, fontWeight: 700, textTransform: 'uppercase',
-                    letterSpacing: '.1em', color: '#9b9b9b', marginBottom: 14,
-                  }}>
-                    Efficiency Inputs
-                  </div>
+                  <SectionTitle>Efficiency Method Inputs</SectionTitle>
 
-                  <div style={{ marginBottom: 14 }}>
-                    <Label>Standard Production Rate</Label>
+                  <div style={{ marginBottom: 16 }}>
+                    <SapLabel>Standard Production Rate</SapLabel>
                     <StdRateEditor
-                      deptId={selDeptId}
-                      machineNumber={machineNum}
-                      rates={stdRates}
-                      onRateUpdated={loadRates}
+                      deptId={selDeptId} machineNumber={machineNum}
+                      rates={stdRates} onRateUpdated={loadRates}
                     />
-                    <div style={{ fontSize: 11, color: '#acaba8', marginTop: 4 }}>
-                      Baseline kg/hr for this machine at 100% efficiency. Editable in-line.
+                    <div style={{ fontSize: 11, color: '#89919a', marginTop: 3 }}>
+                      Baseline kg/hr at 100% efficiency. Click Edit to update.
                     </div>
                   </div>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-                    <FieldGroup
-                      label="Efficiency (%)"
-                      required
-                      hint="Machine efficiency this shift (e.g. 85)"
-                    >
-                      <Input
-                        type="number" value={effPct} onChange={setEffPct}
-                        placeholder="e.g. 85" min={1} max={110} step={0.1}
-                      />
-                    </FieldGroup>
-
-                    <FieldGroup
-                      label="Running Hours"
-                      required
-                      hint="Actual running time (e.g. 8 or 7.5)"
-                    >
-                      <Input
-                        type="number" value={hours} onChange={setHours}
-                        placeholder="e.g. 8" min={0.5} max={12} step={0.25}
-                      />
-                    </FieldGroup>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+                    <Field label="Efficiency (%)" required hint="e.g. 85">
+                      <SapInput type="number" value={effPct} onChange={setEffPct}
+                        placeholder="85" min={1} max={110} step={0.1} />
+                    </Field>
+                    <Field label="Running Hours" required hint="e.g. 8 or 7.5">
+                      <SapInput type="number" value={hours} onChange={setHours}
+                        placeholder="8" min={0.5} max={12} step={0.25} />
+                    </Field>
                   </div>
                 </>
               )}
 
-              {/* ── HANK METER METHOD ─────────────────────────────── */}
               {dept.method === 'hank_meter' && (
                 <>
-                  <div style={{
-                    fontSize: 10, fontWeight: 700, textTransform: 'uppercase',
-                    letterSpacing: '.1em', color: '#9b9b9b', marginBottom: 14,
-                  }}>
-                    Primary — Hank Meter Readings
+                  <SectionTitle>Primary — Hank Meter Readings</SectionTitle>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16, marginBottom: 20 }}>
+                    <Field label="Hank Reading" required hint="Total hanks per spindle">
+                      <SapInput type="number" value={hankReading} onChange={setHankReading}
+                        placeholder="120" min={0.1} step={0.1} />
+                    </Field>
+                    <Field label="Working Spindles" required hint="Active spindles this shift">
+                      <SapInput type="number" value={spindles} onChange={setSpindles}
+                        placeholder={dept.id === 'ringframe' ? '480' : '120'} min={1} step={1} />
+                    </Field>
+                    <Field label="Yarn Count (Ne)" required hint="1 lb = Ne × 840 yd">
+                      <SapInput type="number" value={ne} onChange={setNe}
+                        placeholder="47" min={0.1} step={0.5} />
+                    </Field>
                   </div>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16, marginBottom: 18 }}>
-                    <FieldGroup
-                      label="Hank Reading"
-                      required
-                      hint="Shift total per spindle (hanks)"
-                    >
-                      <Input
-                        type="number" value={hankReading} onChange={setHankReading}
-                        placeholder="e.g. 120" min={0.1} step={0.1}
-                      />
-                    </FieldGroup>
-
-                    <FieldGroup
-                      label="Working Spindles"
-                      required
-                      hint="Active spindles this shift"
-                    >
-                      <Input
-                        type="number" value={spindles} onChange={setSpindles}
-                        placeholder={dept.id === 'ringframe' ? 'e.g. 480' : 'e.g. 120'}
-                        min={1} step={1}
-                      />
-                    </FieldGroup>
-
-                    <FieldGroup
-                      label="Yarn Count (Ne)"
-                      required
-                      hint="1 lb = Ne × 840 yards"
-                    >
-                      <Input
-                        type="number" value={ne} onChange={setNe}
-                        placeholder="e.g. 47" min={0.1} step={0.5}
-                      />
-                    </FieldGroup>
-                  </div>
-
-                  {/* Optional secondary inputs */}
-                  <div style={{
-                    background: '#f7f7f5', border: '1px solid #e8e7e4',
-                    borderRadius: 6, padding: '14px 16px',
-                  }}>
-                    <div style={{
-                      fontSize: 10, fontWeight: 700, textTransform: 'uppercase',
-                      letterSpacing: '.1em', color: '#acaba8', marginBottom: 12,
-                    }}>
-                      Secondary — Theoretical Validation (optional)
-                    </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-                      <FieldGroup label="Spindle RPM" hint="Spindle speed (RPM)">
-                        <Input
-                          type="number" value={rpm} onChange={setRpm}
-                          placeholder="e.g. 18000" min={100} step={100}
-                        />
-                      </FieldGroup>
-                      <FieldGroup label="TPI (Turns / inch)" hint="Twist per inch">
-                        <Input
-                          type="number" value={tpi} onChange={setTpi}
-                          placeholder="e.g. 22.4" min={0.1} step={0.1}
-                        />
-                      </FieldGroup>
+                  <div style={{ background: '#f5f5f5', border: '1px solid #d9dadb', padding: '14px 16px', marginBottom: 16 }}>
+                    <SectionTitle>Secondary — Theoretical Validation (optional)</SectionTitle>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                      <Field label="Spindle RPM" hint="Spindle speed">
+                        <SapInput type="number" value={rpm} onChange={setRpm} placeholder="18000" min={100} step={100} />
+                      </Field>
+                      <Field label="TPI (Turns / inch)" hint="Twist per inch">
+                        <SapInput type="number" value={tpi} onChange={setTpi} placeholder="22.4" min={0.1} step={0.1} />
+                      </Field>
                     </div>
                   </div>
                 </>
@@ -633,101 +586,88 @@ export default function ProductionEntry({ onSaved }) {
             </div>
 
             {/* Notes */}
-            <FieldGroup label="Notes (optional)">
-              <textarea
-                value={notes}
-                onChange={e => setNotes(e.target.value)}
-                rows={2}
-                placeholder="Any shift remarks, downtime reason, etc."
-                style={{
-                  width: '100%', padding: '9px 12px', fontSize: 12,
-                  border: '1px solid #d8d8d5', borderRadius: 6,
-                  background: '#fff', color: '#37352F',
-                  fontFamily: 'var(--font)', resize: 'vertical', outline: 'none',
-                }}
-              />
-            </FieldGroup>
+            <div style={{ borderTop: '1px solid #d9dadb', paddingTop: 20, marginBottom: 16 }}>
+              <Field label="Notes (optional)">
+                <textarea
+                  value={notes} onChange={e => setNotes(e.target.value)} rows={2}
+                  placeholder="Shift remarks, downtime reason, etc."
+                  style={{
+                    width: '100%', padding: '7px 10px', fontSize: 12,
+                    border: `1px solid ${SAP_BORDER}`, borderRadius: 2,
+                    background: '#fff', color: '#32363a',
+                    fontFamily: 'var(--font)', resize: 'vertical', outline: 'none',
+                    boxSizing: 'border-box',
+                  }}
+                />
+              </Field>
+            </div>
 
-            {/* Status */}
+            {/* Status messages */}
             {error && (
               <div style={{
-                padding: '10px 14px', borderRadius: 6, fontSize: 12,
-                background: '#FEF2F2', border: '1px solid #FECACA', color: '#B42626',
+                padding: '9px 12px', fontSize: 12,
+                background: '#fff0f0', border: '1px solid #f9bfbf',
+                borderLeft: '3px solid #bb0000', color: '#bb0000', marginBottom: 12,
               }}>{error}</div>
             )}
             {saved && (
               <div style={{
-                padding: '10px 14px', borderRadius: 6, fontSize: 12,
-                background: '#F0FDF4', border: '1px solid #BBF7D0', color: '#2D9A4E',
-                fontWeight: 600,
+                padding: '9px 12px', fontSize: 12, fontWeight: 500,
+                background: '#f0faf2', border: '1px solid #abe2bc',
+                borderLeft: '3px solid #188f36', color: '#188f36', marginBottom: 12,
               }}>
-                ✓ Entry saved — {dept.name} · Shift {shift}
+                Entry saved — {dept.name} · Shift {shift}
                 {liveResult !== null ? ` · ${liveResult?.toLocaleString('en-IN', { maximumFractionDigits: 1 })} kg` : ''}
               </div>
             )}
 
-            {/* Submit */}
-            <button
-              onClick={handleSubmit}
-              disabled={!canSubmit || saving}
-              style={{
-                padding: '12px 24px', fontSize: 13, fontWeight: 700,
-                border: 'none', borderRadius: 6, cursor: canSubmit ? 'pointer' : 'not-allowed',
-                background: canSubmit ? dept.color : '#e8e7e4',
-                color: canSubmit ? '#fff' : '#acaba8',
-                fontFamily: 'var(--font)', transition: 'all .15s',
-                alignSelf: 'flex-start',
-              }}
-            >
-              {saving ? 'Saving…' : 'Save Production Entry'}
-            </button>
+            {/* SAP button bar */}
+            <div style={{ display: 'flex', gap: 8, paddingTop: 4 }}>
+              <SapPrimaryBtn onClick={handleSubmit} disabled={!canSubmit || saving}>
+                {saving ? 'Saving…' : 'Save'}
+              </SapPrimaryBtn>
+              <SapGhostBtn onClick={() => {
+                setEffPct(''); setHours(''); setHankReading(''); setSpindles('')
+                setRpm(''); setTpi(''); setNotes(''); setSaved(false); setError('')
+              }}>
+                Reset
+              </SapGhostBtn>
+            </div>
           </div>
         </div>
 
-        {/* ── Right panel: formula + help ───────────────────── */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        {/* ── Right: Live Calculation ──────────────────────────── */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
           <FormulaPanel
-            dept={dept}
-            result={liveResult}
-            theoretical={liveTheoretical}
+            dept={dept} result={liveResult} theoretical={liveTheoretical}
             fields={{
-              stdRate: getStdRate(),
-              effPct: effPct || null,
-              hours:  hours || null,
-              hankReading: hankReading || null,
-              spindles: spindles || null,
-              ne: ne || null,
-              rpm: rpm || null,
-              tpi: tpi || null,
+              stdRate: getStdRate(), effPct: effPct || null, hours: hours || null,
+              hankReading: hankReading || null, spindles: spindles || null,
+              ne: ne || null, rpm: rpm || null, tpi: tpi || null,
             }}
           />
 
-          {/* Engineering note card */}
+          {/* Engineering reference note */}
           <div style={{
-            background: '#fff8ec',
-            border: '1px solid #fde68a',
-            borderRadius: 8,
-            padding: '14px 16px',
-            fontSize: 11,
-            color: '#92400e',
-            lineHeight: 1.7,
+            background: '#fff', border: '1px solid #d9dadb', borderTop: 'none',
+            padding: '14px 16px', fontSize: 11, color: '#6a6d70', lineHeight: 1.7,
           }}>
-            <div style={{ fontWeight: 700, marginBottom: 6 }}>
-              {dept.method === 'efficiency' ? '⚙ Efficiency Method' : '🧵 Hank Meter Method'}
+            <div style={{ fontWeight: 600, color: '#32363a', marginBottom: 6 }}>
+              {dept.method === 'efficiency' ? 'Efficiency Method' : 'Hank Meter Method'}
             </div>
             {dept.method === 'efficiency' ? (
               <>
-                <div>• Standard rate = machine's rated output at 100% efficiency</div>
-                <div>• Efficiency % accounts for downtime, stoppages, speed variation</div>
-                <div>• Edit the std rate any time to match actual machine capacity</div>
+                <div>• Std rate = rated output at 100% efficiency</div>
+                <div>• Efficiency % covers downtime, stoppages</div>
+                <div>• Edit std rate to match actual machine capacity</div>
               </>
             ) : (
               <>
-                <div>• 1 hank = 840 yards by definition</div>
-                <div>• Ne = (yards per pound) ÷ 840</div>
+                <div>• 1 hank = 840 yards (standard)</div>
+                <div>• Ne = yards per pound ÷ 840</div>
                 <div>• Output (lb) = hanks × spindles ÷ Ne</div>
-                <div>• Output (kg) = output (lb) × 0.453592</div>
-                <div style={{ marginTop: 4, color: '#b45309' }}>• Theoretical inputs are for validation only — primary_kg uses the hank meter reading</div>
+                <div>• Output (kg) = lb × 0.453592</div>
+                <div style={{ marginTop: 4, color: '#89919a' }}>• Theoretical inputs for validation only</div>
               </>
             )}
           </div>

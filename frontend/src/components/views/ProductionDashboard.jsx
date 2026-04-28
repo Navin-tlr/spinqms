@@ -1,103 +1,93 @@
+/* ──────────────────────────────────────────────────────────────────────────
+   ProductionDashboard — SAP Fiori analytical view
+   - Flat bordered KPI tiles (no colours per dept — unified SAP blue)
+   - Compact table for recent entries
+   - No gradients, no shadows, no rounded corners
+────────────────────────────────────────────────────────────────────────── */
+
 import { useState, useEffect, useCallback } from 'react'
 import { getProductionDashboard, getProductionEntries } from '../../api.js'
 import { Spinner } from '../Primitives.jsx'
 
+const SAP_BLUE = '#0854a0'
+
 const DEPT_META = {
-  carding:   { name: 'Carding',    icon: '⚙', method: 'efficiency',  color: '#1b5e9e' },
-  breaker:   { name: 'Breaker',    icon: '⚙', method: 'efficiency',  color: '#0e7a4a' },
-  rsb:       { name: 'RSB',        icon: '⚙', method: 'efficiency',  color: '#6b3a8a' },
-  simplex:   { name: 'Simplex',    icon: '🧵', method: 'hank_meter',  color: '#b45309' },
-  ringframe: { name: 'Ring Frame', icon: '🔄', method: 'hank_meter',  color: '#b42626' },
+  carding:   { name: 'Carding',    method: 'Efficiency'  },
+  breaker:   { name: 'Breaker',    method: 'Efficiency'  },
+  rsb:       { name: 'RSB',        method: 'Efficiency'  },
+  simplex:   { name: 'Simplex',    method: 'Hank Meter'  },
+  ringframe: { name: 'Ring Frame', method: 'Hank Meter'  },
 }
 
-const SHIFT_COLORS = { A: '#1b5e9e', B: '#0e7a4a', C: '#6b3a8a' }
+const SHIFT_LABEL = { A: 'Shift A', B: 'Shift B', C: 'Shift C' }
 
 function fmtKg(n) {
   if (!n && n !== 0) return '—'
   return n.toLocaleString('en-IN', { maximumFractionDigits: 1 }) + ' kg'
 }
 
+/* ── KPI Card — SAP flat tile (Image 03 / 04 pattern) ─────────────────── */
 function KpiCard({ dept }) {
-  const meta = DEPT_META[dept.dept_id] || {}
-  const total = dept.today_kg
-  const pct = total > 0 ? 100 : 0   // would compare vs target in future
+  const meta  = DEPT_META[dept.dept_id] || {}
+  const total = dept.today_kg || 0
+  const hasData = dept.entry_count > 0
 
   return (
     <div style={{
       background: '#fff',
-      border: '1px solid #e0e2e6',
-      borderRadius: 8,
-      padding: '20px 24px',
-      display: 'flex',
-      flexDirection: 'column',
-      gap: 16,
-      boxShadow: '0 1px 4px rgba(0,0,0,.06)',
+      border: '1px solid #d9dadb',
+      borderTop: `3px solid ${hasData ? SAP_BLUE : '#d9dadb'}`,
+      padding: '16px 20px',
+      display: 'flex', flexDirection: 'column', gap: 0,
+      minWidth: 200,
     }}>
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <div style={{
-            width: 32, height: 32,
-            borderRadius: 6,
-            background: meta.color + '14',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 16,
-          }}>{meta.icon}</div>
-          <div>
-            <div style={{ fontSize: 12, fontWeight: 600, color: '#37352F', letterSpacing: '.02em' }}>
-              {dept.dept_name}
-            </div>
-            <div style={{ fontSize: 10, color: '#9b9b9b', textTransform: 'uppercase', letterSpacing: '.08em' }}>
-              {dept.calc_method === 'efficiency' ? 'Efficiency method' : 'Hank meter method'}
-            </div>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 12 }}>
+        <div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: '#32363a' }}>{meta.name}</div>
+          <div style={{ fontSize: 11, color: '#89919a', marginTop: 2, textTransform: 'uppercase', letterSpacing: '.06em' }}>
+            {meta.method}
           </div>
         </div>
-        {dept.entry_count > 0 && (
-          <span style={{
-            fontSize: 10, fontWeight: 500, color: '#2D9A4E',
-            background: '#F0FDF4', border: '1px solid #BBF7D0',
-            padding: '2px 8px', borderRadius: 20,
+        {hasData && (
+          <div style={{
+            fontSize: 10, fontWeight: 500,
+            color: '#188f36', background: '#f0faf2',
+            border: '1px solid #abe2bc', padding: '2px 7px',
           }}>
             {dept.entry_count} {dept.entry_count === 1 ? 'entry' : 'entries'}
-          </span>
+          </div>
         )}
       </div>
 
-      {/* Big number */}
-      <div style={{ lineHeight: 1 }}>
+      {/* Big number — SAP light-weight large figure */}
+      <div style={{ marginBottom: 14 }}>
         <div style={{
-          fontFamily: 'var(--mono)', fontSize: 32, fontWeight: 600,
-          color: total > 0 ? meta.color : '#c7c6c3',
+          fontFamily: 'var(--mono)', fontSize: 32, fontWeight: 300, lineHeight: 1,
+          color: hasData ? SAP_BLUE : '#d9dadb',
         }}>
           {fmtKg(total)}
         </div>
-        <div style={{ fontSize: 11, color: '#9b9b9b', marginTop: 4 }}>Today's production</div>
+        <div style={{ fontSize: 11, color: '#89919a', marginTop: 4 }}>Today's production</div>
       </div>
 
-      {/* Shift breakdown */}
-      <div style={{ display: 'flex', gap: 8 }}>
+      {/* Shift breakdown — compact table rows */}
+      <div style={{ borderTop: '1px solid #e8e8e8', paddingTop: 10 }}>
         {['A', 'B', 'C'].map(s => {
-          const kg = dept[`shift_${s.toLowerCase()}_kg`]
+          const kg = dept[`shift_${s.toLowerCase()}_kg`] || 0
           return (
             <div key={s} style={{
-              flex: 1,
-              padding: '8px 10px',
-              background: '#f7f7f5',
-              border: '1px solid #e8e7e4',
-              borderRadius: 6,
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: '3px 0', borderBottom: s !== 'C' ? '1px solid #f0f0f0' : 'none',
             }}>
-              <div style={{
-                fontSize: 9, fontWeight: 600, textTransform: 'uppercase',
-                letterSpacing: '.1em', color: SHIFT_COLORS[s], marginBottom: 3,
-              }}>
-                Shift {s}
-              </div>
-              <div style={{
-                fontFamily: 'var(--mono)', fontSize: 13, fontWeight: 500,
-                color: kg > 0 ? '#37352F' : '#c7c6c3',
+              <span style={{ fontSize: 11, color: '#6a6d70' }}>Shift {s}</span>
+              <span style={{
+                fontFamily: 'var(--mono)', fontSize: 12,
+                color: kg > 0 ? '#32363a' : '#d9dadb',
+                fontWeight: kg > 0 ? 500 : 400,
               }}>
                 {kg > 0 ? fmtKg(kg) : '—'}
-              </div>
+              </span>
             </div>
           )
         })}
@@ -106,103 +96,86 @@ function KpiCard({ dept }) {
   )
 }
 
+/* ── Recent Entries table ─────────────────────────────────────────────── */
 function RecentEntries({ entries }) {
+  const thStyle = {
+    padding: '7px 12px', textAlign: 'left',
+    fontSize: 11, fontWeight: 600, color: '#6a6d70',
+    textTransform: 'uppercase', letterSpacing: '.07em',
+    background: '#f5f5f5',
+    borderBottom: '1px solid #d9dadb',
+    whiteSpace: 'nowrap',
+  }
+
   return (
-    <div style={{
-      background: '#fff',
-      border: '1px solid #e0e2e6',
-      borderRadius: 8,
-      overflow: 'hidden',
-      boxShadow: '0 1px 4px rgba(0,0,0,.06)',
-    }}>
+    <div style={{ background: '#fff', border: '1px solid #d9dadb' }}>
+      {/* Table title */}
       <div style={{
-        padding: '14px 20px',
-        borderBottom: '1px solid #f0f0ef',
-        fontSize: 12, fontWeight: 600, color: '#37352F',
-        display: 'flex', alignItems: 'center', gap: 8,
+        padding: '10px 16px',
+        borderBottom: '1px solid #d9dadb',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
       }}>
-        <span>Recent Entries</span>
-        <span style={{
-          fontSize: 11, fontWeight: 400, color: '#9b9b9b',
-          marginLeft: 'auto',
-        }}>last 15 across all departments</span>
+        <span style={{ fontSize: 13, fontWeight: 600, color: '#32363a' }}>Recent Entries</span>
+        <span style={{ fontSize: 11, color: '#89919a' }}>Last 15 across all departments</span>
       </div>
 
       {entries.length === 0 ? (
-        <div style={{ padding: '32px 20px', textAlign: 'center', color: '#acaba8', fontSize: 13 }}>
-          No production entries recorded today.
+        <div style={{ padding: '32px 20px', textAlign: 'center', color: '#89919a', fontSize: 13 }}>
+          No production entries recorded.
         </div>
       ) : (
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead>
-            <tr style={{ background: '#f7f7f5' }}>
-              {['Department', 'Shift', 'Machine', 'Method', 'Primary Output', 'Theoretical', 'Notes'].map(h => (
-                <th key={h} style={{
-                  padding: '8px 14px', textAlign: 'left',
-                  fontSize: 10, fontWeight: 600, color: '#9b9b9b',
-                  textTransform: 'uppercase', letterSpacing: '.06em',
-                  borderBottom: '1px solid #e8e7e4',
-                }}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {entries.map((e, i) => {
-              const meta = DEPT_META[e.dept_id] || {}
-              return (
-                <tr key={e.id} style={{
-                  borderBottom: i < entries.length - 1 ? '1px solid #f0f0ef' : 'none',
-                  transition: 'background .1s',
-                }}>
-                  <td style={{ padding: '10px 14px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <div style={{
-                        width: 3, height: 20, borderRadius: 2, background: meta.color,
-                      }} />
-                      <span style={{ fontSize: 12, fontWeight: 500, color: '#37352F' }}>
-                        {meta.name}
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr>
+                {['Department', 'Shift', 'Machine', 'Method', 'Primary Output', 'Theoretical', 'Notes'].map(h => (
+                  <th key={h} style={thStyle}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {entries.map((e, i) => {
+                const meta = DEPT_META[e.dept_id] || {}
+                const odd  = i % 2 === 0
+                return (
+                  <tr key={e.id} style={{ background: odd ? '#fff' : '#fafafa' }}>
+                    <td style={{ padding: '8px 12px', fontSize: 12, color: '#32363a', fontWeight: 500, borderBottom: '1px solid #eeeeee' }}>
+                      {meta.name}
+                    </td>
+                    <td style={{ padding: '8px 12px', fontSize: 12, color: '#32363a', borderBottom: '1px solid #eeeeee' }}>
+                      {SHIFT_LABEL[e.shift]}
+                    </td>
+                    <td style={{ padding: '8px 12px', fontSize: 12, color: '#6a6d70', fontFamily: 'var(--mono)', borderBottom: '1px solid #eeeeee' }}>
+                      {e.machine_number ? `#${e.machine_number}` : '—'}
+                    </td>
+                    <td style={{ padding: '8px 12px', fontSize: 11, color: '#89919a', textTransform: 'uppercase', letterSpacing: '.05em', borderBottom: '1px solid #eeeeee' }}>
+                      {e.calc_method === 'efficiency' ? 'Efficiency' : 'Hank Meter'}
+                    </td>
+                    <td style={{ padding: '8px 12px', borderBottom: '1px solid #eeeeee' }}>
+                      <span style={{ fontFamily: 'var(--mono)', fontSize: 13, fontWeight: 600, color: SAP_BLUE }}>
+                        {fmtKg(e.primary_kg)}
                       </span>
-                    </div>
-                  </td>
-                  <td style={{ padding: '10px 14px' }}>
-                    <span style={{
-                      fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 4,
-                      color: SHIFT_COLORS[e.shift],
-                      background: SHIFT_COLORS[e.shift] + '14',
-                    }}>
-                      Shift {e.shift}
-                    </span>
-                  </td>
-                  <td style={{ padding: '10px 14px', fontSize: 12, color: '#787774' }}>
-                    {e.machine_number ? `#${e.machine_number}` : '—'}
-                  </td>
-                  <td style={{ padding: '10px 14px', fontSize: 11, color: '#9b9b9b', textTransform: 'uppercase', letterSpacing: '.05em' }}>
-                    {e.calc_method === 'efficiency' ? 'Efficiency' : 'Hank Meter'}
-                  </td>
-                  <td style={{ padding: '10px 14px' }}>
-                    <span style={{
-                      fontFamily: 'var(--mono)', fontSize: 13, fontWeight: 600,
-                      color: '#1b5e9e',
-                    }}>
-                      {fmtKg(e.primary_kg)}
-                    </span>
-                  </td>
-                  <td style={{ padding: '10px 14px', fontFamily: 'var(--mono)', fontSize: 12, color: '#787774' }}>
-                    {e.theoretical_kg ? fmtKg(e.theoretical_kg) : '—'}
-                  </td>
-                  <td style={{ padding: '10px 14px', fontSize: 11, color: '#787774', maxWidth: 200 }}>
-                    {e.notes || '—'}
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
+                    </td>
+                    <td style={{ padding: '8px 12px', fontFamily: 'var(--mono)', fontSize: 12, color: '#6a6d70', borderBottom: '1px solid #eeeeee' }}>
+                      {e.theoretical_kg ? fmtKg(e.theoretical_kg) : '—'}
+                    </td>
+                    <td style={{ padding: '8px 12px', fontSize: 11, color: '#6a6d70', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', borderBottom: '1px solid #eeeeee' }}>
+                      {e.notes || '—'}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   )
 }
 
+/* ══════════════════════════════════════════════════════════════════════════
+   Main
+══════════════════════════════════════════════════════════════════════════ */
 export default function ProductionDashboard({ setProductionView }) {
   const [dashboard, setDashboard] = useState(null)
   const [recent,    setRecent]    = useState([])
@@ -216,13 +189,9 @@ export default function ProductionDashboard({ setProductionView }) {
         getProductionDashboard(selDate),
         getProductionEntries({ entry_date: selDate, limit: 15 }),
       ])
-      setDashboard(dash)
-      setRecent(entries)
-    } catch (e) {
-      console.error(e)
-    } finally {
-      setLoading(false)
-    }
+      setDashboard(dash); setRecent(entries)
+    } catch (e) { console.error(e) }
+    finally { setLoading(false) }
   }, [selDate])
 
   useEffect(() => { load() }, [load])
@@ -231,96 +200,104 @@ export default function ProductionDashboard({ setProductionView }) {
   const isToday  = selDate === todayStr
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
 
-      {/* Page header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
-        <div>
-          <div style={{ fontSize: 20, fontWeight: 700, color: '#37352F', letterSpacing: '-.01em' }}>
-            Production Overview
-          </div>
-          <div style={{ fontSize: 12, color: '#9b9b9b', marginTop: 2 }}>
+      {/* ── SAP action bar ────────────────────────────────────────── */}
+      <div style={{
+        background: '#fff', border: '1px solid #d9dadb', borderBottom: 'none',
+        padding: '8px 16px',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          <span style={{ fontSize: 13, fontWeight: 400, color: '#32363a' }}>Production Overview</span>
+          <span style={{ fontSize: 11, color: '#89919a' }}>
             {isToday ? "Today's shift production" : `Production on ${selDate}`}
-          </div>
+          </span>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <input
-            type="date"
-            value={selDate}
-            max={todayStr}
+            type="date" value={selDate} max={todayStr}
             onChange={e => setSelDate(e.target.value)}
             style={{
-              padding: '7px 12px', fontSize: 12, border: '1px solid #e0e2e6',
-              borderRadius: 6, background: '#fff', color: '#37352F',
-              fontFamily: 'var(--font)', cursor: 'pointer',
+              padding: '5px 10px', fontSize: 12,
+              border: '1px solid #89919a', borderRadius: 2,
+              background: '#fff', color: '#32363a', fontFamily: 'var(--font)',
             }}
           />
-          <button
-            onClick={load}
-            style={{
-              padding: '7px 16px', fontSize: 12, fontWeight: 500,
-              border: '1px solid #e0e2e6', borderRadius: 6,
-              background: '#fff', color: '#37352F', cursor: 'pointer',
-              fontFamily: 'var(--font)',
-            }}
-          >↻ Refresh</button>
-          <button
-            onClick={() => setProductionView('entry')}
-            style={{
-              padding: '7px 16px', fontSize: 12, fontWeight: 600,
-              border: 'none', borderRadius: 6,
-              background: '#1b5e9e', color: '#fff', cursor: 'pointer',
-              fontFamily: 'var(--font)',
-            }}
-          >+ New Entry</button>
+          <button onClick={load} style={{
+            padding: '5px 14px', fontSize: 12,
+            border: '1px solid #89919a', borderRadius: 2,
+            background: '#fff', color: '#32363a', cursor: 'pointer',
+            fontFamily: 'var(--font)',
+          }}>Refresh</button>
+          <button onClick={() => setProductionView('entry')} style={{
+            padding: '5px 16px', fontSize: 12, fontWeight: 500,
+            border: `1px solid ${SAP_BLUE}`, borderRadius: 2,
+            background: SAP_BLUE, color: '#fff', cursor: 'pointer',
+            fontFamily: 'var(--font)',
+          }}>+ New Entry</button>
         </div>
       </div>
 
-      {loading && <div style={{ padding: 48, textAlign: 'center' }}><Spinner /></div>}
+      {loading && (
+        <div style={{ background: '#fff', border: '1px solid #d9dadb', padding: 48, textAlign: 'center' }}>
+          <Spinner />
+        </div>
+      )}
 
       {!loading && dashboard && (
         <>
-          {/* Total kg summary strip */}
+          {/* ── Total summary bar — flat, no gradient ─────────────── */}
           <div style={{
-            background: '#1b5e9e',
-            borderRadius: 8,
-            padding: '18px 24px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: 16,
-            boxShadow: '0 2px 8px rgba(27,94,158,.2)',
+            background: SAP_BLUE,
+            border: `1px solid ${SAP_BLUE}`,
+            padding: '14px 20px',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           }}>
             <div>
-              <div style={{ fontSize: 11, color: 'rgba(255,255,255,.7)', textTransform: 'uppercase', letterSpacing: '.12em', marginBottom: 4 }}>
+              <div style={{ fontSize: 11, color: 'rgba(255,255,255,.65)', textTransform: 'uppercase', letterSpacing: '.1em', marginBottom: 4 }}>
                 Total Production — All Departments
               </div>
-              <div style={{ fontFamily: 'var(--mono)', fontSize: 36, fontWeight: 700, color: '#fff', lineHeight: 1 }}>
+              <div style={{ fontFamily: 'var(--mono)', fontSize: 32, fontWeight: 300, color: '#fff', lineHeight: 1 }}>
                 {fmtKg(dashboard.total_kg)}
               </div>
             </div>
-            <div style={{ display: 'flex', gap: 24 }}>
-              {['A', 'B', 'C'].map(s => {
+            <div style={{ display: 'flex', gap: 0, borderLeft: '1px solid rgba(255,255,255,.2)', paddingLeft: 24, marginLeft: 24 }}>
+              {['A', 'B', 'C'].map((s, i) => {
                 const kg = dashboard.depts.reduce((sum, d) => sum + (d[`shift_${s.toLowerCase()}_kg`] || 0), 0)
                 return (
-                  <div key={s} style={{ textAlign: 'right' }}>
-                    <div style={{ fontSize: 10, color: 'rgba(255,255,255,.65)', textTransform: 'uppercase', letterSpacing: '.1em' }}>Shift {s}</div>
-                    <div style={{ fontFamily: 'var(--mono)', fontSize: 18, fontWeight: 600, color: '#fff' }}>{fmtKg(kg)}</div>
+                  <div key={s} style={{
+                    textAlign: 'center',
+                    padding: '0 20px',
+                    borderRight: i < 2 ? '1px solid rgba(255,255,255,.2)' : 'none',
+                  }}>
+                    <div style={{ fontSize: 10, color: 'rgba(255,255,255,.6)', textTransform: 'uppercase', letterSpacing: '.1em', marginBottom: 4 }}>
+                      Shift {s}
+                    </div>
+                    <div style={{ fontFamily: 'var(--mono)', fontSize: 16, fontWeight: 400, color: '#fff' }}>
+                      {fmtKg(kg)}
+                    </div>
                   </div>
                 )
               })}
             </div>
           </div>
 
-          {/* Dept KPI grid */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
+          {/* ── Dept KPI grid ─────────────────────────────────────── */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))',
+            gap: 0, borderLeft: '1px solid #d9dadb',
+          }}>
             {dashboard.depts.map(dept => (
               <KpiCard key={dept.dept_id} dept={dept} />
             ))}
           </div>
 
-          {/* Recent entries table */}
-          <RecentEntries entries={recent} />
+          {/* ── Recent entries ────────────────────────────────────── */}
+          <div style={{ marginTop: 16 }}>
+            <RecentEntries entries={recent} />
+          </div>
         </>
       )}
     </div>

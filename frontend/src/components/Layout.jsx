@@ -102,6 +102,7 @@ export default function Layout({
         background: 'var(--sidebar-bg)',
         borderRight: '1px solid var(--bd)',
         overflowY: 'auto', overflowX: 'hidden', flexShrink: 0,
+        boxShadow: '1px 0 0 #d9dadb',
         ...(isMobile ? {
           position: 'fixed', top: 0, left: 0, bottom: 0,
           width: 'min(260px, 85vw)', zIndex: 210,
@@ -158,11 +159,11 @@ export default function Layout({
                   onClick={() => { setProductionView && setProductionView(item.id); if (isMobile) setMenuOpen(false) }}
                   style={{
                     display: 'flex', alignItems: 'center', gap: 7,
-                    padding: '5px 8px',
-                    borderRadius: 'var(--r)',
+                    padding: '7px 10px 7px 12px',
+                    borderLeft: active ? '3px solid var(--claude)' : '3px solid transparent',
                     cursor: 'pointer', fontSize: 13,
-                    fontWeight: active ? 500 : 400,
-                    color: active ? 'var(--tx)' : 'var(--tx-2)',
+                    fontWeight: active ? 600 : 400,
+                    color: active ? 'var(--claude)' : 'var(--tx-2)',
                     background: active ? 'var(--bg-active)' : 'transparent',
                     userSelect: 'none', transition: 'background .1s, color .1s',
                   }}
@@ -232,15 +233,14 @@ export default function Layout({
                 onClick={() => navigate(item.id)}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 7,
-                  padding: '5px 8px',
-                  borderRadius: 'var(--r)',
+                  padding: '7px 10px 7px 12px',
+                  borderLeft: active ? '3px solid var(--claude)' : isDropTarget ? '3px solid var(--claude)' : '3px solid transparent',
                   cursor: 'pointer', fontSize: 13,
-                  fontWeight: active ? 500 : 400,
-                  color: active ? 'var(--tx)' : 'var(--tx-2)',
+                  fontWeight: active ? 600 : 400,
+                  color: active ? 'var(--claude)' : 'var(--tx-2)',
                   background: active ? 'var(--bg-active)' : 'transparent',
                   userSelect: 'none',
                   transition: 'background .1s, color .1s',
-                  borderTop: isDropTarget ? '2px solid var(--claude)' : '2px solid transparent',
                 }}
                 onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'var(--bg-hover)'; e.currentTarget.style.color = 'var(--tx)' }}
                 onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = active ? 'var(--tx)' : 'var(--tx-2)' }}
