@@ -472,6 +472,27 @@ class ProductionEntry(Base):
 
 
 # ── 14. Material / Inventory / MRP / Purchase Engine ────────────────────────
+
+class Vendor(Base):
+    """Vendor master — central FK used by POs and direct GRs."""
+    __tablename__ = "vendors"
+
+    id              = Column(Integer, primary_key=True)
+    code            = Column(String(40),  nullable=False, unique=True, index=True)
+    name            = Column(String(120), nullable=False)
+    contact_person  = Column(String(120), nullable=True)
+    phone           = Column(String(40),  nullable=True)
+    email           = Column(String(120), nullable=True)
+    gst_number      = Column(String(40),  nullable=True)
+    address         = Column(Text,        nullable=True)
+    status          = Column(String(20),  nullable=False, default="active")
+    created_at      = Column(DateTime,    nullable=False, default=lambda: datetime.now(timezone.utc))
+    updated_at      = Column(DateTime,    nullable=True)
+
+    purchase_orders  = relationship("PurchaseOrder",  back_populates="vendor")
+    goods_receipts   = relationship("GoodsReceipt",   back_populates="vendor")
+
+
 class Material(Base):
     """Raw material master. Stock is never edited here; inventory ledger drives balances."""
     __tablename__ = "materials"
@@ -480,6 +501,8 @@ class Material(Base):
     code        = Column(String(40), nullable=False, unique=True, index=True)
     name        = Column(String(120), nullable=False)
     base_unit   = Column(String(20), nullable=False)
+    category    = Column(String(60),  nullable=True)
+    description = Column(Text,        nullable=True)
     is_active   = Column(Boolean, nullable=False, default=True)
     created_at  = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
     updated_at  = Column(DateTime, nullable=True)
@@ -571,13 +594,13 @@ class MaterialPlanningParam(Base):
 
 
 class MaterialIssueDocument(Base):
-    """SAP-style goods issue document for confirmed material consumption."""
+    """SAP-style goods issue document — daily total basis, no shift distinction."""
     __tablename__ = "material_issue_documents"
 
     id              = Column(Integer, primary_key=True)
     document_number = Column(String(40), nullable=False, unique=True, index=True)
     issue_date      = Column(Date, nullable=False, index=True)
-    shift           = Column(String(1), nullable=False)
+    shift           = Column(String(1), nullable=True, default="D")   # 'D' = daily
     reference       = Column(String(120), nullable=True)
     status          = Column(String(30), nullable=False, default="posted")
     notes           = Column(Text, nullable=True)
@@ -627,12 +650,14 @@ class PurchaseOrder(Base):
 
     id          = Column(Integer, primary_key=True)
     po_number   = Column(String(40), nullable=False, unique=True, index=True)
-    supplier    = Column(String(120), nullable=True)
+    vendor_id   = Column(Integer, ForeignKey("vendors.id"), nullable=True, index=True)
+    supplier    = Column(String(120), nullable=True)   # legacy free-text fallback
     status      = Column(String(30), nullable=False, default="open")
     order_date  = Column(Date, nullable=False)
     created_at  = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
 
-    lines = relationship("PurchaseOrderLine", back_populates="purchase_order", cascade="all, delete-orphan")
+    vendor   = relationship("Vendor", back_populates="purchase_orders")
+    lines    = relationship("PurchaseOrderLine", back_populates="purchase_order", cascade="all, delete-orphan")
     receipts = relationship("GoodsReceipt", back_populates="purchase_order")
 
 
@@ -654,33 +679,44 @@ class PurchaseOrderLine(Base):
 
 
 class GoodsReceipt(Base):
+    """
+    Goods Receipt document.
+    Can be:
+      - PO-based: purchase_order_id is set, lines reference PO lines
+      - Direct (vendor invoice/opening stock): vendor_id set, purchase_order_id = NULL
+    Attachments (invoice PDF/image) are stored in Supabase Storage; URL saved here.
+    """
     __tablename__ = "goods_receipts"
 
     id                = Column(Integer, primary_key=True)
     gr_number         = Column(String(40), nullable=False, unique=True, index=True)
-    purchase_order_id = Column(Integer, ForeignKey("purchase_orders.id"), nullable=False, index=True)
+    purchase_order_id = Column(Integer, ForeignKey("purchase_orders.id"), nullable=True, index=True)
+    vendor_id         = Column(Integer, ForeignKey("vendors.id"), nullable=True, index=True)
     receipt_date      = Column(Date, nullable=False)
+    reference         = Column(String(120), nullable=True)   # invoice / delivery note number
+    attachment_url    = Column(Text, nullable=True)          # Supabase Storage public URL
     notes             = Column(Text, nullable=True)
     created_at        = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
 
     purchase_order = relationship("PurchaseOrder", back_populates="receipts")
-    lines = relationship("GoodsReceiptLine", back_populates="goods_receipt", cascade="all, delete-orphan")
+    vendor         = relationship("Vendor", back_populates="goods_receipts")
+    lines          = relationship("GoodsReceiptLine", back_populates="goods_receipt", cascade="all, delete-orphan")
 
 
 class GoodsReceiptLine(Base):
     __tablename__ = "goods_receipt_lines"
 
-    id                  = Column(Integer, primary_key=True)
-    goods_receipt_id    = Column(Integer, ForeignKey("goods_receipts.id"), nullable=False, index=True)
-    purchase_order_line_id = Column(Integer, ForeignKey("purchase_order_lines.id"), nullable=False, index=True)
-    material_id         = Column(Integer, ForeignKey("materials.id"), nullable=False, index=True)
-    quantity_received   = Column(Float, nullable=False)
-    unit                = Column(String(20), nullable=False)
-    rate                = Column(Float, nullable=False)
+    id                     = Column(Integer, primary_key=True)
+    goods_receipt_id       = Column(Integer, ForeignKey("goods_receipts.id"), nullable=False, index=True)
+    purchase_order_line_id = Column(Integer, ForeignKey("purchase_order_lines.id"), nullable=True, index=True)
+    material_id            = Column(Integer, ForeignKey("materials.id"), nullable=False, index=True)
+    quantity_received      = Column(Float, nullable=False)
+    unit                   = Column(String(20), nullable=False)
+    rate                   = Column(Float, nullable=True)   # optional on direct GRs
 
-    goods_receipt = relationship("GoodsReceipt", back_populates="lines")
+    goods_receipt       = relationship("GoodsReceipt", back_populates="lines")
     purchase_order_line = relationship("PurchaseOrderLine")
-    material = relationship("Material")
+    material            = relationship("Material")
     inventory_movements = relationship("InventoryMovement", back_populates="goods_receipt_line")
 
 

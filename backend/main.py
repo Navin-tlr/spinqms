@@ -22,7 +22,7 @@ import os
 from datetime import date, datetime, timezone
 from typing import Dict, List, Optional
 
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy import func
@@ -55,11 +55,14 @@ from models import (
     ProductionStdRate,
     Sample,
     SettingsVersion,
+    Vendor,
 )
 from schemas import (
     Alert,
     DeptKPI,
+    DirectGRCreate,
     ErrorResponse,
+    GoodsReceiptLineOut,
     IIRequest,
     IIResponse,
     LabBenchmarkItem,
@@ -105,6 +108,9 @@ from schemas import (
     SampleUpdate,
     SettingsOut,
     SettingsUpdate,
+    VendorCreate,
+    VendorOut,
+    VendorUpdate,
 )
 import logic
 
@@ -156,13 +162,44 @@ async def _http_handler(request: Request, exc: HTTPException) -> JSONResponse:
     )
 
 
+# ── Supabase Storage config ───────────────────────────────────────────────────
+SUPABASE_URL          = os.environ.get("SUPABASE_URL", "").rstrip("/")
+SUPABASE_SERVICE_KEY  = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
+GR_BUCKET             = "gr-attachments"
+
+
+async def _upload_attachment(file: UploadFile, gr_number: str) -> str:
+    """Upload a GR attachment to Supabase Storage and return the public URL."""
+    if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
+        raise HTTPException(500, "Storage not configured — set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY on Render")
+
+    import httpx
+    content = await file.read()
+    ext     = (file.filename or "file").rsplit(".", 1)[-1].lower()
+    path    = f"{gr_number}/{file.filename or f'attachment.{ext}'}"
+
+    async with httpx.AsyncClient(timeout=30) as client:
+        resp = await client.post(
+            f"{SUPABASE_URL}/storage/v1/object/{GR_BUCKET}/{path}",
+            content=content,
+            headers={
+                "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
+                "Content-Type":  file.content_type or "application/octet-stream",
+                "x-upsert":      "true",
+            },
+        )
+        if resp.status_code not in (200, 201):
+            raise HTTPException(502, f"Storage upload failed: {resp.text}")
+
+    return f"{SUPABASE_URL}/storage/v1/object/public/{GR_BUCKET}/{path}"
+
+
 # ── Health / debug endpoint ───────────────────────────────────────────────────
 @app.get("/api/health")
 def health(db: Session = Depends(get_db)):
-    """Returns DB type and live row counts — use this to verify Render is hitting Supabase."""
+    """Returns DB type, storage config, and live row counts."""
     from database import DATABASE_URL
     db_type = "sqlite" if DATABASE_URL.startswith("sqlite") else "postgres"
-    # Mask credentials — show only scheme + host
     try:
         from urllib.parse import urlparse
         p = urlparse(DATABASE_URL)
@@ -174,13 +211,16 @@ def health(db: Session = Depends(get_db)):
         material_count  = db.query(Material).count()
         movement_count  = db.query(InventoryMovement).count()
         stock_count     = db.query(InventoryStock).count()
+        vendor_count    = db.query(Vendor).count()
     except Exception as e:
         return {"db_type": db_type, "db": db_display, "error": str(e)}
 
     return {
-        "db_type": db_type,
-        "db": db_display,
-        "materials": material_count,
+        "db_type":             db_type,
+        "db":                  db_display,
+        "storage_configured":  bool(SUPABASE_URL and SUPABASE_SERVICE_KEY),
+        "materials":           material_count,
+        "vendors":             vendor_count,
         "inventory_movements": movement_count,
         "inventory_stock_rows": stock_count,
     }
@@ -2569,6 +2609,59 @@ def production_dashboard(
 
 # ── Inventory / MRP / Purchasing ─────────────────────────────────────────────
 
+# ── Vendor Master CRUD ────────────────────────────────────────────────────────
+@app.get("/api/vendors", response_model=List[VendorOut])
+def list_vendors(db: Session = Depends(get_db)):
+    return db.query(Vendor).order_by(Vendor.name).all()
+
+
+@app.post("/api/vendors", response_model=VendorOut, status_code=201)
+def create_vendor(body: VendorCreate, db: Session = Depends(get_db)):
+    if db.query(Vendor).filter(Vendor.code.ilike(body.code.strip())).first():
+        raise HTTPException(409, f"Vendor code '{body.code}' already exists")
+    now = datetime.now(timezone.utc)
+    vendor = Vendor(
+        code=body.code.strip().upper(),
+        name=body.name.strip(),
+        contact_person=body.contact_person,
+        phone=body.phone,
+        email=body.email,
+        gst_number=body.gst_number,
+        address=body.address,
+        status="active",
+        created_at=now,
+        updated_at=now,
+    )
+    db.add(vendor)
+    db.commit()
+    db.refresh(vendor)
+    return vendor
+
+
+@app.put("/api/vendors/{vendor_id}", response_model=VendorOut)
+def update_vendor(vendor_id: int, body: VendorUpdate, db: Session = Depends(get_db)):
+    vendor = db.query(Vendor).filter_by(id=vendor_id).first()
+    if not vendor:
+        raise HTTPException(404, f"Vendor {vendor_id} not found")
+    for field, val in body.model_dump(exclude_none=True).items():
+        setattr(vendor, field, val)
+    vendor.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(vendor)
+    return vendor
+
+
+@app.delete("/api/vendors/{vendor_id}", status_code=204)
+def deactivate_vendor(vendor_id: int, db: Session = Depends(get_db)):
+    vendor = db.query(Vendor).filter_by(id=vendor_id).first()
+    if not vendor:
+        raise HTTPException(404, f"Vendor {vendor_id} not found")
+    vendor.status = "inactive"
+    vendor.updated_at = datetime.now(timezone.utc)
+    db.commit()
+
+
+# ── Material Master CRUD ──────────────────────────────────────────────────────
 @app.get("/api/materials", response_model=List[MaterialOut])
 def list_materials(db: Session = Depends(get_db)):
     return db.query(Material).filter_by(is_active=True).order_by(Material.name).all()
@@ -2577,18 +2670,15 @@ def list_materials(db: Session = Depends(get_db)):
 @app.post("/api/materials", response_model=MaterialOut, status_code=201)
 def create_material(body: MaterialCreate, db: Session = Depends(get_db)):
     """Create a new material in the master list."""
-    # Check for duplicate code (case-insensitive)
-    existing = db.query(Material).filter(
-        Material.code.ilike(body.code.strip())
-    ).first()
-    if existing:
+    if db.query(Material).filter(Material.code.ilike(body.code.strip())).first():
         raise HTTPException(409, f"Material code '{body.code}' already exists")
-
     now = datetime.now(timezone.utc)
     material = Material(
         code=body.code.strip().upper(),
         name=body.name.strip(),
         base_unit=body.base_unit.strip(),
+        category=body.category,
+        description=body.description,
         is_active=True,
         created_at=now,
         updated_at=now,
@@ -2601,7 +2691,7 @@ def create_material(body: MaterialCreate, db: Session = Depends(get_db)):
 
 @app.delete("/api/materials/{material_id}", status_code=204)
 def deactivate_material(material_id: int, db: Session = Depends(get_db)):
-    """Soft-delete a material (marks is_active=False). Cannot delete if stock exists."""
+    """Soft-delete. Blocked if stock on hand > 0."""
     material = _material_or_404(db, material_id)
     stock = db.query(InventoryStock).filter_by(material_id=material.id).first()
     if stock and stock.quantity_on_hand > 0:
@@ -2818,51 +2908,81 @@ def list_purchase_recommendations(status: Optional[str] = "open", db: Session = 
     return [_recommendation_payload(r) for r in q.order_by(PurchaseRecommendation.created_at.desc()).all()]
 
 
+def _gr_payload(gr: GoodsReceipt) -> dict:
+    return {
+        "id":                gr.id,
+        "gr_number":         gr.gr_number,
+        "purchase_order_id": gr.purchase_order_id,
+        "vendor_id":         gr.vendor_id,
+        "vendor_name":       gr.vendor.name if gr.vendor else None,
+        "receipt_date":      gr.receipt_date,
+        "reference":         gr.reference,
+        "attachment_url":    gr.attachment_url,
+        "notes":             gr.notes,
+        "created_at":        gr.created_at,
+        "lines": [{
+            "id":                line.id,
+            "material_id":       line.material_id,
+            "material_code":     line.material.code,
+            "material_name":     line.material.name,
+            "quantity_received": line.quantity_received,
+            "unit":              line.unit,
+            "rate":              line.rate,
+        } for line in gr.lines],
+    }
+
+
 def _po_payload(po: PurchaseOrder) -> dict:
     return {
-        "id": po.id,
-        "po_number": po.po_number,
-        "supplier": po.supplier,
-        "status": po.status,
-        "order_date": po.order_date,
-        "created_at": po.created_at,
+        "id":          po.id,
+        "po_number":   po.po_number,
+        "vendor_id":   po.vendor_id,
+        "vendor_name": po.vendor.name if po.vendor else None,
+        "supplier":    po.supplier,
+        "status":      po.status,
+        "order_date":  po.order_date,
+        "created_at":  po.created_at,
         "lines": [{
-            "id": line.id,
+            "id":                line.id,
             "recommendation_id": line.recommendation_id,
-            "material_id": line.material_id,
-            "material_code": line.material.code,
-            "material_name": line.material.name,
-            "quantity_ordered": line.quantity_ordered,
+            "material_id":       line.material_id,
+            "material_code":     line.material.code,
+            "material_name":     line.material.name,
+            "quantity_ordered":  line.quantity_ordered,
             "quantity_received": line.quantity_received,
-            "unit": line.unit,
-            "rate": line.rate,
+            "unit":              line.unit,
+            "rate":              line.rate,
         } for line in po.lines],
     }
 
 
-@app.post("/api/purchase/recommendations/{recommendation_id}/convert-to-po", response_model=PurchaseOrderOut, status_code=201)
+@app.post("/api/purchase/recommendations/{recommendation_id}/convert-to-po",
+          response_model=PurchaseOrderOut, status_code=201)
 def convert_recommendation_to_po(
     recommendation_id: int,
     body: PurchaseOrderCreate,
     db: Session = Depends(get_db),
 ):
-    rec = (
-        db.query(PurchaseRecommendation)
-        .options(joinedload(PurchaseRecommendation.material))
-        .filter_by(id=recommendation_id)
-        .first()
-    )
+    rec = (db.query(PurchaseRecommendation)
+           .options(joinedload(PurchaseRecommendation.material))
+           .filter_by(id=recommendation_id).first())
     if not rec:
         raise HTTPException(404, "Purchase recommendation not found")
     if rec.status != "open":
         raise HTTPException(400, "Recommendation is not open")
 
-    today = date.today()
+    vendor = None
+    if body.vendor_id:
+        vendor = db.query(Vendor).filter_by(id=body.vendor_id).first()
+        if not vendor:
+            raise HTTPException(404, f"Vendor {body.vendor_id} not found")
+
     po = PurchaseOrder(
         po_number=f"PO-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}",
-        supplier=body.supplier,
+        vendor_id=body.vendor_id,
+        supplier=vendor.name if vendor else body.supplier,
         status="open",
-        order_date=body.order_date or today,
+        order_date=body.order_date or date.today(),
         created_at=datetime.now(timezone.utc),
     )
     db.add(po)
@@ -2880,50 +3000,62 @@ def convert_recommendation_to_po(
     rec.status = "converted"
     rec.converted_at = datetime.now(timezone.utc)
     db.commit()
-    po = db.query(PurchaseOrder).options(joinedload(PurchaseOrder.lines).joinedload(PurchaseOrderLine.material)).filter_by(id=po.id).first()
+    po = (db.query(PurchaseOrder)
+          .options(joinedload(PurchaseOrder.vendor),
+                   joinedload(PurchaseOrder.lines).joinedload(PurchaseOrderLine.material))
+          .filter_by(id=po.id).first())
     return _po_payload(po)
 
 
 @app.get("/api/purchase/orders", response_model=List[PurchaseOrderOut])
 def list_purchase_orders(db: Session = Depends(get_db)):
-    rows = (
-        db.query(PurchaseOrder)
-        .options(joinedload(PurchaseOrder.lines).joinedload(PurchaseOrderLine.material))
-        .order_by(PurchaseOrder.created_at.desc())
-        .all()
-    )
+    rows = (db.query(PurchaseOrder)
+            .options(joinedload(PurchaseOrder.vendor),
+                     joinedload(PurchaseOrder.lines).joinedload(PurchaseOrderLine.material))
+            .order_by(PurchaseOrder.created_at.desc()).all())
     return [_po_payload(po) for po in rows]
 
 
 @app.post("/api/purchase/orders/{po_id}/receive", response_model=GoodsReceiptOut, status_code=201)
 def receive_purchase_order(po_id: int, body: GoodsReceiptCreate, db: Session = Depends(get_db)):
-    po = db.query(PurchaseOrder).filter_by(id=po_id).first()
+    """Receive against an open PO. Updates PO line received quantities and posts GR movements."""
+    po = db.query(PurchaseOrder).options(joinedload(PurchaseOrder.vendor)).filter_by(id=po_id).first()
     if not po:
         raise HTTPException(404, "Purchase order not found")
+    if po.status == "received":
+        raise HTTPException(400, "Purchase order is already fully received")
+
+    now = datetime.now(timezone.utc)
     gr = GoodsReceipt(
-        gr_number=f"GR-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}",
+        gr_number=f"GR-{now.strftime('%Y%m%d%H%M%S')}",
         purchase_order_id=po.id,
+        vendor_id=po.vendor_id,
         receipt_date=body.receipt_date or date.today(),
+        reference=body.reference,
         notes=body.notes,
-        created_at=datetime.now(timezone.utc),
+        created_at=now,
     )
     db.add(gr)
     db.flush()
+
     for item in body.lines:
-        po_line = db.query(PurchaseOrderLine).options(joinedload(PurchaseOrderLine.material)).filter_by(id=item.po_line_id, purchase_order_id=po.id).first()
+        po_line = (db.query(PurchaseOrderLine)
+                   .options(joinedload(PurchaseOrderLine.material))
+                   .filter_by(id=item.po_line_id, purchase_order_id=po.id).first())
         if not po_line:
-            raise HTTPException(404, f"PO line {item.po_line_id} not found")
-        remaining = po_line.quantity_ordered - po_line.quantity_received
+            raise HTTPException(404, f"PO line {item.po_line_id} not found on this PO")
+        remaining = round(po_line.quantity_ordered - po_line.quantity_received, 6)
         if item.quantity_received > remaining + 1e-9:
-            raise HTTPException(400, f"Receipt exceeds remaining quantity for line {po_line.id}")
-        rate = item.rate or po_line.rate
+            raise HTTPException(400,
+                f"{po_line.material.name}: trying to receive {item.quantity_received:g} but only "
+                f"{remaining:g} {po_line.unit} remaining")
         gr_line = GoodsReceiptLine(
             goods_receipt_id=gr.id,
             purchase_order_line_id=po_line.id,
             material_id=po_line.material_id,
             quantity_received=item.quantity_received,
             unit=po_line.unit,
-            rate=rate,
+            rate=item.rate or po_line.rate,
         )
         db.add(gr_line)
         db.flush()
@@ -2938,53 +3070,140 @@ def receive_purchase_order(po_id: int, body: GoodsReceiptCreate, db: Session = D
             goods_receipt_line_id=gr_line.id,
             movement_date=gr.receipt_date,
             unit=po_line.unit,
-            notes=f"Goods receipt {gr.gr_number} for {po.po_number}",
+            notes=f"{gr.gr_number} ← {po.po_number}",
         )
         _evaluate_mrp(db, po_line.material)
-    if all(line.quantity_received >= line.quantity_ordered for line in po.lines):
-        po.status = "received"
-    else:
-        po.status = "partial"
+
+    po.status = "received" if all(
+        l.quantity_received >= l.quantity_ordered for l in po.lines
+    ) else "partial"
     db.commit()
-    return {
-        "id": gr.id,
-        "gr_number": gr.gr_number,
-        "purchase_order_id": gr.purchase_order_id,
-        "receipt_date": gr.receipt_date,
-        "created_at": gr.created_at,
-    }
+
+    gr = (db.query(GoodsReceipt)
+          .options(joinedload(GoodsReceipt.vendor),
+                   joinedload(GoodsReceipt.lines).joinedload(GoodsReceiptLine.material))
+          .filter_by(id=gr.id).first())
+    return _gr_payload(gr)
 
 
-@app.post("/api/inventory/quick-receipt", response_model=QuickReceiptOut, status_code=201)
-def quick_receipt(body: QuickReceiptCreate, db: Session = Depends(get_db)):
+@app.get("/api/goods-receipts", response_model=List[GoodsReceiptOut])
+def list_goods_receipts(db: Session = Depends(get_db)):
+    rows = (db.query(GoodsReceipt)
+            .options(joinedload(GoodsReceipt.vendor),
+                     joinedload(GoodsReceipt.lines).joinedload(GoodsReceiptLine.material))
+            .order_by(GoodsReceipt.created_at.desc()).limit(200).all())
+    return [_gr_payload(gr) for gr in rows]
+
+
+@app.post("/api/goods-receipts/direct", response_model=GoodsReceiptOut, status_code=201)
+async def post_direct_gr(
+    vendor_id:    int             = Form(...),
+    receipt_date: Optional[str]   = Form(None),
+    reference:    Optional[str]   = Form(None),
+    notes:        Optional[str]   = Form(None),
+    lines_json:   str             = Form(...),   # JSON array of DirectGRLineCreate
+    attachment:   Optional[UploadFile] = File(None),
+    db: Session = Depends(get_db),
+):
     """
-    Direct stock receipt without a purchase order.
-    Used for bootstrapping initial inventory or ad-hoc receipts.
-    Each line posts a positive inventory_movement of type 'receipt' / source 'quick_receipt'.
+    Direct Goods Receipt — vendor invoice / opening stock, no PO required.
+    Accepts multipart/form-data so an invoice PDF/image can be attached.
+    lines_json must be a JSON array: [{"material_id":1,"quantity_received":100,"unit":"Bales","rate":null}, ...]
     """
+    import json as _json
+    vendor = db.query(Vendor).filter_by(id=vendor_id).first()
+    if not vendor:
+        raise HTTPException(404, f"Vendor {vendor_id} not found")
+    if vendor.status != "active":
+        raise HTTPException(400, f"Vendor '{vendor.name}' is inactive")
+
+    try:
+        lines_raw = _json.loads(lines_json)
+        body = DirectGRCreate(
+            vendor_id=vendor_id,
+            receipt_date=date.fromisoformat(receipt_date) if receipt_date else None,
+            reference=reference,
+            notes=notes,
+            lines=[{"material_id": l["material_id"],
+                    "quantity_received": l["quantity_received"],
+                    "unit": l.get("unit"),
+                    "rate": l.get("rate")} for l in lines_raw],
+        )
+    except Exception as e:
+        raise HTTPException(422, f"Invalid lines_json: {e}")
+
     now = datetime.now(timezone.utc)
-    receipt_date = body.receipt_date or date.today()
     gr_number = f"GR-{now.strftime('%Y%m%d%H%M%S')}"
+    receipt_dt = body.receipt_date or date.today()
+
+    # Upload attachment first (so we can roll back if upload fails)
+    attachment_url = None
+    if attachment and attachment.filename:
+        attachment_url = await _upload_attachment(attachment, gr_number)
+
+    gr = GoodsReceipt(
+        gr_number=gr_number,
+        vendor_id=vendor.id,
+        purchase_order_id=None,
+        receipt_date=receipt_dt,
+        reference=body.reference,
+        attachment_url=attachment_url,
+        notes=body.notes,
+        created_at=now,
+    )
+    db.add(gr)
+    db.flush()
 
     for item in body.lines:
         material = _material_or_404(db, item.material_id)
+        unit = item.unit or material.base_unit
+        gr_line = GoodsReceiptLine(
+            goods_receipt_id=gr.id,
+            purchase_order_line_id=None,
+            material_id=material.id,
+            quantity_received=item.quantity_received,
+            unit=unit,
+            rate=item.rate,
+        )
+        db.add(gr_line)
+        db.flush()
         _post_inventory_movement(
             db,
             material=material,
-            quantity_delta=item.quantity,
+            quantity_delta=item.quantity_received,
             movement_type="receipt",
-            source_type="quick_receipt",
-            source_id=None,          # no parent PO — this is a direct/opening stock receipt
-            movement_date=receipt_date,
-            unit=material.base_unit,
-            notes=f"{gr_number}: {body.reference or 'Direct material receipt'}",
+            source_type="goods_receipt",
+            source_id=gr.id,
+            goods_receipt_line_id=gr_line.id,
+            movement_date=receipt_dt,
+            unit=unit,
+            notes=f"{gr_number} | {vendor.name} | {body.reference or 'Direct receipt'}",
         )
         _evaluate_mrp(db, material)
 
     db.commit()
-    return {
-        "gr_number": gr_number,
-        "receipt_date": receipt_date,
-        "lines_posted": len(body.lines),
-        "created_at": now,
-    }
+    gr = (db.query(GoodsReceipt)
+          .options(joinedload(GoodsReceipt.vendor),
+                   joinedload(GoodsReceipt.lines).joinedload(GoodsReceiptLine.material))
+          .filter_by(id=gr.id).first())
+    return _gr_payload(gr)
+
+
+@app.post("/api/inventory/quick-receipt", response_model=QuickReceiptOut, status_code=201)
+def quick_receipt(body: QuickReceiptCreate, db: Session = Depends(get_db)):
+    """Legacy opening-stock endpoint — kept for backward compatibility. Prefer /api/goods-receipts/direct."""
+    now = datetime.now(timezone.utc)
+    receipt_date = body.receipt_date or date.today()
+    gr_number = f"GR-{now.strftime('%Y%m%d%H%M%S')}"
+    for item in body.lines:
+        material = _material_or_404(db, item.material_id)
+        _post_inventory_movement(
+            db, material=material, quantity_delta=item.quantity,
+            movement_type="receipt", source_type="quick_receipt", source_id=None,
+            movement_date=receipt_date, unit=material.base_unit,
+            notes=f"{gr_number}: {body.reference or 'Direct material receipt'}",
+        )
+        _evaluate_mrp(db, material)
+    db.commit()
+    return {"gr_number": gr_number, "receipt_date": receipt_date,
+            "lines_posted": len(body.lines), "created_at": now}

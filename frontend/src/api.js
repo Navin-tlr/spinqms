@@ -90,21 +90,49 @@ export const getProductionEntries   = (params)        => http.get('/production/e
 export const deleteProductionEntry  = (id)            => http.delete(`/production/entries/${id}`)
 export const getProductionDashboard = (targetDate)    => http.get('/production/dashboard', { params: clean({ target_date: targetDate }) }).then(r => r.data)
 
+// ── Vendor Master ─────────────────────────────────────────────────────────────
+export const getVendors       = ()          => http.get('/vendors').then(r => r.data)
+export const createVendor     = (body)      => http.post('/vendors', body).then(r => r.data)
+export const updateVendor     = (id, body)  => http.put(`/vendors/${id}`, body).then(r => r.data)
+export const deactivateVendor = (id)        => http.delete(`/vendors/${id}`)
+
 // ── Materials / Inventory / MRP / Purchasing ─────────────────────────────────
-export const getMaterials              = ()                  => http.get('/materials').then(r => r.data)
-export const createMaterial            = (body)              => http.post('/materials', body).then(r => r.data)
-export const deactivateMaterial        = (id)                => http.delete(`/materials/${id}`)
-export const getInventoryOverview      = ()                  => http.get('/inventory/overview').then(r => r.data)
-export const getInventoryMovements     = (params = {})       => http.get('/inventory/movements', { params: clean(params) }).then(r => r.data)
-export const createMaterialIssue       = (body)              => http.post('/inventory/material-issues', body).then(r => r.data)
-export const getMaterialIssues         = (params = {})       => http.get('/inventory/material-issues', { params: clean(params) }).then(r => r.data)
-export const updateMaterialPlanning    = (id, body)          => http.put(`/materials/${id}/planning`, body).then(r => r.data)
-export const addMaterialMarketPrice    = (id, body)          => http.post(`/materials/${id}/market-prices`, body).then(r => r.data)
-export const getPurchaseRecommendations = (status = 'open')  => http.get('/purchase/recommendations', { params: clean({ status }) }).then(r => r.data)
-export const convertRecommendationToPO = (id, body)          => http.post(`/purchase/recommendations/${id}/convert-to-po`, body).then(r => r.data)
-export const getPurchaseOrders         = ()                  => http.get('/purchase/orders').then(r => r.data)
-export const receivePurchaseOrder      = (id, body)          => http.post(`/purchase/orders/${id}/receive`, body).then(r => r.data)
-export const quickReceipt              = (body)              => http.post('/inventory/quick-receipt', body).then(r => r.data)
+export const getMaterials           = ()              => http.get('/materials').then(r => r.data)
+export const createMaterial         = (body)          => http.post('/materials', body).then(r => r.data)
+export const deactivateMaterial     = (id)            => http.delete(`/materials/${id}`)
+export const getInventoryOverview   = ()              => http.get('/inventory/overview').then(r => r.data)
+export const getInventoryMovements  = (params = {})   => http.get('/inventory/movements', { params: clean(params) }).then(r => r.data)
+export const createMaterialIssue    = (body)          => http.post('/inventory/material-issues', body).then(r => r.data)
+export const getMaterialIssues      = (params = {})   => http.get('/inventory/material-issues', { params: clean(params) }).then(r => r.data)
+export const updateMaterialPlanning = (id, body)      => http.put(`/materials/${id}/planning`, body).then(r => r.data)
+export const addMaterialMarketPrice = (id, body)      => http.post(`/materials/${id}/market-prices`, body).then(r => r.data)
+
+// ── Goods Receipts ───────────────────────────────────────────────────────────
+export const getGoodsReceipts   = ()          => http.get('/goods-receipts').then(r => r.data)
+/**
+ * Post a direct (vendor invoice) GR — multipart/form-data so a PDF/image can be attached.
+ * @param {object} params  { vendor_id, receipt_date, reference, notes, lines: [...] }
+ * @param {File|null} file Optional invoice file
+ */
+export const postDirectGR = (params, file = null) => {
+  const fd = new FormData()
+  fd.append('vendor_id',    params.vendor_id)
+  if (params.receipt_date) fd.append('receipt_date', params.receipt_date)
+  if (params.reference)    fd.append('reference',    params.reference)
+  if (params.notes)        fd.append('notes',        params.notes)
+  fd.append('lines_json', JSON.stringify(params.lines))
+  if (file) fd.append('attachment', file)
+  return http.post('/goods-receipts/direct', fd, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  }).then(r => r.data)
+}
+
+// ── Purchase / MRP ────────────────────────────────────────────────────────────
+export const getPurchaseRecommendations = (status = 'open') => http.get('/purchase/recommendations', { params: clean({ status }) }).then(r => r.data)
+export const convertRecommendationToPO  = (id, body)        => http.post(`/purchase/recommendations/${id}/convert-to-po`, body).then(r => r.data)
+export const getPurchaseOrders          = ()                 => http.get('/purchase/orders').then(r => r.data)
+export const receivePurchaseOrder       = (id, body)         => http.post(`/purchase/orders/${id}/receive`, body).then(r => r.data)
+export const quickReceipt               = (body)             => http.post('/inventory/quick-receipt', body).then(r => r.data)
 
 // Client-side formula mirrors (for live preview before save)
 export const calcEfficiencyKg    = (stdRate, effPct, hours) =>

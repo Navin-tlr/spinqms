@@ -510,19 +510,57 @@ class ProductionDashboardOut(BaseModel):
     total_kg:  float
 
 
+# ── Vendor Master ────────────────────────────────────────────────────────────
+class VendorCreate(BaseModel):
+    code:           str            = Field(..., min_length=1, max_length=40)
+    name:           str            = Field(..., min_length=1, max_length=120)
+    contact_person: Optional[str]  = Field(None, max_length=120)
+    phone:          Optional[str]  = Field(None, max_length=40)
+    email:          Optional[str]  = Field(None, max_length=120)
+    gst_number:     Optional[str]  = Field(None, max_length=40)
+    address:        Optional[str]  = None
+
+class VendorUpdate(BaseModel):
+    name:           Optional[str]  = Field(None, max_length=120)
+    contact_person: Optional[str]  = Field(None, max_length=120)
+    phone:          Optional[str]  = Field(None, max_length=40)
+    email:          Optional[str]  = Field(None, max_length=120)
+    gst_number:     Optional[str]  = Field(None, max_length=40)
+    address:        Optional[str]  = None
+    status:         Optional[str]  = Field(None, pattern="^(active|inactive)$")
+
+class VendorOut(BaseModel):
+    id:             int
+    code:           str
+    name:           str
+    contact_person: Optional[str]
+    phone:          Optional[str]
+    email:          Optional[str]
+    gst_number:     Optional[str]
+    address:        Optional[str]
+    status:         str
+    created_at:     datetime
+
+    model_config = {"from_attributes": True}
+
+
 # ── Materials / Inventory / MRP / Purchasing ─────────────────────────────────
 class MaterialCreate(BaseModel):
-    code: str = Field(..., min_length=1, max_length=40, description="Unique material code, e.g. RM-COTTON-001")
-    name: str = Field(..., min_length=1, max_length=120, description="Full material name")
-    base_unit: str = Field(..., min_length=1, max_length=20, description="Unit of measure, e.g. Bales, Kg, Cones")
+    code:        str           = Field(..., min_length=1, max_length=40)
+    name:        str           = Field(..., min_length=1, max_length=120)
+    base_unit:   str           = Field(..., min_length=1, max_length=20)
+    category:    Optional[str] = Field(None, max_length=60)
+    description: Optional[str] = None
 
 
 class MaterialOut(BaseModel):
-    id: int
-    code: str
-    name: str
-    base_unit: str
-    is_active: bool
+    id:          int
+    code:        str
+    name:        str
+    base_unit:   str
+    category:    Optional[str]
+    description: Optional[str]
+    is_active:   bool
 
     model_config = {"from_attributes": True}
 
@@ -569,7 +607,7 @@ class MaterialIssueOut(BaseModel):
     id: int
     document_number: str
     issue_date: date
-    shift: str
+    shift: Optional[str]
     reference: Optional[str]
     status: str
     created_at: datetime
@@ -636,70 +674,107 @@ class InventoryOverviewItem(BaseModel):
 
 
 class PurchaseOrderCreate(BaseModel):
-    quantity: Optional[float] = Field(None, gt=0)
-    rate: float = Field(..., gt=0)
-    supplier: Optional[str] = Field(None, max_length=120)
-    order_date: Optional[date] = None
+    quantity:   Optional[float] = Field(None, gt=0)
+    rate:       float           = Field(..., gt=0)
+    vendor_id:  Optional[int]   = None
+    supplier:   Optional[str]   = Field(None, max_length=120)
+    order_date: Optional[date]  = None
 
 
 class PurchaseOrderLineOut(BaseModel):
-    id: int
+    id:                int
     recommendation_id: Optional[int]
-    material_id: int
-    material_code: str
-    material_name: str
-    quantity_ordered: float
+    material_id:       int
+    material_code:     str
+    material_name:     str
+    quantity_ordered:  float
     quantity_received: float
-    unit: str
-    rate: float
+    unit:              str
+    rate:              float
 
 
 class PurchaseOrderOut(BaseModel):
-    id: int
-    po_number: str
-    supplier: Optional[str]
-    status: str
+    id:         int
+    po_number:  str
+    vendor_id:  Optional[int]
+    vendor_name: Optional[str]
+    supplier:   Optional[str]
+    status:     str
     order_date: date
     created_at: datetime
-    lines: List[PurchaseOrderLineOut]
+    lines:      List[PurchaseOrderLineOut]
 
 
+# ── GR: PO-based (receive against an open PO) ────────────────────────────────
 class GoodsReceiptLineCreate(BaseModel):
-    po_line_id: int
-    quantity_received: float = Field(..., gt=0)
-    rate: Optional[float] = Field(None, gt=0)
+    po_line_id:        int
+    quantity_received: float        = Field(..., gt=0)
+    rate:              Optional[float] = Field(None, gt=0)
 
 
 class GoodsReceiptCreate(BaseModel):
-    receipt_date: Optional[date] = None
-    notes: Optional[str] = None
-    lines: List[GoodsReceiptLineCreate] = Field(..., min_length=1)
+    receipt_date: Optional[date]   = None
+    reference:    Optional[str]    = Field(None, max_length=120)
+    notes:        Optional[str]    = None
+    lines:        List[GoodsReceiptLineCreate] = Field(..., min_length=1)
+
+
+# ── GR: Direct vendor GR (no PO required — vendor invoice / opening stock) ───
+class DirectGRLineCreate(BaseModel):
+    material_id:       int
+    quantity_received: float        = Field(..., gt=0)
+    unit:              Optional[str] = None  # falls back to material.base_unit
+    rate:              Optional[float] = Field(None, ge=0)
+
+
+class DirectGRCreate(BaseModel):
+    vendor_id:    int                             # mandatory — vendor must exist
+    receipt_date: Optional[date]   = None
+    reference:    Optional[str]    = Field(None, max_length=120)   # invoice / DN no.
+    notes:        Optional[str]    = None
+    lines:        List[DirectGRLineCreate] = Field(..., min_length=1)
+
+
+class GoodsReceiptLineOut(BaseModel):
+    id:                int
+    material_id:       int
+    material_code:     str
+    material_name:     str
+    quantity_received: float
+    unit:              str
+    rate:              Optional[float]
 
 
 class GoodsReceiptOut(BaseModel):
-    id: int
-    gr_number: str
-    purchase_order_id: int
-    receipt_date: date
-    created_at: datetime
+    id:                 int
+    gr_number:          str
+    purchase_order_id:  Optional[int]
+    vendor_id:          Optional[int]
+    vendor_name:        Optional[str]
+    receipt_date:       date
+    reference:          Optional[str]
+    attachment_url:     Optional[str]
+    notes:              Optional[str]
+    created_at:         datetime
+    lines:              List[GoodsReceiptLineOut]
 
 
-# ── Quick receipt (direct stock addition without PO) ──────────────────────────
+# ── Quick receipt (legacy / opening stock — kept for backward compat) ─────────
 class QuickReceiptLineCreate(BaseModel):
     material_id: int
-    quantity: float = Field(..., gt=0)
+    quantity:    float = Field(..., gt=0)
 
 class QuickReceiptCreate(BaseModel):
-    receipt_date: Optional[date] = None
-    reference: Optional[str] = Field(None, max_length=120)
-    notes: Optional[str] = None
-    lines: List[QuickReceiptLineCreate] = Field(..., min_length=1)
+    receipt_date: Optional[date]  = None
+    reference:    Optional[str]   = Field(None, max_length=120)
+    notes:        Optional[str]   = None
+    lines:        List[QuickReceiptLineCreate] = Field(..., min_length=1)
 
 class QuickReceiptOut(BaseModel):
-    gr_number: str
+    gr_number:    str
     receipt_date: date
     lines_posted: int
-    created_at: datetime
+    created_at:   datetime
 
 
 # ── Error response (used by global exception handler) ────────────────────────

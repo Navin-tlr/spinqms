@@ -9,3 +9,4 @@ psycopg2-binary==2.9.10
 scipy==1.15.2
 statsmodels==0.14.4
 pandas==2.2.3
+httpx==0.28.1
