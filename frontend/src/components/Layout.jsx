@@ -7,6 +7,52 @@ import { useState, useEffect, useCallback } from 'react'
    Branding:   "SVS" appears exactly once — top-left of shell bar
 ────────────────────────────────────────────────────────────────────────── */
 
+/* ── SVS Yarn-ball logo — faithful recreation of the brand mark ──────────
+   Diagonal-stripe sphere referencing yarn wound on a bobbin.
+   size: rendered px square (default 22)
+   light: render in white (for dark shell bar) vs. dark (#1e2e4a)         */
+function YarnLogo({ size = 22, light = true }) {
+  const r  = size / 2
+  const cx = r, cy = r
+  const fill   = light ? 'rgba(255,255,255,0.92)' : '#1e2e4a'
+  const stripe = light ? 'rgba(30,46,74,0.55)'    : 'rgba(255,255,255,0.55)'
+  /* Generate ~11 diagonal stripes clipped to the circle */
+  const lines = []
+  const step  = size * 0.092
+  for (let i = -4; i <= 7; i++) {
+    const x0 = i * step
+    lines.push(
+      <line
+        key={i}
+        x1={x0}           y1={size + 4}
+        x2={x0 + size}    y2={-4}
+        stroke={stripe}
+        strokeWidth={size * 0.066}
+        strokeLinecap="round"
+      />
+    )
+  }
+  return (
+    <svg
+      viewBox={`0 0 ${size} ${size}`}
+      width={size} height={size}
+      style={{ display: 'block', flexShrink: 0 }}
+    >
+      <defs>
+        <clipPath id={`svs-yarn-clip-${size}`}>
+          <circle cx={cx} cy={cy} r={r - 0.5} />
+        </clipPath>
+      </defs>
+      {/* Filled sphere base */}
+      <circle cx={cx} cy={cy} r={r - 0.5} fill={fill} />
+      {/* Diagonal stripe winding — clipped to sphere */}
+      <g clipPath={`url(#svs-yarn-clip-${size})`}>
+        {lines}
+      </g>
+    </svg>
+  )
+}
+
 /* ── shell bar background — muted dark navy, structurally anchoring ─────── */
 const SHELL = '#1e2e4a'
 
@@ -403,20 +449,8 @@ export default function Layout({
               marginRight: 2,
             }}
           >
-            {/* Geometric mark */}
-            <div style={{
-              width: 24, height: 24,
-              background: 'rgba(255,255,255,.12)',
-              border: '1px solid rgba(255,255,255,.18)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              flexShrink: 0,
-            }}>
-              <svg viewBox="0 0 16 12" width="12" height="9" fill="rgba(255,255,255,.85)">
-                <rect x="0" y="0"   width="16"   height="2.5" />
-                <rect x="0" y="4.5" width="11"   height="2.5" />
-                <rect x="0" y="9"   width="13.5" height="2.5" />
-              </svg>
-            </div>
+            {/* SVS yarn-ball brand mark */}
+            <YarnLogo size={22} light={true} />
             <span style={{
               fontSize: 12, fontWeight: 600, color: '#fff',
               letterSpacing: '.08em', textTransform: 'uppercase',

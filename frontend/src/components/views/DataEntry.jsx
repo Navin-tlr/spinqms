@@ -45,7 +45,8 @@ export default function DataEntry({ depts, currentDept, setCurrentDept, onSaved 
   const lsl         = dept?.lsl ?? 0
   const p           = decimalPlaces(target)
   const machineConf = MACHINE_CONFIG[currentDept] ?? null
-  const isRF        = currentDept === 'ringframe'
+  /* autoconer also uses Ne units — treat it the same as Ring Frame */
+  const isRF        = dept?.unit === 'Ne'
 
   useEffect(() => { if (dept) setSampleLen(dept.def_len) }, [currentDept])
 

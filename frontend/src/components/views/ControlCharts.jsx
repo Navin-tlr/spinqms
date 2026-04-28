@@ -139,14 +139,14 @@ export default function ControlCharts({ overview, currentDept, depts, machineFil
     return { arr, labels }
   }, [filtered, range])
 
-  if (!kpi || kpi.n === 0) {
-    return <Card sm><Empty>Enter samples to see control chart</Empty></Card>
-  }
-
-  const target = dept?.target ?? kpi.mean
+  /* ── target & p must be computed before filteredStats hook ─────────────── */
+  /* kpi may be undefined or have n=0; guard with ?. and fallback to 0      */
+  const target = dept?.target ?? kpi?.mean ?? 0
   const p      = target >= 10 ? 2 : 4
 
   /* ── Compute stats from the time-filtered readings (arr) ─────────────────
+     IMPORTANT: this useMemo hook MUST be called before any conditional
+     return — React's Rules of Hooks forbid hooks after early returns.
      Fall back to kpi (all-time) values only when arr is empty.            */
   const filteredStats = useMemo(() => {
     if (arr.length === 0) return null
@@ -164,6 +164,12 @@ export default function ControlCharts({ overview, currentDept, depts, machineFil
     const cp   = sd > 0 ? (usl - lsl) / (6 * sd) : null
     return { mean, sd, ucl, lcl, wul, wll, cv, cpk, cp }
   }, [arr, dept, target])
+
+  /* ── Early return for empty depts — AFTER all hooks ─────────────────────
+     Returning here is now safe: every hook above has already been called   */
+  if (!kpi || kpi.n === 0) {
+    return <Card sm><Empty>Enter samples to see control chart</Empty></Card>
+  }
 
   const { mean, sd, ucl, lcl, wul, wll } = filteredStats ?? kpi
   const flat   = v => arr.map(() => v)

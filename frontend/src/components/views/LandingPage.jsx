@@ -11,6 +11,34 @@ import { useState } from 'react'
 const SAP_BLUE  = '#012169'
 const SHELL_BG  = '#1e2e4a'   /* muted structural navy — shell bar only */
 
+/* ── SVS yarn-ball logo ───────────────────────────────────────────────── */
+function YarnLogo({ size = 22, light = true }) {
+  const r = size / 2
+  const fill   = light ? 'rgba(255,255,255,0.92)' : '#1e2e4a'
+  const stripe = light ? 'rgba(30,46,74,0.55)'    : 'rgba(255,255,255,0.55)'
+  const step   = size * 0.092
+  const lines  = []
+  for (let i = -4; i <= 7; i++) {
+    const x0 = i * step
+    lines.push(
+      <line key={i}
+        x1={x0} y1={size + 4} x2={x0 + size} y2={-4}
+        stroke={stripe} strokeWidth={size * 0.066} strokeLinecap="round" />
+    )
+  }
+  return (
+    <svg viewBox={`0 0 ${size} ${size}`} width={size} height={size} style={{ display: 'block', flexShrink: 0 }}>
+      <defs>
+        <clipPath id={`lp-yarn-${size}`}>
+          <circle cx={r} cy={r} r={r - 0.5} />
+        </clipPath>
+      </defs>
+      <circle cx={r} cy={r} r={r - 0.5} fill={fill} />
+      <g clipPath={`url(#lp-yarn-${size})`}>{lines}</g>
+    </svg>
+  )
+}
+
 /* ── App tiles (active modules) ──────────────────────────────────────── */
 const APP_TILES = [
   {
@@ -199,24 +227,13 @@ export default function LandingPage({ setCurrentModule, overview, alerts, depts 
         gap: 0,
         flexShrink: 0,
       }}>
-        {/* Geometric mark + SVS brand — appears exactly once */}
+        {/* SVS yarn-ball logo + brand — appears exactly once */}
         <div style={{
           display: 'flex', alignItems: 'center', gap: 9,
           paddingRight: 14, borderRight: '1px solid rgba(255,255,255,.10)',
           marginRight: 14,
         }}>
-          <div style={{
-            width: 24, height: 24,
-            background: 'rgba(255,255,255,.12)',
-            border: '1px solid rgba(255,255,255,.18)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}>
-            <svg viewBox="0 0 16 12" width="12" height="9" fill="rgba(255,255,255,.85)">
-              <rect x="0" y="0"   width="16"   height="2.5" />
-              <rect x="0" y="4.5" width="11"   height="2.5" />
-              <rect x="0" y="9"   width="13.5" height="2.5" />
-            </svg>
-          </div>
+          <YarnLogo size={22} light={true} />
           <span style={{ fontSize: 12, fontWeight: 600, color: '#fff', letterSpacing: '.08em', textTransform: 'uppercase' }}>SVS</span>
         </div>
 
