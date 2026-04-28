@@ -76,12 +76,12 @@ export default function Overview({ overview: propOverview, currentDept, setCurre
         </span>
         {RANGES.map(r => (
           <button key={r.id} onClick={() => handleRange(r.id)} style={{
-            padding: '3px 12px', fontSize: 11, fontWeight: range === r.id ? 600 : 400,
-            border: '1px solid', borderRadius: 20, cursor: 'pointer',
-            fontFamily: 'var(--font)', transition: 'all .12s', lineHeight: 1.6,
-            background:  range === r.id ? 'var(--tx)' : 'transparent',
-            color:       range === r.id ? 'var(--bg)' : 'var(--tx-2)',
-            borderColor: range === r.id ? 'var(--tx)' : 'var(--bd-md)',
+            padding: '4px 12px', fontSize: 11, fontWeight: range === r.id ? 500 : 400,
+            border: '1px solid', borderRadius: 2, cursor: 'pointer',
+            fontFamily: 'var(--font)', lineHeight: 1.6,
+            background:  range === r.id ? 'var(--claude)' : '#fff',
+            color:       range === r.id ? '#fff' : 'var(--tx-2)',
+            borderColor: range === r.id ? 'var(--claude)' : 'var(--bd-md)',
           }}>
             {r.label}
           </button>
@@ -108,15 +108,15 @@ export default function Overview({ overview: propOverview, currentDept, setCurre
                   style={{
                     display: 'flex', flexDirection: 'column', alignItems: 'center',
                     textAlign: 'center', padding: '9px 12px', minWidth: 86,
-                    border: `1px solid ${active ? 'var(--bd-hv)' : 'var(--bd)'}`,
-                    borderRadius: 'var(--r)', cursor: 'pointer',
+                    border: `1px solid ${active ? 'var(--claude)' : 'var(--bd)'}`,
+                    borderRadius: 0, cursor: 'pointer',
                     background: active ? 'var(--bg-active)' : 'transparent',
                     transition: 'all .12s',
                   }}
                 >
-                  <div style={{ fontSize: 12, fontWeight: active ? 500 : 400, color: active ? 'var(--tx)' : 'var(--tx-2)' }}>{d.short}</div>
+                  <div style={{ fontSize: 12, fontWeight: active ? 500 : 400, color: active ? 'var(--claude)' : 'var(--tx-2)' }}>{d.short}</div>
                   <div style={{ fontSize: 10, color: 'var(--tx-4)', marginTop: 2 }}>{d.target} {d.unit}</div>
-                  <div style={{ fontSize: 11.5, marginTop: 4, fontWeight: 600, color: col }}>
+                  <div style={{ fontSize: 11, marginTop: 4, fontWeight: 500, color: col }}>
                     {d.cv != null ? `${d.cv.toFixed(1)}%` : '—'}
                   </div>
                 </div>
@@ -205,14 +205,11 @@ export default function Overview({ overview: propOverview, currentDept, setCurre
               if (d.n === 0) return (
                 <tr key={d.dept_id} onClick={() => setCurrentDept(d.dept_id)}
                   style={rowStyle} onMouseEnter={hoverOn} onMouseLeave={hoverOff}>
-                  <td style={{ padding: '9px 0', borderBottom: rowBd }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-                      <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--tx-4)', flexShrink: 0 }} />
-                      <span style={{ fontSize: 13, color: 'var(--tx-3)', fontWeight: isActive ? 500 : 400 }}>{d.name}</span>
-                    </div>
+                  <td style={{ padding: '8px 0 8px 12px', borderBottom: rowBd, borderLeft: isActive ? '3px solid var(--claude)' : '3px solid transparent' }}>
+                    <span style={{ fontSize: 12, color: 'var(--tx-3)', fontWeight: isActive ? 500 : 400 }}>{d.name}</span>
                   </td>
-                  <td colSpan={6} style={{ padding: '9px 0', borderBottom: rowBd, color: 'var(--tx-4)', fontSize: 11.5, fontStyle: 'italic', paddingLeft: 12 }}>
-                    No data
+                  <td colSpan={6} style={{ padding: '8px 0 8px 12px', borderBottom: rowBd, color: 'var(--tx-4)', fontSize: 11, fontStyle: 'italic' }}>
+                    No data recorded
                   </td>
                 </tr>
               )
@@ -221,23 +218,20 @@ export default function Overview({ overview: propOverview, currentDept, setCurre
               return (
                 <tr key={d.dept_id} onClick={() => setCurrentDept(d.dept_id)}
                   style={rowStyle} onMouseEnter={hoverOn} onMouseLeave={hoverOff}>
-                  {/* Department name + quality dot */}
-                  <td style={{ padding: '10px 0', borderBottom: rowBd }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-                      <span style={{ width: 5, height: 5, borderRadius: '50%', background: qDot, flexShrink: 0 }} />
-                      <span style={{ fontSize: 13, fontWeight: isActive ? 500 : 400 }}>{d.name}</span>
-                    </div>
+                  {/* Department name — left border indicates active */}
+                  <td style={{ padding: '8px 0 8px 12px', borderBottom: rowBd, borderLeft: isActive ? '3px solid var(--claude)' : '3px solid transparent' }}>
+                    <span style={{ fontSize: 12, fontWeight: isActive ? 500 : 400, color: isActive ? 'var(--claude)' : 'var(--tx)' }}>{d.name}</span>
                   </td>
-                  {/* Numeric columns — monospace, right-aligned */}
-                  <td style={{ padding: '10px 0 10px 12px', borderBottom: rowBd, fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--tx-3)', textAlign: 'right' }}>{d.n}</td>
-                  <td style={{ padding: '10px 0 10px 12px', borderBottom: rowBd, fontFamily: 'var(--mono)', fontSize: 12, textAlign: 'right' }}>{d.mean?.toFixed(pp)}</td>
-                  <td style={{ padding: '10px 0 10px 12px', borderBottom: rowBd, fontFamily: 'var(--mono)', fontSize: 12.5, color: qCol ?? 'var(--tx)', fontWeight: 600, textAlign: 'right' }}>
+                  {/* Numeric columns — monospace, right-aligned, regular weight */}
+                  <td style={{ padding: '8px 12px', borderBottom: rowBd, fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--tx-3)', textAlign: 'right' }}>{d.n}</td>
+                  <td style={{ padding: '8px 12px', borderBottom: rowBd, fontFamily: 'var(--mono)', fontSize: 12, textAlign: 'right' }}>{d.mean?.toFixed(pp)}</td>
+                  <td style={{ padding: '8px 12px', borderBottom: rowBd, fontFamily: 'var(--mono)', fontSize: 12, color: qCol ?? 'var(--tx)', fontWeight: 500, textAlign: 'right' }}>
                     {d.cv != null ? `${d.cv.toFixed(2)}%` : '—'}
                   </td>
-                  <td style={{ padding: '10px 0 10px 12px', borderBottom: rowBd, fontFamily: 'var(--mono)', fontSize: 12, textAlign: 'right' }}>{d.cpk?.toFixed(2) ?? '—'}</td>
-                  <td style={{ padding: '10px 0 10px 12px', borderBottom: rowBd, fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--tx-3)', textAlign: 'right' }}>{d.cp?.toFixed(2) ?? '—'}</td>
+                  <td style={{ padding: '8px 12px', borderBottom: rowBd, fontFamily: 'var(--mono)', fontSize: 12, textAlign: 'right' }}>{d.cpk?.toFixed(2) ?? '—'}</td>
+                  <td style={{ padding: '8px 12px', borderBottom: rowBd, fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--tx-3)', textAlign: 'right' }}>{d.cp?.toFixed(2) ?? '—'}</td>
                   {/* Status badge */}
-                  <td style={{ padding: '10px 0 10px 14px', borderBottom: rowBd }}>
+                  <td style={{ padding: '8px 14px', borderBottom: rowBd }}>
                     {d.quality && <Badge variant={d.quality}>{qualityLabel[d.quality]}</Badge>}
                   </td>
                 </tr>

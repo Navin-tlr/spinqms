@@ -8,7 +8,7 @@
 
 /* ── Badge ──────────────────────────────────────────────────────────────── */
 export function Badge({ variant = 'neutral', children, className = '' }) {
-  const base = 'inline-flex items-center gap-1 text-[11px] font-medium px-[8px] py-[2px] rounded-full leading-none whitespace-nowrap tracking-[.01em]'
+  const base = 'inline-flex items-center gap-1 text-[11px] font-medium px-[7px] py-[2px] leading-none whitespace-nowrap tracking-[.04em]'
   const variants = {
     ok:      'bg-[var(--ok-bg)]      text-[var(--ok)]      ring-1 ring-[var(--ok-bd)]',
     warn:    'bg-[var(--warn-bg)]    text-[var(--warn)]    ring-1 ring-[var(--warn-bd)]',
@@ -76,9 +76,9 @@ export function Btn({
     sm: 'px-[9px]  py-[4px] text-[12px] min-h-[26px]',
   }
   const variants = {
-    /* dark primary — Notion "Create" style */
-    primary: 'bg-[#37352F] text-white border border-[#37352F] hover:bg-[#1A1A18]',
-    /* accent — terracotta for CTAs */
+    /* primary — SVS navy */
+    primary: 'bg-[var(--claude)] text-white border border-[var(--claude)] hover:opacity-85',
+    /* accent — same as primary for consistency */
     accent:  'bg-[var(--claude)] text-white border border-[var(--claude)] hover:opacity-85',
     /* default — clean bordered */
     default: 'bg-[var(--bg)] text-[var(--tx)] border border-[var(--bd-md)] hover:bg-[var(--bg-hover)] hover:border-[var(--bd-hv)]',
@@ -98,16 +98,16 @@ export function Btn({
 /* ── Metric tile ─────────────────────────────────────────────────────────── */
 export function Metric({ label, value, sub, quality, large = false }) {
   const cm = { ok: 'text-[var(--ok)]', warn: 'text-[var(--warn)]', bad: 'text-[var(--bad)]' }
-  const valSize = large ? 'text-[16px]' : 'text-[20px]'
+  const valSize = large ? 'text-[14px]' : 'text-[18px]'
   return (
     <div
-      className="rounded-[var(--r-lg)] px-[14px] py-3 flex flex-col gap-1"
-      style={{ background: 'var(--bg)', border: '1px solid var(--bd-md)' }}
+      className="px-[12px] py-[10px] flex flex-col gap-1"
+      style={{ background: 'var(--bg)', border: '1px solid var(--bd-md)', borderRadius: 'var(--r)' }}
     >
-      <div className={`${valSize} font-semibold tracking-tight leading-none font-[var(--mono)] ${cm[quality] ?? 'text-[var(--tx)]'}`}>
+      <div style={{ fontSize: 11, color: 'var(--tx-3)', lineHeight: 1, marginBottom: 4 }}>{label}</div>
+      <div className={`${valSize} font-medium tracking-tight leading-none font-[var(--mono)] ${cm[quality] ?? 'text-[var(--tx)]'}`}>
         {value ?? '—'}
       </div>
-      <div className="text-[11px] text-[var(--tx-3)] leading-tight">{label}</div>
       {sub && <div className="text-[10px] text-[var(--tx-4)] mt-0.5">{sub}</div>}
     </div>
   )

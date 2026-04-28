@@ -121,30 +121,31 @@ export default function Layout({
         {/* ── Brand / section header ── */}
         <div style={{
           display: 'flex', alignItems: 'center', gap: 10,
-          padding: '16px 16px 14px',
+          padding: '13px 14px',
           borderBottom: '1px solid var(--bd)',
           flexShrink: 0,
           background: 'var(--sidebar-bg)',
         }}>
+          {/* Geometric mark — 3 stacked bars, minimal textile reference */}
           <div style={{
-            width: 30, height: 30,
-            background: '#354a5e', borderRadius: 7,
+            width: 28, height: 28,
+            background: '#012169',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             flexShrink: 0,
           }}>
-            <svg viewBox="0 0 20 20" width="15" height="15" fill="none" stroke="rgba(255,255,255,.85)" strokeWidth="1.8" strokeLinecap="round">
-              <circle cx="10" cy="10" r="6.5" />
-              <line x1="10" y1="3.5" x2="10" y2="6.5" />
-              <line x1="10" y1="13.5" x2="10" y2="16.5" />
-              <line x1="3.5" y1="10" x2="6.5" y2="10" />
-              <line x1="13.5" y1="10" x2="16.5" y2="10" />
+            <svg viewBox="0 0 16 12" width="14" height="10" fill="rgba(255,255,255,.9)">
+              <rect x="0" y="0"   width="16" height="2.5" />
+              <rect x="0" y="4.5" width="11" height="2.5" />
+              <rect x="0" y="9"   width="13.5" height="2.5" />
             </svg>
           </div>
           <div>
-            <div style={{ fontSize: 13, fontWeight: 600, letterSpacing: '-.01em', lineHeight: 1.25, color: 'var(--tx)' }}>
-              {currentModule === 'quality' ? 'Quality Management' : 'Production'}
+            <div style={{ fontSize: 13, fontWeight: 500, letterSpacing: '.01em', lineHeight: 1.25, color: 'var(--tx)' }}>
+              SVS
             </div>
-            <div style={{ fontSize: 10, color: 'var(--tx-3)', marginTop: 1, letterSpacing: '.02em' }}>SpinQMS Enterprise</div>
+            <div style={{ fontSize: 10, color: 'var(--tx-3)', marginTop: 1, letterSpacing: '.03em', textTransform: 'uppercase' }}>
+              {currentModule === 'quality' ? 'Quality' : 'Production'}
+            </div>
           </div>
         </div>
 
@@ -188,27 +189,25 @@ export default function Layout({
           <SideLabel>Departments</SideLabel>
           {depts.map(d => {
             const active = d.id === currentDept
-            const qC = d.quality === 'ok' ? 'var(--ok)' : d.quality === 'warn' ? 'var(--warn)' : d.quality === 'bad' ? 'var(--bad)' : null
             return (
               <button key={d.id}
                 onClick={() => { setCurrentDept(d.id); if (isMobile) setMenuOpen(false) }}
                 style={{
-                  width: '100%', display: 'flex', alignItems: 'center', gap: 8,
-                  padding: '5px 8px',
-                  borderRadius: 'var(--r)',
+                  width: '100%', display: 'flex', alignItems: 'center',
+                  padding: '6px 10px 6px 12px',
+                  borderLeft: active ? '3px solid var(--claude)' : '3px solid transparent',
                   border: 'none',
-                  cursor: 'pointer', fontSize: 13,
+                  cursor: 'pointer', fontSize: 12,
                   fontWeight: active ? 500 : 400,
                   fontFamily: 'var(--font)',
-                  color: active ? 'var(--tx)' : 'var(--tx-2)',
+                  color: active ? 'var(--claude)' : 'var(--tx-2)',
                   background: active ? 'var(--bg-active)' : 'transparent',
                   userSelect: 'none', transition: 'background .1s, color .1s',
                   textAlign: 'left',
-                }}>
-                <span style={{
-                  width: 5, height: 5, borderRadius: '50%', flexShrink: 0,
-                  background: qC ?? 'var(--tx-4)',
-                }} />
+                }}
+                onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'var(--bg-hover)' }}
+                onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent' }}
+              >
                 <span style={{ flex: 1 }}>{d.name}</span>
               </button>
             )
@@ -294,10 +293,10 @@ export default function Layout({
       {/* ── Main area ── */}
       <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', background: 'var(--bg-2)' }}>
 
-        {/* ── SAP Fiori Shell Bar ── */}
+        {/* ── Shell Bar — SVS Navy ── */}
         <div style={{
           height: 44,
-          background: '#354a5e',
+          background: '#012169',
           display: 'flex',
           alignItems: 'center',
           padding: '0 0 0 16px',
@@ -331,9 +330,9 @@ export default function Layout({
               <rect x="11" y="11" width="4" height="4" rx="0.8" />
             </svg>
             <span style={{
-              fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,.85)',
-              letterSpacing: '.04em', textTransform: 'uppercase',
-            }}>SpinQMS</span>
+              fontSize: 13, fontWeight: 600, color: '#ffffff',
+              letterSpacing: '.06em', textTransform: 'uppercase',
+            }}>SVS</span>
           </button>
 
           {/* Divider label */}

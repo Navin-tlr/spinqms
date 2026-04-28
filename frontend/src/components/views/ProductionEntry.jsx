@@ -2,7 +2,7 @@
    ProductionEntry — SAP Fiori Data Entry Form (Image 05 reference)
    - Flat white panel, 1px border, 0px radius
    - SAP form pattern: label (grey, 12px) above input (13px)
-   - Unified SAP blue (#0854a0) — no per-department colours
+   - Unified SAP blue (#012169) — no per-department colours
    - Section headers: small uppercase grey
    - Submit: SAP primary button
 ────────────────────────────────────────────────────────────────────────── */
@@ -14,7 +14,7 @@ import {
   calcEfficiencyKg, calcHankMeterKg, calcTheoreticalKg,
 } from '../../api.js'
 
-const SAP_BLUE   = '#0854a0'
+const SAP_BLUE   = '#012169'
 const SAP_BORDER = '#89919a'
 const SAP_BG     = '#f2f2f2'
 

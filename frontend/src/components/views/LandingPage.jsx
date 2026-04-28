@@ -9,7 +9,7 @@
 import { useState } from 'react'
 
 /* ── SAP primary blue (unified — no per-module colours) ──────────────── */
-const SAP_BLUE = '#0854a0'
+const SAP_BLUE = '#012169'
 
 /* ── App tiles (active modules) ──────────────────────────────────────── */
 const APP_TILES = [
@@ -164,7 +164,7 @@ function SapTile({ title, subtitle, icon, onClick, disabled, metric, metricLabel
         alignItems: 'center',
         justifyContent: 'space-between',
       }}>
-        <span>{disabled ? 'Coming Soon' : 'SpinQMS'}</span>
+        <span>{disabled ? 'Coming Soon' : 'SVS'}</span>
         <span style={{ color: '#89919a' }}>{subtitle}</span>
       </div>
     </div>
@@ -192,7 +192,7 @@ export default function LandingPage({ setCurrentModule, overview, alerts, depts 
       {/* ── Shell bar ─────────────────────────────────────────────────── */}
       <div style={{
         height: 44,
-        background: '#354a5e',
+        background: '#012169',
         display: 'flex',
         alignItems: 'center',
         padding: '0 16px',
@@ -213,7 +213,7 @@ export default function LandingPage({ setCurrentModule, overview, alerts, depts 
             <rect x="6" y="11" width="4" height="4" rx="0.5" />
             <rect x="11" y="11" width="4" height="4" rx="0.5" />
           </svg>
-          <span style={{ fontSize: 13, fontWeight: 600, color: '#fff', letterSpacing: '.01em' }}>SpinQMS</span>
+          <span style={{ fontSize: 13, fontWeight: 600, color: '#fff', letterSpacing: '.01em' }}>SVS</span>
         </div>
 
         {/* Page title */}
@@ -293,9 +293,9 @@ export default function LandingPage({ setCurrentModule, overview, alerts, depts 
               }}>
                 {[
                   { label: 'Departments in control', value: `${goodDepts} / ${depts.length}`, color: '#188f36' },
-                  { label: 'Total batches recorded',  value: totalKpi,                          color: '#0854a0' },
+                  { label: 'Total batches recorded',  value: totalKpi,                          color: '#012169' },
                   { label: 'Active alerts',            value: alerts.filter(a => a.severity !== 'ok').length, color: hasBad ? '#bb0000' : hasWarn ? '#e6600d' : '#188f36' },
-                  { label: 'Departments tracked',      value: depts.length,                      color: '#0854a0' },
+                  { label: 'Departments tracked',      value: depts.length,                      color: '#012169' },
                 ].map((kpi, i, arr) => (
                   <div key={kpi.label} style={{
                     flex: 1,
@@ -370,7 +370,7 @@ export default function LandingPage({ setCurrentModule, overview, alerts, depts 
 
         {/* System footer */}
         <div style={{ marginTop: 48, display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 11, color: '#89919a', borderTop: '1px solid #d9dadb', paddingTop: 16 }}>
-          <span>SpinQMS Enterprise · SVS Branch · v2.0</span>
+          <span>SVS Enterprise · SVS Branch · v2.0</span>
           <span style={{ fontFamily: 'var(--mono)' }}>:8000 backend · :5173 frontend</span>
         </div>
       </div>
