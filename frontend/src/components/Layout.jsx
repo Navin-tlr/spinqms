@@ -1,26 +1,33 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 
 /* ──────────────────────────────────────────────────────────────────────────
-   Navigation manifest — default order, user can drag-reorder modules.
-   Icons: clean 16×16 geometric stroke icons (Lucide / Notion aesthetic).
+   Layout — SAP Fiori shell with collapsible side navigation
+   Shell bar:  muted structural navy (#1e2e4a), not the full brand colour
+   Sidebar:    compact by default (48 px), expands to 220 px on demand
+   Branding:   "SVS" appears exactly once — top-left of shell bar
 ────────────────────────────────────────────────────────────────────────── */
+
+/* ── shell bar background — muted dark navy, structurally anchoring ─────── */
+const SHELL = '#1e2e4a'
+
+/* ── Navigation manifest ─────────────────────────────────────────────────── */
 const DEFAULT_NAV = [
-  { id: 'overview', label: 'Overview',          emoji: '📊' },
-  { id: 'entry',    label: 'Data Entry',         emoji: '✏️' },
-  { id: 'charts',   label: 'Control Charts',     emoji: '📈' },
-  { id: 'uster',    label: 'Uster Benchmarks',   emoji: '🎯' },
-  { id: 'report',   label: 'Shift Report',       emoji: '📋' },
-  { id: 'log',      label: 'Data Log',           emoji: '🗂️' },
-  { id: 'lab',      label: 'YarnLAB',            emoji: '🧪' },
-  { id: 'settings', label: 'Settings',           emoji: '⚙️' },
-  { id: 'guide',    label: 'Operator Guide',     emoji: '📖' },
+  { id: 'overview', label: 'Overview',         abbr: 'OV' },
+  { id: 'entry',    label: 'Data Entry',        abbr: 'DE' },
+  { id: 'charts',   label: 'Control Charts',    abbr: 'CC' },
+  { id: 'uster',    label: 'Uster Benchmarks',  abbr: 'UB' },
+  { id: 'report',   label: 'Shift Report',      abbr: 'SR' },
+  { id: 'log',      label: 'Data Log',          abbr: 'DL' },
+  { id: 'lab',      label: 'YarnLAB',           abbr: 'YL' },
+  { id: 'settings', label: 'Settings',          abbr: 'ST' },
+  { id: 'guide',    label: 'Operator Guide',    abbr: 'OG' },
 ]
 const BOTTOM_NAV = ['overview', 'entry', 'charts', 'report']
 
-/* ── Clean geometric SVG paths (16 × 16 viewBox) ──────────────────────── */
+/* ── SVG icon paths (16×16 viewBox) ─────────────────────────────────────── */
 const ICONS = {
   overview: 'M2 2h5.5v5.5H2V2zM8.5 2H14v5.5H8.5V2zM2 8.5h5.5V14H2V8.5zM8.5 8.5H14V14H8.5V8.5z',
-  entry:    'M3 13h2.6L13 5.6 10.4 3 3 10.4V13zm8.8-9.5L13.5 5.2a.6.6 0 000 .9L12 7.5M9 5l2 2',
+  entry:    'M3 13h2.6L13 5.6 10.4 3 3 10.4V13zm8.8-9.5L13.5 5.2a.6.6 0 000 .9L12 7.5',
   charts:   'M2.5 2v11.5H14M4.5 11 7 7.5l2.5 2L13 4',
   uster:    'M8 13.5A5.5 5.5 0 108 2.5a5.5 5.5 0 000 11zM8 10.5a2.5 2.5 0 100-5 2.5 2.5 0 000 5zM8 9a1 1 0 100-2 1 1 0 000 2z',
   report:   'M4 2h6l3 3v9a1 1 0 01-1 1H4a1 1 0 01-1-1V3a1 1 0 011-1zm6 0v3h3M5.5 7.5h5M5.5 10h5M5.5 12.5h3',
@@ -30,14 +37,22 @@ const ICONS = {
   guide:    'M4 2h8a1 1 0 011 1v10a1 1 0 01-1 1H4a1 1 0 01-1-1V3a1 1 0 011-1zM8 2v12M4 6h4M4 9h4',
 }
 
-/* ── Production sidebar nav ───────────────────────────────────────────── */
+/* ── Production module navigation ────────────────────────────────────────── */
 const PRODUCTION_NAV = [
-  { id: 'dashboard', label: 'Dashboard',   icon: 'M2 2h5.5v5.5H2V2zM8.5 2H14v5.5H8.5V2zM2 8.5h5.5V14H2V8.5zM8.5 8.5H14V14H8.5V8.5z' },
-  { id: 'entry',     label: 'Enter Output', icon: 'M3 13h2.6L13 5.6 10.4 3 3 10.4V13zm8.8-9.5L13.5 5.2a.6.6 0 000 .9L12 7.5' },
-  { id: 'log',       label: 'Production Log', icon: 'M2 4h12M2 4v8a1 1 0 001 1h10a1 1 0 001-1V4M2 8.5h12M6 4v9M10 4v9' },
+  { id: 'dashboard', label: 'Dashboard',      abbr: 'DB', icon: 'M2 2h5.5v5.5H2V2zM8.5 2H14v5.5H8.5V2zM2 8.5h5.5V14H2V8.5zM8.5 8.5H14V14H8.5V8.5z' },
+  { id: 'entry',     label: 'Enter Output',   abbr: 'EO', icon: 'M3 13h2.6L13 5.6 10.4 3 3 10.4V13zm8.8-9.5L13.5 5.2a.6.6 0 000 .9L12 7.5' },
+  { id: 'log',       label: 'Production Log', abbr: 'PL', icon: 'M2 4h12M2 4v8a1 1 0 001 1h10a1 1 0 001-1V4M2 8.5h12M6 4v9M10 4v9' },
 ]
 
-/* ── Layout ───────────────────────────────────────────────────────────── */
+/* ── Dept abbreviation (2 chars) ─────────────────────────────────────────── */
+function deptAbbr(name = '') {
+  const words = name.trim().split(/\s+/)
+  return words.length >= 2
+    ? (words[0][0] + words[1][0]).toUpperCase()
+    : name.substring(0, 2).toUpperCase()
+}
+
+/* ══════════════════════════════════════════════════════════════════════════ */
 export default function Layout({
   view, setView,
   currentDept, setCurrentDept,
@@ -46,10 +61,29 @@ export default function Layout({
   productionView, setProductionView,
   children,
 }) {
-  /* Go back to the landing page */
   const goHome = () => setCurrentModule && setCurrentModule(null)
+
+  /* ── Sidebar collapse state — compact (true) by default ── */
+  const [collapsed, setCollapsed] = useState(() => {
+    try { return localStorage.getItem('svs_sidebar_collapsed') !== 'false' }
+    catch { return true }
+  })
+  const toggleCollapse = () => {
+    const next = !collapsed
+    setCollapsed(next)
+    localStorage.setItem('svs_sidebar_collapsed', String(next))
+  }
+
+  /* ── Mobile state ── */
   const [menuOpen, setMenuOpen] = useState(false)
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768)
+  useEffect(() => {
+    const h = () => setIsMobile(window.innerWidth <= 768)
+    window.addEventListener('resize', h)
+    return () => window.removeEventListener('resize', h)
+  }, [])
+
+  /* ── Drag-to-reorder quality nav ── */
   const [navOrder, setNavOrder] = useState(() => {
     try { return JSON.parse(localStorage.getItem('spinqms_nav_order')) || DEFAULT_NAV.map(n => n.id) }
     catch { return DEFAULT_NAV.map(n => n.id) }
@@ -57,20 +91,6 @@ export default function Layout({
   const [dragIdx, setDragIdx] = useState(null)
   const [dropIdx, setDropIdx] = useState(null)
 
-  useEffect(() => {
-    const h = () => setIsMobile(window.innerWidth <= 768)
-    window.addEventListener('resize', h)
-    return () => window.removeEventListener('resize', h)
-  }, [])
-
-  const hasBad  = alerts.some(a => a.severity === 'bad')
-  const hasWarn = alerts.some(a => a.severity === 'warn')
-  const dotColor = hasBad ? 'var(--bad)' : hasWarn ? 'var(--warn)' : 'var(--ok)'
-  const navigate = id => { setView(id); setMenuOpen(false) }
-  const navItems = navOrder.map(id => DEFAULT_NAV.find(n => n.id === id)).filter(Boolean)
-  const currentLabel = DEFAULT_NAV.find(n => n.id === view)?.label ?? 'SpinQMS'
-
-  /* ── Drag handlers ── */
   const handleDragStart = useCallback((e, idx) => {
     setDragIdx(idx)
     e.dataTransfer.effectAllowed = 'move'
@@ -92,257 +112,330 @@ export default function Layout({
     setDragIdx(null); setDropIdx(null)
   }, [dragIdx, dropIdx, navOrder])
 
-  return (
-    <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'var(--sidebar) 1fr', height: '100vh' }}>
-      {isMobile && <div className={`mob-overlay ${menuOpen ? 'open' : ''}`} onClick={() => setMenuOpen(false)} />}
+  /* ── Status dot ── */
+  const hasBad  = alerts.some(a => a.severity === 'bad')
+  const hasWarn = alerts.some(a => a.severity === 'warn')
+  const dotColor = hasBad ? 'var(--bad)' : hasWarn ? 'var(--warn)' : 'var(--ok)'
 
-      {/* ── Sidebar ── */}
+  const navigate = id => { setView(id); setMenuOpen(false) }
+  const navItems = navOrder.map(id => DEFAULT_NAV.find(n => n.id === id)).filter(Boolean)
+  const currentLabel = DEFAULT_NAV.find(n => n.id === view)?.label ?? ''
+
+  /* ── Sidebar width ── */
+  const sideW = isMobile ? 0 : (collapsed ? 48 : 220)
+
+  /* ── Grid columns string ── */
+  const gridCols = isMobile ? '1fr' : `${sideW}px 1fr`
+
+  return (
+    <div style={{
+      display: 'grid',
+      gridTemplateColumns: gridCols,
+      height: '100vh',
+      transition: isMobile ? 'none' : 'grid-template-columns .18s ease',
+    }}>
+      {isMobile && (
+        <div
+          className={`mob-overlay ${menuOpen ? 'open' : ''}`}
+          onClick={() => setMenuOpen(false)}
+        />
+      )}
+
+      {/* ════════════════════════════════════════════════════
+          SIDEBAR
+      ════════════════════════════════════════════════════ */}
       <aside style={{
-        display: 'flex', flexDirection: 'column',
+        display: 'flex',
+        flexDirection: 'column',
+        width: isMobile ? 'min(260px, 85vw)' : sideW,
         background: 'var(--sidebar-bg)',
         borderRight: '1px solid var(--bd)',
-        overflowY: 'auto', overflowX: 'hidden', flexShrink: 0,
-        boxShadow: '1px 0 0 #d9dadb',
+        overflowY: 'auto',
+        overflowX: 'hidden',
+        flexShrink: 0,
+        transition: 'width .18s ease',
         ...(isMobile ? {
           position: 'fixed', top: 0, left: 0, bottom: 0,
-          width: 'min(260px, 85vw)', zIndex: 210,
+          zIndex: 210,
           transform: menuOpen ? 'translateX(0)' : 'translateX(-100%)',
           transition: 'transform .2s cubic-bezier(.4,0,.2,1)',
           boxShadow: menuOpen ? 'var(--shadow-md)' : 'none',
+          width: 'min(260px, 85vw)',
         } : {}),
       }}>
-        {isMobile && (
-          <button onClick={() => setMenuOpen(false)}
-            style={{ position: 'absolute', top: 12, right: 10, width: 26, height: 26, border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--tx-3)', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 'var(--r)' }}>
-            ×
-          </button>
-        )}
 
-        {/* ── Brand / section header ── */}
+        {/* ── Sidebar collapse toggle ─────────────────────────────────── */}
         <div style={{
-          display: 'flex', alignItems: 'center', gap: 10,
-          padding: '13px 14px',
+          height: 44,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: collapsed && !isMobile ? 'center' : 'flex-end',
+          padding: collapsed && !isMobile ? 0 : '0 8px',
           borderBottom: '1px solid var(--bd)',
           flexShrink: 0,
-          background: 'var(--sidebar-bg)',
         }}>
-          {/* Geometric mark — 3 stacked bars, minimal textile reference */}
-          <div style={{
-            width: 28, height: 28,
-            background: '#012169',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            flexShrink: 0,
-          }}>
-            <svg viewBox="0 0 16 12" width="14" height="10" fill="rgba(255,255,255,.9)">
-              <rect x="0" y="0"   width="16" height="2.5" />
-              <rect x="0" y="4.5" width="11" height="2.5" />
-              <rect x="0" y="9"   width="13.5" height="2.5" />
-            </svg>
-          </div>
-          <div>
-            <div style={{ fontSize: 13, fontWeight: 500, letterSpacing: '.01em', lineHeight: 1.25, color: 'var(--tx)' }}>
-              SVS
-            </div>
-            <div style={{ fontSize: 10, color: 'var(--tx-3)', marginTop: 1, letterSpacing: '.03em', textTransform: 'uppercase' }}>
-              {currentModule === 'quality' ? 'Quality' : 'Production'}
-            </div>
-          </div>
+          {isMobile ? (
+            /* Mobile: close button */
+            <button
+              onClick={() => setMenuOpen(false)}
+              title="Close menu"
+              style={btnReset}
+            >
+              <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="var(--tx-3)" strokeWidth="1.5" strokeLinecap="round">
+                <path d="M3 3l10 10M13 3L3 13" />
+              </svg>
+            </button>
+          ) : (
+            /* Desktop: collapse/expand toggle */
+            <button
+              onClick={toggleCollapse}
+              title={collapsed ? 'Expand navigation' : 'Collapse navigation'}
+              style={btnReset}
+            >
+              <svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="var(--tx-3)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                {collapsed
+                  ? <path d="M3 4h10M3 8h10M3 12h10" />          /* hamburger = expand */
+                  : <path d="M3 4h10M3 8h7M3 12h10" />}           /* partial = collapse  */
+              </svg>
+            </button>
+          )}
         </div>
 
-        {/* ── Production sidebar nav (shown when in production module) ── */}
+        {/* ── Production nav ─────────────────────────────────────────── */}
         {currentModule === 'production' && (
-          <div style={{ padding: '12px 8px', flex: 1 }}>
-            <SideLabel>Production</SideLabel>
+          <div style={{ padding: collapsed && !isMobile ? '8px 0' : '8px 6px', flex: 1 }}>
+            {(!collapsed || isMobile) && <SideLabel>Production</SideLabel>}
             {PRODUCTION_NAV.map(item => {
               const active = productionView === item.id
               return (
-                <div key={item.id}
+                <SideItem
+                  key={item.id}
+                  active={active}
+                  collapsed={collapsed && !isMobile}
+                  title={item.label}
                   onClick={() => { setProductionView && setProductionView(item.id); if (isMobile) setMenuOpen(false) }}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 7,
-                    padding: '7px 10px 7px 12px',
-                    borderLeft: active ? '3px solid var(--claude)' : '3px solid transparent',
-                    cursor: 'pointer', fontSize: 13,
-                    fontWeight: active ? 600 : 400,
-                    color: active ? 'var(--claude)' : 'var(--tx-2)',
-                    background: active ? 'var(--bg-active)' : 'transparent',
-                    userSelect: 'none', transition: 'background .1s, color .1s',
-                  }}
-                  onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'var(--bg-hover)' }}
-                  onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent' }}
                 >
-                  <span style={{ width: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                    <NavIcon d={item.icon} active={active} />
-                  </span>
-                  <span>{item.label}</span>
-                </div>
+                  <NavIcon d={item.icon} active={active} />
+                  {(!collapsed || isMobile) && <span style={{ fontSize: 12 }}>{item.label}</span>}
+                  {(collapsed && !isMobile) && (
+                    <span style={{ fontSize: 9, fontWeight: 600, color: active ? 'var(--claude)' : 'var(--tx-3)', letterSpacing: '.03em' }}>
+                      {item.abbr}
+                    </span>
+                  )}
+                </SideItem>
               )
             })}
           </div>
         )}
 
-        {/* ── Quality sidebar (shown when in quality module) ── */}
-        {currentModule !== 'production' && (<>
+        {/* ── Quality nav ────────────────────────────────────────────── */}
+        {currentModule !== 'production' && (
+          <>
+            {/* Departments */}
+            <div style={{ padding: collapsed && !isMobile ? '8px 0' : '8px 6px 4px' }}>
+              {(!collapsed || isMobile) && <SideLabel>Departments</SideLabel>}
+              {depts.map(d => {
+                const active = d.id === currentDept
+                const abbr   = deptAbbr(d.name)
+                return (
+                  <SideItem
+                    key={d.id}
+                    active={active}
+                    collapsed={collapsed && !isMobile}
+                    title={d.name}
+                    onClick={() => { setCurrentDept(d.id); if (isMobile) setMenuOpen(false) }}
+                    isButton
+                  >
+                    {(collapsed && !isMobile) ? (
+                      <span style={{
+                        fontSize: 10, fontWeight: active ? 600 : 500,
+                        color: active ? 'var(--claude)' : 'var(--tx-2)',
+                        letterSpacing: '.03em',
+                      }}>{abbr}</span>
+                    ) : (
+                      <span style={{ fontSize: 12, flex: 1 }}>{d.name}</span>
+                    )}
+                  </SideItem>
+                )
+              })}
+            </div>
 
-        {/* ── Departments ── */}
-        <div style={{ padding: '12px 8px 4px' }}>
-          <SideLabel>Departments</SideLabel>
-          {depts.map(d => {
-            const active = d.id === currentDept
-            return (
-              <button key={d.id}
-                onClick={() => { setCurrentDept(d.id); if (isMobile) setMenuOpen(false) }}
-                style={{
-                  width: '100%', display: 'flex', alignItems: 'center',
-                  padding: '6px 10px 6px 12px',
-                  borderLeft: active ? '3px solid var(--claude)' : '3px solid transparent',
-                  border: 'none',
-                  cursor: 'pointer', fontSize: 12,
-                  fontWeight: active ? 500 : 400,
-                  fontFamily: 'var(--font)',
-                  color: active ? 'var(--claude)' : 'var(--tx-2)',
-                  background: active ? 'var(--bg-active)' : 'transparent',
-                  userSelect: 'none', transition: 'background .1s, color .1s',
-                  textAlign: 'left',
-                }}
-                onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'var(--bg-hover)' }}
-                onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent' }}
-              >
-                <span style={{ flex: 1 }}>{d.name}</span>
-              </button>
-            )
-          })}
-        </div>
+            {/* Divider */}
+            {(!collapsed || isMobile) && (
+              <div style={{ height: 1, background: 'var(--bd)', margin: '4px 10px' }} />
+            )}
 
-        {/* ── Divider ── */}
-        <div style={{ height: 1, background: 'var(--bd)', margin: '8px 10px' }} />
+            {/* Modules */}
+            <div style={{ padding: collapsed && !isMobile ? '4px 0' : '0 6px 8px', flex: 1 }}>
+              {(!collapsed || isMobile) && <SideLabel>Modules</SideLabel>}
+              {navItems.map((item, idx) => {
+                const active       = view === item.id
+                const isDropTarget = dropIdx === idx && dragIdx !== idx
+                return (
+                  <div
+                    key={item.id}
+                    draggable
+                    onDragStart={e => handleDragStart(e, idx)}
+                    onDragOver={e => handleDragOver(e, idx)}
+                    onDragEnd={handleDragEnd}
+                    onClick={() => navigate(item.id)}
+                    title={item.label}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: collapsed && !isMobile ? 'center' : 'flex-start',
+                      gap: 7,
+                      padding: collapsed && !isMobile ? '9px 0' : '7px 8px 7px 10px',
+                      borderLeft: active
+                        ? '3px solid var(--claude)'
+                        : isDropTarget
+                          ? '3px solid var(--claude)'
+                          : '3px solid transparent',
+                      cursor: 'pointer',
+                      color: active ? 'var(--claude)' : 'var(--tx-2)',
+                      background: active ? 'var(--bg-active)' : 'transparent',
+                      userSelect: 'none',
+                      transition: 'background .1s, color .1s',
+                    }}
+                    onMouseEnter={e => { if (!active) { e.currentTarget.style.background = 'var(--bg-hover)'; e.currentTarget.style.color = 'var(--tx)' } }}
+                    onMouseLeave={e => { if (!active) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--tx-2)' } }}
+                  >
+                    {/* Drag handle — only in expanded mode */}
+                    {(!collapsed || isMobile) && (
+                      <div className="drag-handle" style={{ flexShrink: 0 }}>
+                        <span><i /><i /></span><span><i /><i /></span><span><i /><i /></span>
+                      </div>
+                    )}
 
-        {/* ── Modules — draggable ── */}
-        <div style={{ padding: '0 8px 8px', flex: 1 }}>
-          <SideLabel>Modules</SideLabel>
-          {navItems.map((item, idx) => {
-            const active      = view === item.id
-            const isDropTarget = dropIdx === idx && dragIdx !== idx
-            return (
-              <div key={item.id}
-                draggable
-                onDragStart={e => handleDragStart(e, idx)}
-                onDragOver={e => handleDragOver(e, idx)}
-                onDragEnd={handleDragEnd}
-                onClick={() => navigate(item.id)}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 7,
-                  padding: '7px 10px 7px 12px',
-                  borderLeft: active ? '3px solid var(--claude)' : isDropTarget ? '3px solid var(--claude)' : '3px solid transparent',
-                  cursor: 'pointer', fontSize: 13,
-                  fontWeight: active ? 600 : 400,
-                  color: active ? 'var(--claude)' : 'var(--tx-2)',
-                  background: active ? 'var(--bg-active)' : 'transparent',
-                  userSelect: 'none',
-                  transition: 'background .1s, color .1s',
-                }}
-                onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'var(--bg-hover)'; e.currentTarget.style.color = 'var(--tx)' }}
-                onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = active ? 'var(--tx)' : 'var(--tx-2)' }}
-              >
-                {/* Drag handle */}
-                <div className="drag-handle" style={{ flexShrink: 0 }}>
-                  <span><i /><i /></span><span><i /><i /></span><span><i /><i /></span>
-                </div>
-                {/* Icon */}
-                <span style={{ width: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                  <NavIcon d={ICONS[item.id]} active={active} />
-                </span>
-                <span style={{ flex: 1 }}>{item.label}</span>
-                {item.id === 'lab' && (
-                  <span style={{
-                    fontSize: 9, fontWeight: 600, letterSpacing: '.04em',
-                    padding: '1px 5px', borderRadius: 3,
-                    background: 'var(--claude-bg)', color: 'var(--claude)',
-                    border: '1px solid var(--claude-bd)',
-                    lineHeight: 1.6,
-                  }}>NEW</span>
+                    {/* Icon */}
+                    <span style={{ width: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <NavIcon d={ICONS[item.id]} active={active} />
+                    </span>
+
+                    {/* Label — hidden when collapsed */}
+                    {(!collapsed || isMobile) && (
+                      <>
+                        <span style={{ flex: 1, fontSize: 12, fontWeight: active ? 500 : 400 }}>{item.label}</span>
+                        {item.id === 'lab' && (
+                          <span style={{
+                            fontSize: 9, fontWeight: 600, letterSpacing: '.04em',
+                            padding: '1px 5px',
+                            background: 'var(--claude-bg)', color: 'var(--claude)',
+                            border: '1px solid var(--claude-bd)',
+                            lineHeight: 1.6,
+                          }}>NEW</span>
+                        )}
+                      </>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* Footer — status ── */}
+            <div style={{
+              padding: collapsed && !isMobile ? '10px 0' : '10px 14px 14px',
+              borderTop: '1px solid var(--bd)',
+              flexShrink: 0,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: collapsed && !isMobile ? 'center' : 'flex-start',
+              gap: 3,
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                <span style={{
+                  width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
+                  background: dotColor,
+                  boxShadow: `0 0 0 3px color-mix(in srgb, ${dotColor} 18%, transparent)`,
+                  animation: 'pulse 2.5s ease-in-out infinite',
+                }} />
+                {(!collapsed || isMobile) && (
+                  <span style={{ fontSize: 11, color: 'var(--tx-2)' }}>{statusTxt}</span>
                 )}
               </div>
-            )
-          })}
-        </div>
-
-        {/* ── Sidebar footer — system status ── */}
-        <div style={{
-          padding: '10px 14px 14px',
-          borderTop: '1px solid var(--bd)',
-          flexShrink: 0,
-          background: 'var(--sidebar-bg)',
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-            <span style={{
-              width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
-              background: dotColor,
-              boxShadow: `0 0 0 3px color-mix(in srgb, ${dotColor} 18%, transparent)`,
-              animation: 'pulse 2.5s ease-in-out infinite',
-            }} />
-            <span style={{ fontSize: 11, color: 'var(--tx-2)', fontWeight: 500 }}>{statusTxt}</span>
-          </div>
-          <div style={{ fontSize: 10, color: 'var(--tx-4)', marginTop: 3, fontFamily: 'var(--mono)', letterSpacing: '.02em' }}>{lastSaved}</div>
-        </div>
-
-        {/* Close quality-only block */}
-        </>)}
+              {(!collapsed || isMobile) && (
+                <div style={{ fontSize: 10, color: 'var(--tx-4)', fontVariantNumeric: 'tabular-nums', letterSpacing: '.01em' }}>
+                  {lastSaved}
+                </div>
+              )}
+            </div>
+          </>
+        )}
       </aside>
 
-      {/* ── Main area ── */}
+      {/* ════════════════════════════════════════════════════
+          MAIN AREA
+      ════════════════════════════════════════════════════ */}
       <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', background: 'var(--bg-2)' }}>
 
-        {/* ── Shell Bar — SVS Navy ── */}
+        {/* ── Shell Bar ─────────────────────────────────────────────── */}
         <div style={{
           height: 44,
-          background: '#012169',
+          background: SHELL,
           display: 'flex',
           alignItems: 'center',
-          padding: '0 0 0 16px',
+          padding: '0 0 0 12px',
           flexShrink: 0,
           gap: 0,
-          boxShadow: '0 2px 6px rgba(0,0,0,.18)',
         }}>
-          {/* Home / brand button */}
+          {/* Mobile: hamburger to open sidebar */}
+          {isMobile && (
+            <button
+              onClick={() => setMenuOpen(true)}
+              style={{ ...shellBtn, marginRight: 6 }}
+              title="Open navigation"
+            >
+              <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="rgba(255,255,255,.7)" strokeWidth="1.5" strokeLinecap="round">
+                <path d="M2 4h12M2 8h12M2 12h12" />
+              </svg>
+            </button>
+          )}
+
+          {/* Brand — SVS (appears exactly once, top-left) */}
           <button
             onClick={goHome}
-            title="Home — Application Launchpad"
+            title="Application Launchpad"
             style={{
-              display: 'flex', alignItems: 'center', gap: 8,
-              padding: '0 16px 0 0',
-              marginRight: 4,
-              borderRight: '1px solid rgba(255,255,255,.12)',
-              background: 'transparent', border: 'none',
-              cursor: 'pointer', height: 44,
+              display: 'flex', alignItems: 'center', gap: 9,
+              height: 44, padding: '0 14px 0 2px',
+              background: 'transparent', border: 'none', cursor: 'pointer',
+              borderRight: '1px solid rgba(255,255,255,.10)',
+              marginRight: 2,
             }}
           >
-            {/* SAP-style 3×3 grid icon */}
-            <svg viewBox="0 0 16 16" width="15" height="15" fill="rgba(255,255,255,.7)">
-              <rect x="1" y="1" width="4" height="4" rx="0.8" />
-              <rect x="6" y="1" width="4" height="4" rx="0.8" />
-              <rect x="11" y="1" width="4" height="4" rx="0.8" />
-              <rect x="1" y="6" width="4" height="4" rx="0.8" />
-              <rect x="6" y="6" width="4" height="4" rx="0.8" />
-              <rect x="11" y="6" width="4" height="4" rx="0.8" />
-              <rect x="1" y="11" width="4" height="4" rx="0.8" />
-              <rect x="6" y="11" width="4" height="4" rx="0.8" />
-              <rect x="11" y="11" width="4" height="4" rx="0.8" />
-            </svg>
+            {/* Geometric mark */}
+            <div style={{
+              width: 24, height: 24,
+              background: 'rgba(255,255,255,.12)',
+              border: '1px solid rgba(255,255,255,.18)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              flexShrink: 0,
+            }}>
+              <svg viewBox="0 0 16 12" width="12" height="9" fill="rgba(255,255,255,.85)">
+                <rect x="0" y="0"   width="16"   height="2.5" />
+                <rect x="0" y="4.5" width="11"   height="2.5" />
+                <rect x="0" y="9"   width="13.5" height="2.5" />
+              </svg>
+            </div>
             <span style={{
-              fontSize: 13, fontWeight: 600, color: '#ffffff',
-              letterSpacing: '.06em', textTransform: 'uppercase',
+              fontSize: 12, fontWeight: 600, color: '#fff',
+              letterSpacing: '.08em', textTransform: 'uppercase',
             }}>SVS</span>
           </button>
 
-          {/* Divider label */}
-          <div style={{ fontSize: 11, color: 'rgba(255,255,255,.4)', padding: '0 12px', borderRight: '1px solid rgba(255,255,255,.10)', marginRight: 0, height: 44, display: 'flex', alignItems: 'center' }}>
+          {/* Module context label */}
+          <span style={{
+            fontSize: 11, color: 'rgba(255,255,255,.38)',
+            padding: '0 14px',
+            borderRight: '1px solid rgba(255,255,255,.08)',
+            whiteSpace: 'nowrap',
+          }}>
             {currentModule === 'quality' ? 'Quality Management' : 'Production & Inventory'}
-          </div>
+          </span>
 
-          {/* Module nav tabs */}
+          {/* Module switcher tabs */}
           {[
-            { id: 'quality',    label: 'Quality' },
+            { id: 'quality',    label: 'Quality'    },
             { id: 'production', label: 'Production' },
           ].map(mod => {
             const active = currentModule === mod.id
@@ -351,126 +444,114 @@ export default function Layout({
                 key={mod.id}
                 onClick={() => setCurrentModule && setCurrentModule(mod.id)}
                 style={{
-                  height: 44,
-                  padding: '0 16px',
-                  fontSize: 12, fontWeight: active ? 600 : 400,
+                  height: 44, padding: '0 15px',
+                  fontSize: 12, fontWeight: active ? 500 : 400,
                   border: 'none',
-                  borderBottom: active ? '2.5px solid #fff' : '2.5px solid transparent',
-                  background: active ? 'rgba(255,255,255,.09)' : 'transparent',
-                  color: active ? '#fff' : 'rgba(255,255,255,.55)',
+                  borderBottom: active ? '2px solid rgba(255,255,255,.8)' : '2px solid transparent',
+                  background: active ? 'rgba(255,255,255,.07)' : 'transparent',
+                  color: active ? '#fff' : 'rgba(255,255,255,.48)',
                   cursor: 'pointer',
                   fontFamily: 'var(--font)',
                   transition: 'all .15s',
                   whiteSpace: 'nowrap',
                 }}
-                onMouseEnter={e => { if (!active) { e.currentTarget.style.color = 'rgba(255,255,255,.85)'; e.currentTarget.style.background = 'rgba(255,255,255,.05)' }}}
-                onMouseLeave={e => { if (!active) { e.currentTarget.style.color = 'rgba(255,255,255,.55)'; e.currentTarget.style.background = 'transparent' }}}
+                onMouseEnter={e => { if (!active) { e.currentTarget.style.color = 'rgba(255,255,255,.78)'; e.currentTarget.style.background = 'rgba(255,255,255,.04)' }}}
+                onMouseLeave={e => { if (!active) { e.currentTarget.style.color = 'rgba(255,255,255,.48)'; e.currentTarget.style.background = 'transparent' }}}
               >
                 {mod.label}
               </button>
             )
           })}
 
-          {/* Right side — user avatar placeholder */}
-          <div style={{ marginLeft: 'auto', marginRight: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+          {/* Right actions */}
+          <div style={{ marginLeft: 'auto', marginRight: 10, display: 'flex', alignItems: 'center', gap: 4 }}>
+            {!isMobile && currentModule === 'quality' && (
+              <>
+                <ShellActionBtn onClick={() => window.open('/api/export/csv', '_blank')} title="Export CSV">
+                  <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M8 2v8M5 7l3 3 3-3M2.5 11v1a1 1 0 001 1h9a1 1 0 001-1v-1" />
+                  </svg>
+                  <span>Export</span>
+                </ShellActionBtn>
+                <ShellActionBtn onClick={() => window.print()} title="Print">
+                  <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M4 5V2h8v3M3 11H2a1 1 0 01-1-1V7a1 1 0 011-1h12a1 1 0 011 1v3a1 1 0 01-1 1h-1M4 9h8v5H4V9z" />
+                  </svg>
+                  <span>Print</span>
+                </ShellActionBtn>
+              </>
+            )}
+            {/* User icon — no text, no branding repetition */}
             <div style={{
-              width: 28, height: 28, borderRadius: '50%',
-              background: 'rgba(255,255,255,.15)',
+              width: 28, height: 28,
+              background: 'rgba(255,255,255,.1)',
+              border: '1px solid rgba(255,255,255,.16)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,.8)',
-              letterSpacing: '.02em',
             }}>
-              SVS
+              <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="rgba(255,255,255,.65)" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="8" cy="5.5" r="2.5" />
+                <path d="M2.5 13.5c0-2.5 2.46-4.5 5.5-4.5s5.5 2 5.5 4.5" />
+              </svg>
             </div>
           </div>
         </div>
 
-        {/* ── SAP Content Header — breadcrumb bar ── */}
+        {/* ── Page header — breadcrumb + context ────────────────────── */}
         <header style={{
           height: 'var(--hdr)',
           display: 'flex', alignItems: 'center',
           justifyContent: 'space-between',
-          padding: '0 24px',
+          padding: '0 20px',
           background: 'var(--bg)',
           borderBottom: '1px solid var(--bd)',
           flexShrink: 0,
           gap: 12,
-          ...(isMobile ? { padding: '0 12px', position: 'sticky', top: 0, zIndex: 100 } : {}),
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            {isMobile && (
-              <button onClick={() => setMenuOpen(true)}
-                style={{
-                  width: 32, height: 32, border: 'none', background: 'transparent',
-                  cursor: 'pointer', color: 'var(--tx-2)', fontSize: 18,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  borderRadius: 'var(--r)', flexShrink: 0,
-                }}>☰</button>
-            )}
-
-            {/* SAP-style breadcrumb: Home › Module › Page */}
-            <nav style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              <button
-                onClick={goHome}
-                style={{
-                  background: 'none', border: 'none', padding: '2px 4px',
-                  fontSize: 11, color: 'var(--claude)', cursor: 'pointer',
-                  fontFamily: 'var(--font)', borderRadius: 3,
-                  display: 'flex', alignItems: 'center', gap: 4,
-                }}
-              >
-                <svg viewBox="0 0 14 14" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M2 7L7 2l5 5M3.5 5.5V12h3V8.5h1V12h3V5.5" />
-                </svg>
-                Home
-              </button>
-              <span style={{ fontSize: 10, color: 'var(--tx-4)' }}>›</span>
-              <span style={{ fontSize: 11, color: 'var(--tx-3)' }}>
-                {currentModule === 'production' ? 'Production & Inventory' : 'Quality Management'}
-              </span>
-              <span style={{ fontSize: 10, color: 'var(--tx-4)' }}>›</span>
-              <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--tx)', letterSpacing: '-.01em' }}>
-                {currentModule === 'production'
-                  ? (PRODUCTION_NAV.find(n => n.id === productionView)?.label ?? 'Production')
-                  : currentLabel}
-              </span>
-            </nav>
-          </div>
-
-          {!isMobile && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              {currentModule === 'quality' && (
-                <>
-                  <HeaderBtn onClick={() => window.open('/api/export/csv', '_blank')}>
-                    <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M8 2v8M5 7l3 3 3-3M2.5 11v1a1 1 0 001 1h9a1 1 0 001-1v-1" />
-                    </svg>
-                    Export CSV
-                  </HeaderBtn>
-                  <HeaderBtn onClick={() => window.print()}>
-                    <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M4 5V2h8v3M3 11H2a1 1 0 01-1-1V7a1 1 0 011-1h12a1 1 0 011 1v3a1 1 0 01-1 1h-1M4 9h8v5H4V9z" />
-                    </svg>
-                    Print
-                  </HeaderBtn>
-                </>
-              )}
-            </div>
-          )}
+          <nav style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+            <button
+              onClick={goHome}
+              style={{
+                background: 'none', border: 'none', padding: '2px 4px',
+                fontSize: 11, color: 'var(--tx-3)', cursor: 'pointer',
+                fontFamily: 'var(--font)', display: 'flex', alignItems: 'center', gap: 4,
+              }}
+              onMouseEnter={e => e.currentTarget.style.color = 'var(--claude)'}
+              onMouseLeave={e => e.currentTarget.style.color = 'var(--tx-3)'}
+            >
+              <svg viewBox="0 0 14 14" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M2 7L7 2l5 5M3.5 5.5V12h3V8.5h1V12h3V5.5" />
+              </svg>
+              Home
+            </button>
+            <Crumb />
+            <span style={{ fontSize: 11, color: 'var(--tx-3)' }}>
+              {currentModule === 'production' ? 'Production' : 'Quality'}
+            </span>
+            <Crumb />
+            <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--tx)' }}>
+              {currentModule === 'production'
+                ? (PRODUCTION_NAV.find(n => n.id === productionView)?.label ?? 'Production')
+                : currentLabel}
+            </span>
+          </nav>
         </header>
 
-        {/* ── Page content ── */}
-        <div id="main-scroll-container" style={{
-          flex: 1, overflowY: 'auto',
-          padding: '20px 24px',
-          display: 'flex', flexDirection: 'column', gap: 14,
-          ...(isMobile ? { padding: '14px 12px calc(68px + env(safe-area-inset-bottom,0px)) 12px' } : {}),
-        }}>
+        {/* ── Scrollable content area ────────────────────────────────── */}
+        <div
+          id="main-scroll-container"
+          style={{
+            flex: 1, overflowY: 'auto',
+            padding: isMobile
+              ? '14px 12px calc(68px + env(safe-area-inset-bottom,0px)) 12px'
+              : '20px 24px',
+            display: 'flex', flexDirection: 'column', gap: 14,
+          }}
+        >
           {children}
         </div>
       </div>
 
-      {/* ── Mobile bottom nav ── */}
+      {/* ── Mobile bottom nav ────────────────────────────────────────── */}
       {isMobile && (
         <nav style={{
           position: 'fixed', bottom: 0, left: 0, right: 0,
@@ -514,47 +595,59 @@ export default function Layout({
   )
 }
 
-/* ── Clean geometric nav icon ──────────────────────────────────────────── */
+/* ── Sub-components ──────────────────────────────────────────────────────── */
+
 function NavIcon({ d, size = 15, active }) {
   return (
     <svg viewBox="0 0 16 16" width={size} height={size} fill="none"
       stroke={active ? 'var(--claude)' : 'currentColor'}
       strokeWidth="1.4"
       strokeLinecap="round" strokeLinejoin="round"
-      style={{ opacity: active ? 1 : .65, flexShrink: 0 }}>
+      style={{ opacity: active ? 1 : .6, flexShrink: 0 }}>
       <path d={d} />
     </svg>
   )
 }
 
-/* ── Header action button — SAP ghost style ────────────────────────────── */
-function HeaderBtn({ children, onClick }) {
+/* Generic sidebar item — handles both collapsed and expanded layouts */
+function SideItem({ active, collapsed, title, onClick, children, isButton }) {
+  const Tag = isButton ? 'button' : 'div'
   return (
-    <button onClick={onClick}
+    <Tag
+      onClick={onClick}
+      title={collapsed ? title : undefined}
       style={{
-        display: 'inline-flex', alignItems: 'center', gap: 5,
-        padding: '5px 12px', fontSize: 12, fontWeight: 500,
-        border: '1px solid var(--bd-md)', borderRadius: 'var(--r)',
-        background: 'var(--bg)', color: 'var(--tx-2)',
-        cursor: 'pointer', fontFamily: 'var(--font)',
-        transition: 'all .1s', letterSpacing: '.01em',
+        width: '100%',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: collapsed ? 'center' : 'flex-start',
+        gap: collapsed ? 0 : 7,
+        padding: collapsed ? '9px 0' : '7px 8px 7px 10px',
+        borderLeft: active ? '3px solid var(--claude)' : '3px solid transparent',
+        border: isButton ? 'none' : undefined,
+        cursor: 'pointer',
+        fontFamily: 'var(--font)',
+        fontWeight: active ? 500 : 400,
+        color: active ? 'var(--claude)' : 'var(--tx-2)',
+        background: active ? 'var(--bg-active)' : 'transparent',
+        userSelect: 'none',
+        transition: 'background .1s, color .1s',
+        textAlign: 'left',
       }}
-      onMouseEnter={e => {
-        e.currentTarget.style.background = 'var(--claude-bg)'
-        e.currentTarget.style.borderColor = 'var(--claude-bd)'
-        e.currentTarget.style.color = 'var(--claude)'
-      }}
-      onMouseLeave={e => {
-        e.currentTarget.style.background = 'var(--bg)'
-        e.currentTarget.style.borderColor = 'var(--bd-md)'
-        e.currentTarget.style.color = 'var(--tx-2)'
-      }}>
+      onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'var(--bg-hover)' }}
+      onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent' }}
+    >
       {children}
-    </button>
+    </Tag>
   )
 }
 
-/* ── Sidebar section label — SAP group header style ─────────────────────── */
+/* Breadcrumb separator */
+function Crumb() {
+  return <span style={{ fontSize: 10, color: 'var(--tx-4)', lineHeight: 1 }}>›</span>
+}
+
+/* Sidebar section label */
 function SideLabel({ children }) {
   return (
     <div style={{
@@ -562,9 +655,43 @@ function SideLabel({ children }) {
       letterSpacing: '.09em', textTransform: 'uppercase',
       color: 'var(--tx-4)',
       padding: '4px 10px 5px',
-      marginTop: 2,
     }}>
       {children}
     </div>
   )
+}
+
+/* Shell bar ghost action button */
+function ShellActionBtn({ children, onClick, title }) {
+  return (
+    <button
+      onClick={onClick}
+      title={title}
+      style={{
+        display: 'inline-flex', alignItems: 'center', gap: 5,
+        height: 28, padding: '0 10px',
+        fontSize: 11, fontWeight: 400,
+        border: '1px solid rgba(255,255,255,.16)',
+        background: 'transparent',
+        color: 'rgba(255,255,255,.65)',
+        cursor: 'pointer',
+        fontFamily: 'var(--font)',
+        letterSpacing: '.01em',
+        transition: 'all .12s',
+      }}
+      onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,.08)'; e.currentTarget.style.color = '#fff' }}
+      onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'rgba(255,255,255,.65)' }}
+    >
+      {children}
+    </button>
+  )
+}
+
+/* Shared reset style for icon-only buttons */
+const btnReset = {
+  width: 32, height: 32,
+  display: 'flex', alignItems: 'center', justifyContent: 'center',
+  border: 'none', background: 'transparent', cursor: 'pointer',
+  borderRadius: 2,
+  flexShrink: 0,
 }

@@ -11,44 +11,52 @@
    Accent:       #0064d9  (SAP Fiori blue)
 ═══════════════════════════════════════════════════════ */
 
-/* ── Styrene B web font ─────────────────────────────────────────────────────*/
+/* ── SAP 72 web font — self-hosted ─────────────────────────────────────────*/
 @font-face {
-  font-family: 'Styrene B';
+  font-family: '72';
   font-style:  normal;
-  font-weight: 100;
+  font-weight: 300;
   font-display: swap;
-  src: local('Styrene B Thin'), local('StyreneB-Thin'),
-       url('/fonts/StyreneB-Thin.otf') format('opentype');
+  src: local('72-Light'), local('SAP 72 Light'),
+       url('/fonts/72-Light.ttf') format('truetype');
 }
 @font-face {
-  font-family: 'Styrene B';
+  font-family: '72';
   font-style:  normal;
   font-weight: 400;
   font-display: swap;
-  src: local('Styrene B'), local('StyreneB-Regular'), local('Styrene B Regular'),
-       url('/fonts/StyreneB-Regular.otf') format('opentype');
+  src: local('72-Regular'), local('SAP 72'),
+       url('/fonts/72-Regular.ttf') format('truetype');
 }
 @font-face {
-  font-family: 'Styrene B';
-  font-style:  normal;
-  font-weight: 500;
+  font-family: '72';
+  font-style:  italic;
+  font-weight: 400;
   font-display: swap;
-  src: local('Styrene B Medium'), local('StyreneB-Medium'),
-       url('/fonts/StyreneB-Medium.otf') format('opentype');
+  src: local('72-Italic'), local('SAP 72 Italic'),
+       url('/fonts/72-Italic.ttf') format('truetype');
 }
 @font-face {
-  font-family: 'Styrene B';
+  font-family: '72';
   font-style:  normal;
-  font-weight: 900;
+  font-weight: 600;
   font-display: swap;
-  src: local('Styrene B Black'), local('StyreneB-Black'),
-       url('/fonts/StyreneB-Black.otf') format('opentype');
+  src: local('72-Semibold'), local('SAP 72 Semibold'),
+       url('/fonts/72-Semibold.ttf') format('truetype');
+}
+@font-face {
+  font-family: '72';
+  font-style:  normal;
+  font-weight: 700;
+  font-display: swap;
+  src: local('72-Bold'), local('SAP 72 Bold'),
+       url('/fonts/72-Bold.ttf') format('truetype');
 }
 
 :root {
-  /* Typography */
-  --font: 'Styrene B', -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
-  --mono: 'JetBrains Mono', "SF Mono", "Fira Code", "Consolas", monospace;
+  /* Typography — SAP 72 system-wide */
+  --font: '72', 'SAP 72', -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --mono: '72', 'SAP 72', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
 
   /* ── Surfaces — flat ERP neutrals ──────────────── */
   --bg:         #ffffff;                  /* pure white — cards, forms, panels   */
@@ -87,8 +95,9 @@
   --r-lg: 2px;
   --r-xl: 4px;
 
-  --sidebar: 248px;
-  --hdr:     44px;
+  --sidebar:           220px;
+  --sidebar-collapsed: 48px;
+  --hdr:               44px;
 
   /* ── Elevation — SAP subtle shadows ─────────────── */
   --shadow:    0 1px 4px rgba(0, 0, 0, .08);
@@ -149,6 +158,9 @@ html, body {
   text-rendering: optimizeLegibility;
 }
 body { overflow: hidden; }
+
+/* ── Tabular numerics — applied wherever --mono is used ─────────────────── */
+[style*="var(--mono)"], .mono { font-variant-numeric: tabular-nums; }
 
 /* ── Number inputs — hide spinner ───────────────────── */
 input[type="number"]::-webkit-outer-spin-button,

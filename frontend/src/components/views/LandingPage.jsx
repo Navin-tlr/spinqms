@@ -8,8 +8,8 @@
 
 import { useState } from 'react'
 
-/* ── SAP primary blue (unified — no per-module colours) ──────────────── */
-const SAP_BLUE = '#012169'
+const SAP_BLUE  = '#012169'
+const SHELL_BG  = '#1e2e4a'   /* muted structural navy — shell bar only */
 
 /* ── App tiles (active modules) ──────────────────────────────────────── */
 const APP_TILES = [
@@ -164,7 +164,7 @@ function SapTile({ title, subtitle, icon, onClick, disabled, metric, metricLabel
         alignItems: 'center',
         justifyContent: 'space-between',
       }}>
-        <span>{disabled ? 'Coming Soon' : 'SVS'}</span>
+        <span style={{ color: disabled ? '#c8cacb' : '#89919a' }}>{disabled ? 'Planned' : 'Active'}</span>
         <span style={{ color: '#89919a' }}>{subtitle}</span>
       </div>
     </div>
@@ -192,49 +192,59 @@ export default function LandingPage({ setCurrentModule, overview, alerts, depts 
       {/* ── Shell bar ─────────────────────────────────────────────────── */}
       <div style={{
         height: 44,
-        background: '#012169',
+        background: SHELL_BG,
         display: 'flex',
         alignItems: 'center',
         padding: '0 16px',
-        gap: 12,
+        gap: 0,
         flexShrink: 0,
-        boxShadow: '0 2px 4px rgba(0,0,0,.2)',
       }}>
-        {/* Grid icon + brand */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingRight: 16, borderRight: '1px solid rgba(255,255,255,.15)' }}>
-          <svg viewBox="0 0 16 16" width="14" height="14" fill="rgba(255,255,255,.7)">
-            <rect x="1" y="1" width="4" height="4" rx="0.5" />
-            <rect x="6" y="1" width="4" height="4" rx="0.5" />
-            <rect x="11" y="1" width="4" height="4" rx="0.5" />
-            <rect x="1" y="6" width="4" height="4" rx="0.5" />
-            <rect x="6" y="6" width="4" height="4" rx="0.5" />
-            <rect x="11" y="6" width="4" height="4" rx="0.5" />
-            <rect x="1" y="11" width="4" height="4" rx="0.5" />
-            <rect x="6" y="11" width="4" height="4" rx="0.5" />
-            <rect x="11" y="11" width="4" height="4" rx="0.5" />
-          </svg>
-          <span style={{ fontSize: 13, fontWeight: 600, color: '#fff', letterSpacing: '.01em' }}>SVS</span>
+        {/* Geometric mark + SVS brand — appears exactly once */}
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 9,
+          paddingRight: 14, borderRight: '1px solid rgba(255,255,255,.10)',
+          marginRight: 14,
+        }}>
+          <div style={{
+            width: 24, height: 24,
+            background: 'rgba(255,255,255,.12)',
+            border: '1px solid rgba(255,255,255,.18)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <svg viewBox="0 0 16 12" width="12" height="9" fill="rgba(255,255,255,.85)">
+              <rect x="0" y="0"   width="16"   height="2.5" />
+              <rect x="0" y="4.5" width="11"   height="2.5" />
+              <rect x="0" y="9"   width="13.5" height="2.5" />
+            </svg>
+          </div>
+          <span style={{ fontSize: 12, fontWeight: 600, color: '#fff', letterSpacing: '.08em', textTransform: 'uppercase' }}>SVS</span>
         </div>
 
-        {/* Page title */}
-        <span style={{ fontSize: 12, color: 'rgba(255,255,255,.75)' }}>Home</span>
+        {/* Context label */}
+        <span style={{ fontSize: 11, color: 'rgba(255,255,255,.38)' }}>Application Launchpad</span>
 
-        {/* Right: system status chip + user */}
-        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 14 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'rgba(255,255,255,.65)' }}>
+        {/* Right: system status + user icon */}
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'rgba(255,255,255,.55)' }}>
             <span style={{
-              width: 6, height: 6, borderRadius: '50%',
+              width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
               background: hasBad ? '#ff6b6b' : hasWarn ? '#ff8f3c' : '#3dd68c',
               display: 'inline-block',
             }} />
             {hasBad ? 'Action required' : hasWarn ? 'Warnings active' : 'All systems normal'}
           </div>
+          {/* User icon — no SVS text */}
           <div style={{
-            width: 28, height: 28, borderRadius: '50%',
-            background: 'rgba(255,255,255,.15)',
+            width: 28, height: 28,
+            background: 'rgba(255,255,255,.10)',
+            border: '1px solid rgba(255,255,255,.16)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,.8)',
-          }}>SVS</div>
+          }}>
+            <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="rgba(255,255,255,.65)" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="8" cy="5.5" r="2.5" />
+              <path d="M2.5 13.5c0-2.5 2.46-4.5 5.5-4.5s5.5 2 5.5 4.5" />
+            </svg>
+          </div>
         </div>
       </div>
 
