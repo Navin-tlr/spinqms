@@ -3,11 +3,12 @@
 @tailwind utilities;
 
 /* ═══════════════════════════════════════════════════════
-   SPINQMS DESIGN TOKENS  v3 — Notion-inspired
-   Warm off-white surfaces · tight geometry · minimal elevation
-   Primary text: #37352F (Notion warm charcoal)
-   Body bg:      #F7F7F5 (Notion sidebar off-white)
-   Cards:        #FFFFFF  (pure white blocks)
+   SPINQMS DESIGN TOKENS  v4 — SAP Fiori-inspired
+   Cool neutral surfaces · structured geometry · enterprise clarity
+   Primary text: #32363a (SAP neutral dark)
+   Body bg:      #f5f6f8 (SAP off-white blue-grey)
+   Cards:        #ffffff  (pure white panels)
+   Accent:       #0064d9  (SAP Fiori blue)
 ═══════════════════════════════════════════════════════ */
 
 /* ── Styrene B web font ─────────────────────────────────────────────────────*/
@@ -49,87 +50,87 @@
   --font: 'Styrene B', -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
   --mono: 'JetBrains Mono', "SF Mono", "Fira Code", "Consolas", monospace;
 
-  /* ── Surfaces — warm off-white (Notion palette) ─── */
-  --bg:         #FFFFFF;                  /* pure white — cards, inputs, modals */
-  --bg-2:       #F7F7F5;                  /* warm off-white — body & sidebar bg  */
-  --bg-3:       #EFEEEC;                  /* slightly deeper — code blocks, tiles */
-  --sidebar-bg: #F7F7F5;                  /* sidebar = body, seamless feel       */
-  --bg-hover:   rgba(55, 53, 47, .06);   /* row / item hover                    */
-  --bg-active:  rgba(55, 53, 47, .09);   /* selected / active state             */
+  /* ── Surfaces — SAP Fiori cool neutrals ────────── */
+  --bg:         #ffffff;                  /* pure white — cards, forms, panels   */
+  --bg-2:       #f5f6f8;                  /* SAP body background (light blue-grey)*/
+  --bg-3:       #edf0f2;                  /* deeper tint — stripes, code blocks  */
+  --sidebar-bg: #ffffff;                  /* sidebar white (SAP shell pattern)   */
+  --bg-hover:   rgba(0, 100, 217, .05);  /* SAP blue-tint row hover             */
+  --bg-active:  rgba(0, 100, 217, .10);  /* SAP blue-tint selected state        */
 
-  /* ── Borders — warm neutral ─────────────────────── */
-  --bd:    rgba(55, 53, 47, .09);
-  --bd-md: rgba(55, 53, 47, .15);
-  --bd-hv: rgba(55, 53, 47, .26);
+  /* ── Borders — cool neutral ──────────────────────── */
+  --bd:    #e8eaed;
+  --bd-md: #d1d5db;
+  --bd-hv: #9ca3af;
 
-  /* ── Text — warm charcoal (Notion exact) ────────── */
-  --tx:   #37352F;
-  --tx-2: #787774;
-  --tx-3: #ACABA8;
-  --tx-4: #C7C6C3;
+  /* ── Text — SAP neutral grey scale ──────────────── */
+  --tx:   #32363a;
+  --tx-2: #6a6d70;
+  --tx-3: #a9abad;
+  --tx-4: #c8cacb;
 
-  /* ── Status — clean, semantic ────────────────────── */
-  --ok:   #2D9A4E; --ok-bg:   #F0FDF4; --ok-bd:   #BBF7D0;
-  --warn: #9E6C00; --warn-bg: #FFF8EC; --warn-bd: #FDE68A;
-  --bad:  #B42626; --bad-bg:  #FEF2F2; --bad-bd:  #FECACA;
-  --info: #1559C7; --info-bg: #EFF6FF; --info-bd: #BFDBFE;
+  /* ── Status — SAP semantic ───────────────────────── */
+  --ok:   #188f36; --ok-bg:   #f0faf2; --ok-bd:   #abe2bc;
+  --warn: #e6600d; --warn-bg: #fff8f0; --warn-bd: #ffc47c;
+  --bad:  #bb0000; --bad-bg:  #fff0f0; --bad-bd:  #f9bfbf;
+  --info: #0064d9; --info-bg: #ebf4ff; --info-bd: #91c8f6;
 
-  /* ── Accent — SpinQMS warm terracotta ───────────── */
-  --claude:    #E06C47;
-  --claude-bg: #FFF3EE;
-  --claude-bd: #FCCCB5;
+  /* ── Accent — SAP Fiori blue ─────────────────────── */
+  --claude:    #0064d9;
+  --claude-bg: #ebf4ff;
+  --claude-bd: #91c8f6;
 
-  --purple: #7C3AED; --purple-bg: #F5F3FF; --purple-bd: #DDD6FE;
+  --purple: #6d2ac4; --purple-bg: #f3ecfb; --purple-bd: #c4a4e6;
 
-  /* ── Geometry — tight, Notion-like ──────────────── */
+  /* ── Geometry — SAP standard spacing ────────────── */
   --r:    4px;
   --r-lg: 6px;
   --r-xl: 10px;
 
-  --sidebar: 240px;
-  --hdr:     48px;
+  --sidebar: 248px;
+  --hdr:     44px;
 
-  /* ── Elevation — nearly flat (Notion aesthetic) ─── */
-  --shadow:    0 1px 3px rgba(15, 15, 15, .06), 0 0 0 1px rgba(55, 53, 47, .04);
-  --shadow-md: 0 4px 16px rgba(15, 15, 15, .08), 0 1px 4px rgba(15, 15, 15, .04);
-  --shadow-lg: 0 8px 30px rgba(15, 15, 15, .12), 0 2px 6px rgba(15, 15, 15, .04);
+  /* ── Elevation — SAP subtle shadows ─────────────── */
+  --shadow:    0 1px 4px rgba(0, 0, 0, .08);
+  --shadow-md: 0 2px 12px rgba(0, 0, 0, .10), 0 1px 3px rgba(0, 0, 0, .06);
+  --shadow-lg: 0 6px 24px rgba(0, 0, 0, .12), 0 2px 6px rgba(0, 0, 0, .06);
 }
 
 /* ── Dark mode ──────────────────────────────────────── */
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg:        #1F1E1D;
-    --bg-2:      #252423;
-    --bg-3:      #2F2E2C;
-    --sidebar-bg:#252423;
-    --bg-hover:  rgba(255, 255, 255, .05);
-    --bg-active: rgba(255, 255, 255, .08);
+    --bg:        #1a1d21;
+    --bg-2:      #22262b;
+    --bg-3:      #2a2f35;
+    --sidebar-bg:#1a1d21;
+    --bg-hover:  rgba(0, 144, 255, .08);
+    --bg-active: rgba(0, 144, 255, .14);
 
-    --bd:    rgba(255, 255, 255, .07);
-    --bd-md: rgba(255, 255, 255, .12);
-    --bd-hv: rgba(255, 255, 255, .20);
+    --bd:    rgba(255, 255, 255, .08);
+    --bd-md: rgba(255, 255, 255, .13);
+    --bd-hv: rgba(255, 255, 255, .22);
 
-    --tx:   #E7E6E3;
-    --tx-2: #9B9A97;
-    --tx-3: #6F6E69;
-    --tx-4: #52504D;
+    --tx:   #e5e7ea;
+    --tx-2: #9ba1a8;
+    --tx-3: #636970;
+    --tx-4: #464c54;
 
-    --ok:   #4ADE80; --ok-bg:   #052E16; --ok-bd:   #166534;
-    --warn: #FCD34D; --warn-bg: #1C1500; --warn-bd: #854D0E;
-    --bad:  #FCA5A5; --bad-bg:  #1C0A0A; --bad-bd:  #991B1B;
-    --info: #93C5FD; --info-bg: #0C1A3A; --info-bd: #1E40AF;
+    --ok:   #3dd68c; --ok-bg:   #04200e; --ok-bd:   #0d5c2c;
+    --warn: #ff8f3c; --warn-bg: #1c0f00; --warn-bd: #7c3600;
+    --bad:  #ff6b6b; --bad-bg:  #1c0000; --bad-bd:  #8b0000;
+    --info: #5eaeff; --info-bg: #001830; --info-bd: #1a4a8c;
 
-    --claude:    #F97316;
-    --claude-bg: #1C0F05;
-    --claude-bd: #7C2D12;
+    --claude:    #4ca5ff;
+    --claude-bg: #001225;
+    --claude-bd: #1a4a8c;
 
-    --purple:    #A78BFA;
-    --purple-bg: #1E1040;
-    --purple-bd: #5B21B6;
+    --purple:    #a98ff4;
+    --purple-bg: #160d2e;
+    --purple-bd: #4a2a8c;
 
-    --shadow:    0 1px 4px rgba(0, 0, 0, .4);
-    --shadow-md: 0 4px 16px rgba(0, 0, 0, .45), 0 2px 4px rgba(0, 0, 0, .3);
-    --shadow-lg: 0 10px 30px rgba(0, 0, 0, .5), 0 4px 8px rgba(0, 0, 0, .35);
+    --shadow:    0 1px 4px rgba(0, 0, 0, .5);
+    --shadow-md: 0 4px 16px rgba(0, 0, 0, .55), 0 2px 4px rgba(0, 0, 0, .4);
+    --shadow-lg: 0 10px 30px rgba(0, 0, 0, .6), 0 4px 8px rgba(0, 0, 0, .45);
   }
 }
 
@@ -158,7 +159,7 @@ input[type="number"] { -moz-appearance: textfield; }
 input:focus, select:focus, textarea:focus {
   outline: none;
   border-color: var(--claude) !important;
-  box-shadow: 0 0 0 2px var(--claude-bg), inset 0 0 0 1px var(--claude-bd) !important;
+  box-shadow: 0 0 0 3px rgba(0, 100, 217, .15), 0 0 0 1px var(--claude) !important;
 }
 button:focus-visible {
   outline: 2px solid var(--claude);

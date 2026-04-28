@@ -46,6 +46,8 @@ export default function Layout({
   productionView, setProductionView,
   children,
 }) {
+  /* Go back to the landing page */
+  const goHome = () => setCurrentModule && setCurrentModule(null)
   const [menuOpen, setMenuOpen] = useState(false)
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768)
   const [navOrder, setNavOrder] = useState(() => {
@@ -115,21 +117,21 @@ export default function Layout({
           </button>
         )}
 
-        {/* ── Brand ── */}
+        {/* ── Brand / section header ── */}
         <div style={{
           display: 'flex', alignItems: 'center', gap: 10,
-          padding: '14px 14px 12px',
+          padding: '16px 16px 14px',
           borderBottom: '1px solid var(--bd)',
           flexShrink: 0,
+          background: 'var(--sidebar-bg)',
         }}>
-          {/* Logo mark — spinning circle */}
           <div style={{
-            width: 28, height: 28,
-            background: 'var(--claude)', borderRadius: 7,
+            width: 30, height: 30,
+            background: '#354a5e', borderRadius: 7,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             flexShrink: 0,
           }}>
-            <svg viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="white" strokeWidth="1.8" strokeLinecap="round">
+            <svg viewBox="0 0 20 20" width="15" height="15" fill="none" stroke="rgba(255,255,255,.85)" strokeWidth="1.8" strokeLinecap="round">
               <circle cx="10" cy="10" r="6.5" />
               <line x1="10" y1="3.5" x2="10" y2="6.5" />
               <line x1="10" y1="13.5" x2="10" y2="16.5" />
@@ -138,8 +140,10 @@ export default function Layout({
             </svg>
           </div>
           <div>
-            <div style={{ fontSize: 13.5, fontWeight: 600, letterSpacing: '-.02em', lineHeight: 1.2, color: 'var(--tx)' }}>SpinQMS</div>
-            <div style={{ fontSize: 10, color: 'var(--tx-3)', marginTop: 1, letterSpacing: '.03em' }}>Ne 47 Weft · SQC</div>
+            <div style={{ fontSize: 13, fontWeight: 600, letterSpacing: '-.01em', lineHeight: 1.25, color: 'var(--tx)' }}>
+              {currentModule === 'quality' ? 'Quality Management' : 'Production'}
+            </div>
+            <div style={{ fontSize: 10, color: 'var(--tx-3)', marginTop: 1, letterSpacing: '.02em' }}>SpinQMS Enterprise</div>
           </div>
         </div>
 
@@ -264,22 +268,23 @@ export default function Layout({
           })}
         </div>
 
-        {/* ── Footer ── */}
+        {/* ── Sidebar footer — system status ── */}
         <div style={{
-          padding: '10px 14px 12px',
+          padding: '10px 14px 14px',
           borderTop: '1px solid var(--bd)',
           flexShrink: 0,
+          background: 'var(--sidebar-bg)',
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 11.5 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
             <span style={{
               width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
               background: dotColor,
-              boxShadow: `0 0 0 2px color-mix(in srgb, ${dotColor} 20%, transparent)`,
+              boxShadow: `0 0 0 3px color-mix(in srgb, ${dotColor} 18%, transparent)`,
               animation: 'pulse 2.5s ease-in-out infinite',
             }} />
-            <span style={{ color: 'var(--tx-2)', fontWeight: 500 }}>{statusTxt}</span>
+            <span style={{ fontSize: 11, color: 'var(--tx-2)', fontWeight: 500 }}>{statusTxt}</span>
           </div>
-          <div style={{ fontSize: 10.5, color: 'var(--tx-4)', marginTop: 3, fontFamily: 'var(--mono)' }}>{lastSaved}</div>
+          <div style={{ fontSize: 10, color: 'var(--tx-4)', marginTop: 3, fontFamily: 'var(--mono)', letterSpacing: '.02em' }}>{lastSaved}</div>
         </div>
 
         {/* Close quality-only block */}
@@ -289,28 +294,57 @@ export default function Layout({
       {/* ── Main area ── */}
       <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', background: 'var(--bg-2)' }}>
 
-        {/* ── SAP-style Module Shell Bar ── */}
+        {/* ── SAP Fiori Shell Bar ── */}
         <div style={{
-          height: 40,
+          height: 44,
           background: '#354a5e',
           display: 'flex',
           alignItems: 'center',
-          padding: '0 0 0 20px',
+          padding: '0 0 0 16px',
           flexShrink: 0,
           gap: 0,
+          boxShadow: '0 2px 6px rgba(0,0,0,.18)',
         }}>
-          {/* Shell brand */}
-          <div style={{
-            fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,.55)',
-            letterSpacing: '.06em', textTransform: 'uppercase', paddingRight: 20,
-            borderRight: '1px solid rgba(255,255,255,.12)',
-            marginRight: 4,
-          }}>SpinQMS</div>
+          {/* Home / brand button */}
+          <button
+            onClick={goHome}
+            title="Home — Application Launchpad"
+            style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              padding: '0 16px 0 0',
+              marginRight: 4,
+              borderRight: '1px solid rgba(255,255,255,.12)',
+              background: 'transparent', border: 'none',
+              cursor: 'pointer', height: 44,
+            }}
+          >
+            {/* SAP-style 3×3 grid icon */}
+            <svg viewBox="0 0 16 16" width="15" height="15" fill="rgba(255,255,255,.7)">
+              <rect x="1" y="1" width="4" height="4" rx="0.8" />
+              <rect x="6" y="1" width="4" height="4" rx="0.8" />
+              <rect x="11" y="1" width="4" height="4" rx="0.8" />
+              <rect x="1" y="6" width="4" height="4" rx="0.8" />
+              <rect x="6" y="6" width="4" height="4" rx="0.8" />
+              <rect x="11" y="6" width="4" height="4" rx="0.8" />
+              <rect x="1" y="11" width="4" height="4" rx="0.8" />
+              <rect x="6" y="11" width="4" height="4" rx="0.8" />
+              <rect x="11" y="11" width="4" height="4" rx="0.8" />
+            </svg>
+            <span style={{
+              fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,.85)',
+              letterSpacing: '.04em', textTransform: 'uppercase',
+            }}>SpinQMS</span>
+          </button>
 
-          {/* Module tabs */}
+          {/* Divider label */}
+          <div style={{ fontSize: 11, color: 'rgba(255,255,255,.4)', padding: '0 12px', borderRight: '1px solid rgba(255,255,255,.10)', marginRight: 0, height: 44, display: 'flex', alignItems: 'center' }}>
+            {currentModule === 'quality' ? 'Quality Management' : 'Production & Inventory'}
+          </div>
+
+          {/* Module nav tabs */}
           {[
-            { id: 'quality',    label: 'Quality',              badge: null },
-            { id: 'production', label: 'Production & Inventory', badge: null },
+            { id: 'quality',    label: 'Quality' },
+            { id: 'production', label: 'Production' },
           ].map(mod => {
             const active = currentModule === mod.id
             return (
@@ -318,30 +352,46 @@ export default function Layout({
                 key={mod.id}
                 onClick={() => setCurrentModule && setCurrentModule(mod.id)}
                 style={{
-                  height: 40,
-                  padding: '0 18px',
+                  height: 44,
+                  padding: '0 16px',
                   fontSize: 12, fontWeight: active ? 600 : 400,
-                  border: 'none', borderBottom: active ? '2px solid #fff' : '2px solid transparent',
-                  background: active ? 'rgba(255,255,255,.10)' : 'transparent',
-                  color: active ? '#fff' : 'rgba(255,255,255,.6)',
+                  border: 'none',
+                  borderBottom: active ? '2.5px solid #fff' : '2.5px solid transparent',
+                  background: active ? 'rgba(255,255,255,.09)' : 'transparent',
+                  color: active ? '#fff' : 'rgba(255,255,255,.55)',
                   cursor: 'pointer',
                   fontFamily: 'var(--font)',
                   transition: 'all .15s',
                   whiteSpace: 'nowrap',
                 }}
+                onMouseEnter={e => { if (!active) { e.currentTarget.style.color = 'rgba(255,255,255,.85)'; e.currentTarget.style.background = 'rgba(255,255,255,.05)' }}}
+                onMouseLeave={e => { if (!active) { e.currentTarget.style.color = 'rgba(255,255,255,.55)'; e.currentTarget.style.background = 'transparent' }}}
               >
                 {mod.label}
               </button>
             )
           })}
+
+          {/* Right side — user avatar placeholder */}
+          <div style={{ marginLeft: 'auto', marginRight: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{
+              width: 28, height: 28, borderRadius: '50%',
+              background: 'rgba(255,255,255,.15)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,.8)',
+              letterSpacing: '.02em',
+            }}>
+              SVS
+            </div>
+          </div>
         </div>
 
-        {/* ── Header ── */}
+        {/* ── SAP Content Header — breadcrumb bar ── */}
         <header style={{
           height: 'var(--hdr)',
           display: 'flex', alignItems: 'center',
           justifyContent: 'space-between',
-          padding: '0 20px',
+          padding: '0 24px',
           background: 'var(--bg)',
           borderBottom: '1px solid var(--bd)',
           flexShrink: 0,
@@ -358,18 +408,34 @@ export default function Layout({
                   borderRadius: 'var(--r)', flexShrink: 0,
                 }}>☰</button>
             )}
-            {/* Breadcrumb */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+
+            {/* SAP-style breadcrumb: Home › Module › Page */}
+            <nav style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <button
+                onClick={goHome}
+                style={{
+                  background: 'none', border: 'none', padding: '2px 4px',
+                  fontSize: 11, color: 'var(--claude)', cursor: 'pointer',
+                  fontFamily: 'var(--font)', borderRadius: 3,
+                  display: 'flex', alignItems: 'center', gap: 4,
+                }}
+              >
+                <svg viewBox="0 0 14 14" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M2 7L7 2l5 5M3.5 5.5V12h3V8.5h1V12h3V5.5" />
+                </svg>
+                Home
+              </button>
+              <span style={{ fontSize: 10, color: 'var(--tx-4)' }}>›</span>
               <span style={{ fontSize: 11, color: 'var(--tx-3)' }}>
-                {currentModule === 'production' ? 'Production' : 'Quality'}
+                {currentModule === 'production' ? 'Production & Inventory' : 'Quality Management'}
               </span>
-              <span style={{ fontSize: 11, color: 'var(--tx-4)' }}>/</span>
-              <span style={{ fontSize: 13.5, fontWeight: 500, color: 'var(--tx)', letterSpacing: '-.01em' }}>
+              <span style={{ fontSize: 10, color: 'var(--tx-4)' }}>›</span>
+              <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--tx)', letterSpacing: '-.01em' }}>
                 {currentModule === 'production'
                   ? (PRODUCTION_NAV.find(n => n.id === productionView)?.label ?? 'Production')
                   : currentLabel}
               </span>
-            </div>
+            </nav>
           </div>
 
           {!isMobile && (
@@ -462,22 +528,22 @@ function NavIcon({ d, size = 15, active }) {
   )
 }
 
-/* ── Header action button ──────────────────────────────────────────────── */
+/* ── Header action button — SAP ghost style ────────────────────────────── */
 function HeaderBtn({ children, onClick }) {
   return (
     <button onClick={onClick}
       style={{
         display: 'inline-flex', alignItems: 'center', gap: 5,
-        padding: '4px 10px', fontSize: 12, fontWeight: 400,
+        padding: '5px 12px', fontSize: 12, fontWeight: 500,
         border: '1px solid var(--bd-md)', borderRadius: 'var(--r)',
         background: 'var(--bg)', color: 'var(--tx-2)',
         cursor: 'pointer', fontFamily: 'var(--font)',
-        transition: 'all .1s',
+        transition: 'all .1s', letterSpacing: '.01em',
       }}
       onMouseEnter={e => {
-        e.currentTarget.style.background = 'var(--bg-hover)'
-        e.currentTarget.style.borderColor = 'var(--bd-hv)'
-        e.currentTarget.style.color = 'var(--tx)'
+        e.currentTarget.style.background = 'var(--claude-bg)'
+        e.currentTarget.style.borderColor = 'var(--claude-bd)'
+        e.currentTarget.style.color = 'var(--claude)'
       }}
       onMouseLeave={e => {
         e.currentTarget.style.background = 'var(--bg)'
@@ -489,14 +555,15 @@ function HeaderBtn({ children, onClick }) {
   )
 }
 
-/* ── Section label ─────────────────────────────────────────────────────── */
+/* ── Sidebar section label — SAP group header style ─────────────────────── */
 function SideLabel({ children }) {
   return (
     <div style={{
-      fontSize: 10.5, fontWeight: 500,
-      letterSpacing: '.07em', textTransform: 'uppercase',
+      fontSize: 10, fontWeight: 600,
+      letterSpacing: '.09em', textTransform: 'uppercase',
       color: 'var(--tx-4)',
-      padding: '2px 8px 6px',
+      padding: '4px 10px 5px',
+      marginTop: 2,
     }}>
       {children}
     </div>

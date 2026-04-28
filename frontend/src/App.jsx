@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import Layout from './components/Layout.jsx'
+import LandingPage from './components/views/LandingPage.jsx'
 import Overview from './components/views/Overview.jsx'
 import DataEntry from './components/views/DataEntry.jsx'
 import ControlCharts from './components/views/ControlCharts.jsx'
@@ -85,7 +86,7 @@ export default function App() {
   const [loading,       setLoading]       = useState(true)
   const [machineFilter, setMachineFilter] = useState(null)
   /* ── Module switching ─────────────────────────────────────────────────── */
-  const [currentModule,    setCurrentModule]    = useState('quality')   // 'quality' | 'production'
+  const [currentModule,    setCurrentModule]    = useState(null)        // null = landing | 'quality' | 'production'
   const [productionView,   setProductionView]   = useState('dashboard') // 'dashboard' | 'entry' | 'log'
 
   // Reset machine filter when department changes
@@ -121,9 +122,25 @@ export default function App() {
 
   if (loading) {
     return (
-      <div style={{ display:'flex', height:'100vh', alignItems:'center', justifyContent:'center', flexDirection:'column', gap:16 }}>
-        <Spinner />
-        <div style={{ fontSize:13, color:'var(--tx-3)' }}>Connecting to SpinQMS backend…</div>
+      <div style={{ display:'flex', height:'100vh', alignItems:'center', justifyContent:'center', flexDirection:'column', gap:16, background:'#f5f6f8' }}>
+        <div style={{ width:40, height:40, background:'#354a5e', borderRadius:10, display:'flex', alignItems:'center', justifyContent:'center' }}>
+          <div style={{ width:20, height:20, borderRadius:'50%', border:'2px solid rgba(255,255,255,.25)', borderTopColor:'#fff', animation:'spin .7s linear infinite' }} />
+        </div>
+        <div style={{ fontSize:13, color:'#6a6d70', fontWeight:500 }}>Connecting to SpinQMS…</div>
+      </div>
+    )
+  }
+
+  /* ── Landing page (no module selected) ──────────────────────────────── */
+  if (currentModule === null) {
+    return (
+      <div style={{ height: '100vh', overflowY: 'auto' }}>
+        <LandingPage
+          setCurrentModule={setCurrentModule}
+          overview={overview}
+          alerts={alerts}
+          depts={depts}
+        />
       </div>
     )
   }
