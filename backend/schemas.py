@@ -678,6 +678,24 @@ class GoodsReceiptOut(BaseModel):
     created_at: datetime
 
 
+# ── Quick receipt (direct stock addition without PO) ──────────────────────────
+class QuickReceiptLineCreate(BaseModel):
+    material_id: int
+    quantity: float = Field(..., gt=0)
+
+class QuickReceiptCreate(BaseModel):
+    receipt_date: Optional[date] = None
+    reference: Optional[str] = Field(None, max_length=120)
+    notes: Optional[str] = None
+    lines: List[QuickReceiptLineCreate] = Field(..., min_length=1)
+
+class QuickReceiptOut(BaseModel):
+    gr_number: str
+    receipt_date: date
+    lines_posted: int
+    created_at: datetime
+
+
 # ── Error response (used by global exception handler) ────────────────────────
 class ErrorResponse(BaseModel):
     detail:    str

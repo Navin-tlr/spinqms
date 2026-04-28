@@ -102,6 +102,7 @@ export const getPurchaseRecommendations = (status = 'open')  => http.get('/purch
 export const convertRecommendationToPO = (id, body)          => http.post(`/purchase/recommendations/${id}/convert-to-po`, body).then(r => r.data)
 export const getPurchaseOrders         = ()                  => http.get('/purchase/orders').then(r => r.data)
 export const receivePurchaseOrder      = (id, body)          => http.post(`/purchase/orders/${id}/receive`, body).then(r => r.data)
+export const quickReceipt              = (body)              => http.post('/inventory/quick-receipt', body).then(r => r.data)
 
 // Client-side formula mirrors (for live preview before save)
 export const calcEfficiencyKg    = (stdRate, effPct, hours) =>

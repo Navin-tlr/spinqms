@@ -86,6 +86,8 @@ from schemas import (
     ProductionStdRateUpdate,
     GoodsReceiptCreate,
     GoodsReceiptOut,
+    QuickReceiptCreate,
+    QuickReceiptOut,
     InventoryMovementOut,
     InventoryOverviewItem,
     MaterialMarketPriceCreate,
@@ -2867,4 +2869,38 @@ def receive_purchase_order(po_id: int, body: GoodsReceiptCreate, db: Session = D
         "purchase_order_id": gr.purchase_order_id,
         "receipt_date": gr.receipt_date,
         "created_at": gr.created_at,
+    }
+
+
+@app.post("/api/inventory/quick-receipt", response_model=QuickReceiptOut, status_code=201)
+def quick_receipt(body: QuickReceiptCreate, db: Session = Depends(get_db)):
+    """
+    Direct stock receipt without a purchase order.
+    Used for bootstrapping initial inventory or ad-hoc receipts.
+    Each line posts a positive inventory_movement of type 'receipt' / source 'quick_receipt'.
+    """
+    now = datetime.now(timezone.utc)
+    receipt_date = body.receipt_date or date.today()
+    gr_number = f"GR-{now.strftime('%Y%m%d%H%M%S')}"
+
+    for item in body.lines:
+        material = _material_or_404(db, item.material_id)
+        _post_inventory_movement(
+            db,
+            material=material,
+            quantity_delta=item.quantity,
+            movement_type="receipt",
+            source_type="quick_receipt",
+            movement_date=receipt_date,
+            unit=material.base_unit,
+            notes=f"{gr_number}: {body.reference or 'Direct material receipt'}",
+        )
+        _evaluate_mrp(db, material)
+
+    db.commit()
+    return {
+        "gr_number": gr_number,
+        "receipt_date": receipt_date,
+        "lines_posted": len(body.lines),
+        "created_at": now,
     }

@@ -5,6 +5,7 @@ import {
   getInventoryMovements,
   getInventoryOverview,
   getMaterials,
+  quickReceipt,
   updateMaterialPlanning,
 } from '../../api.js'
 import { Spinner } from '../Primitives.jsx'
@@ -212,6 +213,136 @@ function MaterialMovements({ movements, loading }) {
   )
 }
 
+function MaterialReceipt({ materials, onPosted }) {
+  const today = new Date().toISOString().slice(0, 10)
+  const [receiptDate, setReceiptDate] = useState(today)
+  const [reference,   setReference]   = useState('')
+  const [lines,       setLines]       = useState([{ material_id: '', quantity: '' }])
+  const [posting,     setPosting]     = useState(false)
+  const [message,     setMessage]     = useState('')
+  const [error,       setError]       = useState('')
+
+  const materialMap = Object.fromEntries(materials.map(m => [String(m.id), m]))
+  const addRow    = () => setLines(prev => [...prev, { material_id: '', quantity: '' }])
+  const removeRow = idx => setLines(prev => prev.length === 1 ? prev : prev.filter((_, i) => i !== idx))
+  const updateRow = (idx, patch) => setLines(prev => prev.map((row, i) => i === idx ? { ...row, ...patch } : row))
+
+  const canPost = lines.every(row => row.material_id && Number(row.quantity) > 0)
+
+  const post = async () => {
+    setPosting(true); setError(''); setMessage('')
+    try {
+      const doc = await quickReceipt({
+        receipt_date: receiptDate,
+        reference:    reference || 'Direct material receipt',
+        lines: lines.map(row => ({
+          material_id: Number(row.material_id),
+          quantity:    Number(row.quantity),
+        })),
+      })
+      setMessage(`Posted ${doc.gr_number} — ${doc.lines_posted} line(s)`)
+      setLines([{ material_id: '', quantity: '' }])
+      setReference('')
+      onPosted && onPosted()
+    } catch (e) {
+      setError(e?.response?.data?.detail || 'Posting failed')
+    } finally {
+      setPosting(false)
+    }
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+      {/* Header */}
+      <div style={{ background: '#fff', border: '1px solid #d9dadb', borderBottom: 'none', padding: '14px 16px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '180px 1fr', gap: 16, alignItems: 'end' }}>
+          <div>
+            <div style={{ fontSize: 11, color: '#6a6d70', marginBottom: 4 }}>Receipt Date</div>
+            <input
+              type="date" value={receiptDate} max={today}
+              onChange={e => setReceiptDate(e.target.value)}
+              style={{ ...inputStyle, width: '100%' }}
+            />
+          </div>
+          <div>
+            <div style={{ fontSize: 11, color: '#6a6d70', marginBottom: 4 }}>Reference / Reason</div>
+            <input
+              value={reference}
+              onChange={e => setReference(e.target.value)}
+              placeholder="e.g. Opening stock, Return from store, Supplier delivery…"
+              style={{ ...inputStyle, width: '100%' }}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Line items */}
+      <div style={{ background: '#fff', border: '1px solid #d9dadb', overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead>
+            <tr>
+              {['Line', 'Material', 'Quantity', 'Unit', 'Movement Type', ''].map(h => (
+                <th key={h} style={{ padding: '7px 12px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#6a6d70', textTransform: 'uppercase', letterSpacing: '.07em', background: '#f5f5f5', borderBottom: '1px solid #d9dadb' }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {lines.map((line, idx) => {
+              const material = materialMap[line.material_id]
+              return (
+                <tr key={idx}>
+                  <td style={{ padding: '7px 12px', fontFamily: 'var(--mono)', fontSize: 12, borderBottom: '1px solid #eeeeee', width: 60 }}>{idx + 1}</td>
+                  <td style={{ padding: '5px 12px', borderBottom: '1px solid #eeeeee', minWidth: 220 }}>
+                    <select value={line.material_id} onChange={e => updateRow(idx, { material_id: e.target.value })} style={{ ...inputStyle, width: '100%' }}>
+                      <option value="">Select material</option>
+                      {materials.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                    </select>
+                  </td>
+                  <td style={{ padding: '5px 12px', borderBottom: '1px solid #eeeeee', width: 160 }}>
+                    <input
+                      type="number" min="0" step={material?.base_unit === 'Bales' ? 1 : 0.1}
+                      value={line.quantity}
+                      onChange={e => updateRow(idx, { quantity: e.target.value })}
+                      style={{ ...inputStyle, width: '100%', fontFamily: 'var(--mono)' }}
+                    />
+                  </td>
+                  <td style={{ padding: '7px 12px', fontFamily: 'var(--mono)', fontSize: 12, color: '#6a6d70', borderBottom: '1px solid #eeeeee', width: 100 }}>{material?.base_unit || '-'}</td>
+                  <td style={{ padding: '7px 12px', fontSize: 12, color: '#188f36', fontWeight: 600, borderBottom: '1px solid #eeeeee', width: 120 }}>GR</td>
+                  <td style={{ padding: '5px 12px', borderBottom: '1px solid #eeeeee', width: 90 }}>
+                    <button onClick={() => removeRow(idx)} disabled={lines.length === 1} style={{ ...inputStyle, cursor: lines.length === 1 ? 'not-allowed' : 'pointer', color: lines.length === 1 ? '#89919a' : '#bb0000' }}>Remove</button>
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Footer */}
+      <div style={{ background: '#fff', border: '1px solid #d9dadb', borderTop: 'none', padding: '10px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <button onClick={addRow} style={{ ...inputStyle, cursor: 'pointer' }}>Add Row</button>
+        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+          {error   && <span style={{ fontSize: 12, color: '#bb0000' }}>{error}</span>}
+          {message && <span style={{ fontSize: 12, color: '#188f36' }}>{message}</span>}
+          <button
+            disabled={!canPost || posting} onClick={post}
+            style={{
+              ...inputStyle,
+              background:  canPost ? SAP_BLUE : '#f2f2f2',
+              color:       canPost ? '#fff' : '#89919a',
+              borderColor: canPost ? SAP_BLUE : '#d9dadb',
+              cursor:      canPost ? 'pointer' : 'not-allowed',
+              fontWeight:  600,
+            }}
+          >
+            {posting ? 'Posting…' : 'Post GR'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function Planning({ rows, onSaved }) {
   const [drafts, setDrafts] = useState({})
   const [price, setPrice] = useState({ material_id: '', price: '', price_date: new Date().toISOString().slice(0, 10) })
@@ -316,20 +447,22 @@ export default function InventoryPlanning({ mode = 'stock' }) {
   useEffect(() => { load() }, [load])
 
   const titles = {
-    stock: ['Stock Overview', 'Current stock, days left, and reorder status'],
-    issue: ['Material Issue', 'Post goods issue documents for daily production'],
-    movements: ['Material Movements', 'Auditable goods issue and goods receipt ledger'],
-    planning: ['Planning (MRP)', 'Lead time, safety stock, price trend, and reorder parameters'],
+    stock:     ['Stock Overview',    'Current stock, days left, and reorder status'],
+    issue:     ['Material Issue',    'Post goods issue documents for daily production'],
+    receipt:   ['Material Receipt',  'Post direct stock receipt without a purchase order'],
+    movements: ['Material Movements','Auditable goods issue and goods receipt ledger'],
+    planning:  ['Planning (MRP)',    'Lead time, safety stock, price trend, and reorder parameters'],
   }
   const [title, subtitle] = titles[mode] || titles.stock
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
       <PageBar title={title} subtitle={subtitle} onRefresh={load} />
-      {mode === 'stock' && <StockOverview rows={rows} loading={loading} />}
-      {mode === 'issue' && <MaterialIssue materials={materials} onPosted={load} />}
+      {mode === 'stock'     && <StockOverview   rows={rows}         loading={loading} />}
+      {mode === 'issue'     && <MaterialIssue   materials={materials} onPosted={load} />}
+      {mode === 'receipt'   && <MaterialReceipt materials={materials} onPosted={load} />}
       {mode === 'movements' && <MaterialMovements movements={movements} loading={loading} />}
-      {mode === 'planning' && <Planning rows={rows} onSaved={load} />}
+      {mode === 'planning'  && <Planning         rows={rows}         onSaved={load} />}
     </div>
   )
 }
