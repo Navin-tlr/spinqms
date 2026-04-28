@@ -7,6 +7,10 @@ import axios from 'axios'
 
 const http = axios.create({ baseURL: '/api' })
 
+/* Strip null / undefined / empty-string values so Axios doesn't send ?key= */
+const clean = (params = {}) =>
+  Object.fromEntries(Object.entries(params).filter(([, v]) => v != null && v !== ''))
+
 // ── Settings ──────────────────────────────────────────────────────────────────
 export const getSettings    = ()              => http.get('/settings').then(r => r.data)
 export const updateSettings = (deptId, body) => http.put(`/settings/${deptId}`, body).then(r => r.data)
@@ -25,24 +29,17 @@ export const clearSamples  = ()                              => http.delete('/sa
 export const deleteSample  = (id)                            => http.delete(`/samples/${id}`)
 
 // ── Overview ──────────────────────────────────────────────────────────────────
-export const getOverview = (params = {}) => {
-  const clean = Object.fromEntries(Object.entries(params).filter(([, v]) => v != null && v !== ''))
-  return http.get('/overview', { params: clean }).then(r => r.data)
-}
+export const getOverview = (params = {}) =>
+  http.get('/overview', { params: clean(params) }).then(r => r.data)
 export const getAlerts   = ()      => http.get('/alerts').then(r => r.data)
 
 // ── Data Log ──────────────────────────────────────────────────────────────────
-export const getLog = (params) => {
-  // strip undefined/null values so axios doesn't send empty query params
-  const clean = Object.fromEntries(Object.entries(params).filter(([, v]) => v != null && v !== ''))
-  return http.get('/log', { params: clean }).then(r => r.data)
-}
+export const getLog = (params) =>
+  http.get('/log', { params: clean(params) }).then(r => r.data)
 
 // ── Uster ─────────────────────────────────────────────────────────────────────
-export const getUster = (params = {}) => {
-  const clean = Object.fromEntries(Object.entries(params).filter(([, v]) => v != null && v !== ''))
-  return http.get('/uster', { params: clean }).then(r => r.data)
-}
+export const getUster = (params = {}) =>
+  http.get('/uster', { params: clean(params) }).then(r => r.data)
 
 // ── Utility calcs ─────────────────────────────────────────────────────────────
 export const calcIrregularity = (body) => http.post('/calc/irregularity', body).then(r => r.data)

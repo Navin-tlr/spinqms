@@ -718,20 +718,33 @@ export default function InventoryPlanning({ mode = 'stock' }) {
   const [vendors,   setVendors]   = useState([])
   const [movements, setMovements] = useState([])
   const [loading,   setLoading]   = useState(true)
+  const [loadErrors, setLoadErrors] = useState([])
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [ovRes, matRes, venRes, movRes] = await Promise.allSettled([
-      getInventoryOverview(),
-      getMaterials(),
-      getVendors(),
-      getInventoryMovements({ limit: 300 }),
-    ])
-    if (ovRes.status  === 'fulfilled') setRows(ovRes.value)
-    if (matRes.status === 'fulfilled') setMaterials(matRes.value)
-    if (venRes.status === 'fulfilled') setVendors(venRes.value)
-    if (movRes.status === 'fulfilled') setMovements(movRes.value)
-    setLoading(false)
+    setLoadErrors([])
+    try {
+      const [ovRes, matRes, venRes, movRes] = await Promise.allSettled([
+        getInventoryOverview(),
+        getMaterials(),
+        getVendors(),
+        getInventoryMovements({ limit: 300 }),
+      ])
+      const errs = []
+      if (ovRes.status  === 'fulfilled') setRows(ovRes.value)
+      else errs.push(`Stock overview: ${errMsg(ovRes.reason)}`)
+      if (matRes.status === 'fulfilled') setMaterials(matRes.value)
+      else errs.push(`Materials: ${errMsg(matRes.reason)}`)
+      if (venRes.status === 'fulfilled') setVendors(venRes.value)
+      else errs.push(`Vendors: ${errMsg(venRes.reason)}`)
+      if (movRes.status === 'fulfilled') setMovements(movRes.value)
+      else errs.push(`Movements: ${errMsg(movRes.reason)}`)
+      if (errs.length) setLoadErrors(errs)
+    } catch (e) {
+      setLoadErrors([`Unexpected error: ${errMsg(e)}`])
+    } finally {
+      setLoading(false)
+    }
   }, [])
 
   useEffect(() => { load() }, [load])
@@ -763,20 +776,32 @@ export default function InventoryPlanning({ mode = 'stock' }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-      <PageBar title={title} subtitle={subtitle} onRefresh={load} />
-      {loading && mode !== 'vendors' && mode !== 'materials' ? (
-        <div style={{ padding: 48, textAlign: 'center' }}><Spinner /></div>
-      ) : (
-        <>
-          {mode === 'vendors'   && <VendorMaster    vendors={vendors}      onChanged={onVendorChanged} />}
-          {mode === 'materials' && <MaterialMaster  materials={materials}  onChanged={onMaterialChanged} />}
-          {mode === 'stock'     && <StockOverview   rows={rows}            loading={loading} />}
-          {mode === 'receipt'   && <MaterialReceipt materials={materials}  vendors={vendors} onPosted={load} />}
-          {mode === 'issue'     && <MaterialIssue   materials={materials}  stockRows={rows}  onPosted={load} />}
-          {mode === 'movements' && <MaterialMovements movements={movements} loading={loading} />}
-          {mode === 'planning'  && <Planning         rows={rows}           onSaved={load} />}
-        </>
+      <PageBar title={title} subtitle={subtitle} onRefresh={load}>
+        {loading && (
+          <span style={{ fontSize: 11, color: '#89919a', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ display: 'inline-block', width: 12, height: 12, border: '2px solid #d9dadb', borderTopColor: B, borderRadius: '50%', animation: 'spin .7s linear infinite' }} />
+            Loading…
+          </span>
+        )}
+      </PageBar>
+
+      {/* Surface any API errors as a non-blocking banner */}
+      {loadErrors.length > 0 && (
+        <div style={{ background: '#fff5f5', border: '1px solid #ffcccc', borderBottom: 'none', padding: '8px 16px' }}>
+          {loadErrors.map((e, i) => (
+            <div key={i} style={{ fontSize: 12, color: ERR }}>⚠ {e}</div>
+          ))}
+        </div>
       )}
+
+      {/* All modes render immediately — no loading gate blocking forms */}
+      {mode === 'vendors'   && <VendorMaster    vendors={vendors}      onChanged={onVendorChanged} />}
+      {mode === 'materials' && <MaterialMaster  materials={materials}  onChanged={onMaterialChanged} />}
+      {mode === 'stock'     && <StockOverview   rows={rows}            loading={loading} />}
+      {mode === 'receipt'   && <MaterialReceipt materials={materials}  vendors={vendors} onPosted={load} />}
+      {mode === 'issue'     && <MaterialIssue   materials={materials}  stockRows={rows}  onPosted={load} />}
+      {mode === 'movements' && <MaterialMovements movements={movements} loading={loading} />}
+      {mode === 'planning'  && <Planning         rows={rows}           onSaved={load} />}
     </div>
   )
 }
