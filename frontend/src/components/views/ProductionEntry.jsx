@@ -10,7 +10,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import {
   getProductionStdRates, updateProductionStdRate,
-  createProductionEntry, getMaterials,
+  createProductionEntry,
   calcEfficiencyKg, calcHankMeterKg, calcTheoreticalKg,
 } from '../../api.js'
 
@@ -274,8 +274,6 @@ export default function ProductionEntry({ onSaved }) {
   const [tpi, setTpi] = useState('')
 
   const [stdRates, setStdRates] = useState({})
-  const [materials, setMaterials] = useState([])
-  const [consumption, setConsumption] = useState([])
   const loadRates = useCallback(async () => {
     try {
       const rows = await getProductionStdRates()
@@ -285,12 +283,6 @@ export default function ProductionEntry({ onSaved }) {
     } catch {}
   }, [])
   useEffect(() => { loadRates() }, [loadRates])
-  useEffect(() => {
-    getMaterials().then(rows => {
-      setMaterials(rows)
-      setConsumption(rows.map(m => ({ material_code: m.code, material_id: m.id, item: m.name, quantity: '', unit: m.base_unit })))
-    }).catch(() => {})
-  }, [])
 
   const dept = DEPTS.find(d => d.id === selDeptId)
 
@@ -338,18 +330,10 @@ export default function ProductionEntry({ onSaved }) {
         if (rpm) body.spindle_rpm = parseFloat(rpm)
         if (tpi) body.tpi         = parseFloat(tpi)
       }
-      body.material_consumption = consumption
-        .filter(row => row.quantity !== '' && parseFloat(row.quantity) > 0)
-        .map(row => ({
-          material_id: row.material_id,
-          quantity: parseFloat(row.quantity),
-          unit: row.unit,
-        }))
       await createProductionEntry(body)
       setSaved(true)
       setEffPct(''); setHours(''); setHankReading(''); setSpindles('')
       setRpm(''); setTpi(''); setNotes('')
-      setConsumption(prev => prev.map(row => ({ ...row, quantity: '' })))
       if (onSaved) onSaved()
       setTimeout(() => setSaved(false), 3000)
     } catch (e) {
@@ -360,7 +344,6 @@ export default function ProductionEntry({ onSaved }) {
   const canSubmit = dept.method === 'efficiency'
     ? !!(effPct && hours && getStdRate())
     : !!(hankReading && spindles && ne)
-  const canSubmitWithConsumption = canSubmit && consumption.some(row => parseFloat(row.quantity) > 0)
 
   const today = new Date().toISOString().slice(0, 10)
 
@@ -604,49 +587,6 @@ export default function ProductionEntry({ onSaved }) {
 
             {/* Notes */}
             <div style={{ borderTop: '1px solid #d9dadb', paddingTop: 20, marginBottom: 16 }}>
-              <SectionTitle>Material Consumption</SectionTitle>
-              <div style={{ border: '1px solid #d9dadb', overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                  <thead>
-                    <tr>
-                      {['Item', 'Quantity', 'Unit'].map(h => (
-                        <th key={h} style={{
-                          padding: '7px 10px', textAlign: 'left',
-                          fontSize: 11, fontWeight: 600, color: '#6a6d70',
-                          textTransform: 'uppercase', letterSpacing: '.07em',
-                          background: '#f5f5f5', borderBottom: '1px solid #d9dadb',
-                        }}>{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {consumption.map((row, idx) => (
-                      <tr key={row.material_code} style={{ background: idx % 2 === 0 ? '#fff' : '#fafafa' }}>
-                        <td style={{ padding: '7px 10px', fontSize: 12, color: '#32363a', borderBottom: '1px solid #eeeeee' }}>
-                          {row.item}
-                        </td>
-                        <td style={{ padding: '5px 10px', borderBottom: '1px solid #eeeeee', width: 160 }}>
-                          <SapInput
-                            type="number"
-                            value={row.quantity}
-                            onChange={val => setConsumption(prev => prev.map((r, i) => i === idx ? { ...r, quantity: val } : r))}
-                            placeholder="0"
-                            min={0}
-                            step={row.unit === 'Bales' ? 1 : 0.1}
-                          />
-                        </td>
-                        <td style={{ padding: '7px 10px', fontSize: 12, color: '#6a6d70', fontFamily: 'var(--mono)', borderBottom: '1px solid #eeeeee' }}>
-                          {row.unit}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            {/* Notes */}
-            <div style={{ borderTop: '1px solid #d9dadb', paddingTop: 20, marginBottom: 16 }}>
               <Field label="Notes (optional)">
                 <textarea
                   value={notes} onChange={e => setNotes(e.target.value)} rows={2}
@@ -683,13 +623,12 @@ export default function ProductionEntry({ onSaved }) {
 
             {/* SAP button bar */}
             <div style={{ display: 'flex', gap: 8, paddingTop: 4 }}>
-              <SapPrimaryBtn onClick={handleSubmit} disabled={!canSubmitWithConsumption || saving}>
+              <SapPrimaryBtn onClick={handleSubmit} disabled={!canSubmit || saving}>
                 {saving ? 'Saving…' : 'Save'}
               </SapPrimaryBtn>
               <SapGhostBtn onClick={() => {
                 setEffPct(''); setHours(''); setHankReading(''); setSpindles('')
                 setRpm(''); setTpi(''); setNotes(''); setSaved(false); setError('')
-                setConsumption(prev => prev.map(row => ({ ...row, quantity: '' })))
               }}>
                 Reset
               </SapGhostBtn>

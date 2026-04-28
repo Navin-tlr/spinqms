@@ -94,6 +94,8 @@ export const getProductionDashboard = (targetDate)    => http.get('/production/d
 export const getMaterials              = ()                  => http.get('/materials').then(r => r.data)
 export const getInventoryOverview      = ()                  => http.get('/inventory/overview').then(r => r.data)
 export const getInventoryMovements     = (params = {})       => http.get('/inventory/movements', { params: clean(params) }).then(r => r.data)
+export const createMaterialIssue       = (body)              => http.post('/inventory/material-issues', body).then(r => r.data)
+export const getMaterialIssues         = (params = {})       => http.get('/inventory/material-issues', { params: clean(params) }).then(r => r.data)
 export const updateMaterialPlanning    = (id, body)          => http.put(`/materials/${id}/planning`, body).then(r => r.data)
 export const addMaterialMarketPrice    = (id, body)          => http.post(`/materials/${id}/market-prices`, body).then(r => r.data)
 export const getPurchaseRecommendations = (status = 'open')  => http.get('/purchase/recommendations', { params: clean({ status }) }).then(r => r.data)

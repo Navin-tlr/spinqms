@@ -465,12 +465,6 @@ class ProductionEntry(Base):
     voided_at  = Column(DateTime, nullable=True)
     void_reason = Column(Text,    nullable=True)
 
-    consumption_lines = relationship(
-        "ProductionMaterialConsumption",
-        back_populates="production_entry",
-        cascade="all, delete-orphan",
-    )
-
     __table_args__ = (
         Index("ix_prod_entries_dept_date", "dept_id", "entry_date"),
         Index("ix_prod_entries_date_shift", "entry_date", "shift"),
@@ -495,7 +489,7 @@ class Material(Base):
 
 
 class ProductionMaterialConsumption(Base):
-    """Confirmed material consumption captured with a production document."""
+    """Legacy table from the first MRP iteration. New consumption uses material issue documents."""
     __tablename__ = "production_material_consumptions"
 
     id                  = Column(Integer, primary_key=True)
@@ -505,7 +499,7 @@ class ProductionMaterialConsumption(Base):
     unit                = Column(String(20), nullable=False)
     created_at          = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
 
-    production_entry = relationship("ProductionEntry", back_populates="consumption_lines")
+    production_entry = relationship("ProductionEntry")
     material = relationship("Material")
     inventory_movements = relationship("InventoryMovement", back_populates="production_consumption")
 
@@ -528,6 +522,7 @@ class InventoryMovement(Base):
     source_type         = Column(String(40), nullable=False)
     source_id           = Column(Integer, nullable=True, index=True)
     production_consumption_id = Column(Integer, ForeignKey("production_material_consumptions.id"), nullable=True)
+    material_issue_line_id = Column(Integer, ForeignKey("material_issue_lines.id"), nullable=True)
     goods_receipt_line_id = Column(Integer, ForeignKey("goods_receipt_lines.id"), nullable=True)
     quantity_delta      = Column(Float, nullable=False)
     unit                = Column(String(20), nullable=False)
@@ -538,6 +533,7 @@ class InventoryMovement(Base):
 
     material = relationship("Material")
     production_consumption = relationship("ProductionMaterialConsumption", back_populates="inventory_movements")
+    material_issue_line = relationship("MaterialIssueLine", back_populates="inventory_movements")
     goods_receipt_line = relationship("GoodsReceiptLine", back_populates="inventory_movements")
 
     __table_args__ = (
@@ -572,6 +568,37 @@ class MaterialPlanningParam(Base):
     updated_at         = Column(DateTime, nullable=True)
 
     material = relationship("Material", back_populates="planning_params")
+
+
+class MaterialIssueDocument(Base):
+    """SAP-style goods issue document for confirmed material consumption."""
+    __tablename__ = "material_issue_documents"
+
+    id              = Column(Integer, primary_key=True)
+    document_number = Column(String(40), nullable=False, unique=True, index=True)
+    issue_date      = Column(Date, nullable=False, index=True)
+    shift           = Column(String(1), nullable=False)
+    reference       = Column(String(120), nullable=True)
+    status          = Column(String(30), nullable=False, default="posted")
+    notes           = Column(Text, nullable=True)
+    created_at      = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+
+    lines = relationship("MaterialIssueLine", back_populates="document", cascade="all, delete-orphan")
+
+
+class MaterialIssueLine(Base):
+    __tablename__ = "material_issue_lines"
+
+    id          = Column(Integer, primary_key=True)
+    document_id = Column(Integer, ForeignKey("material_issue_documents.id"), nullable=False, index=True)
+    material_id = Column(Integer, ForeignKey("materials.id"), nullable=False, index=True)
+    quantity    = Column(Float, nullable=False)
+    unit        = Column(String(20), nullable=False)
+    movement_type = Column(String(10), nullable=False, default="GI")
+
+    document = relationship("MaterialIssueDocument", back_populates="lines")
+    material = relationship("Material")
+    inventory_movements = relationship("InventoryMovement", back_populates="material_issue_line")
 
 
 class PurchaseRecommendation(Base):

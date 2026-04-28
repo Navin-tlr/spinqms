@@ -443,7 +443,6 @@ class ProductionEntryCreate(BaseModel):
     # Optional secondary (theoretical)
     spindle_rpm: Optional[float] = Field(None, gt=0)
     tpi:         Optional[float] = Field(None, gt=0, description="Turns per inch")
-    material_consumption: List["MaterialConsumptionCreate"] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def validate_method_inputs(self) -> "ProductionEntryCreate":
@@ -490,7 +489,6 @@ class ProductionEntryOut(BaseModel):
     recorded_at: datetime
     created_at:  datetime
     is_void:     bool = False
-    material_consumption: List["MaterialConsumptionOut"] = Field(default_factory=list)
 
     model_config = {"from_attributes": True}
 
@@ -523,28 +521,6 @@ class MaterialOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
-class MaterialConsumptionCreate(BaseModel):
-    material_id: Optional[int] = None
-    material_code: Optional[str] = None
-    quantity: float = Field(..., gt=0)
-    unit: str = Field(..., min_length=1, max_length=20)
-
-    @model_validator(mode="after")
-    def has_material_ref(self) -> "MaterialConsumptionCreate":
-        if self.material_id is None and not self.material_code:
-            raise ValueError("material_id or material_code is required")
-        return self
-
-
-class MaterialConsumptionOut(BaseModel):
-    id: int
-    material_id: int
-    material_code: str
-    material_name: str
-    quantity: float
-    unit: str
-
-
 class InventoryMovementOut(BaseModel):
     id: int
     material_id: int
@@ -558,6 +534,40 @@ class InventoryMovementOut(BaseModel):
     movement_date: date
     notes: Optional[str]
     created_at: datetime
+
+
+class MaterialIssueLineCreate(BaseModel):
+    material_id: int
+    quantity: float = Field(..., gt=0)
+
+
+class MaterialIssueCreate(BaseModel):
+    issue_date: date
+    shift: str = Field(..., pattern="^[ABC]$")
+    reference: Optional[str] = Field("Daily Production", max_length=120)
+    notes: Optional[str] = None
+    lines: List[MaterialIssueLineCreate] = Field(..., min_length=1)
+
+
+class MaterialIssueLineOut(BaseModel):
+    id: int
+    material_id: int
+    material_code: str
+    material_name: str
+    quantity: float
+    unit: str
+    movement_type: str
+
+
+class MaterialIssueOut(BaseModel):
+    id: int
+    document_number: str
+    issue_date: date
+    shift: str
+    reference: Optional[str]
+    status: str
+    created_at: datetime
+    lines: List[MaterialIssueLineOut]
 
 
 class MaterialPlanningParamUpdate(BaseModel):

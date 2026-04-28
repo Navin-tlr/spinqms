@@ -44,10 +44,11 @@ from models import (
     LabSimplexInput,
     LabTrial,
     Material,
+    MaterialIssueDocument,
+    MaterialIssueLine,
     MaterialMarketPrice,
     MaterialPlanningParam,
     ProductionEntry,
-    ProductionMaterialConsumption,
     PurchaseOrder,
     PurchaseOrderLine,
     PurchaseRecommendation,
@@ -89,6 +90,8 @@ from schemas import (
     InventoryOverviewItem,
     MaterialMarketPriceCreate,
     MaterialMarketPriceOut,
+    MaterialIssueCreate,
+    MaterialIssueOut,
     MaterialOut,
     MaterialPlanningParamUpdate,
     PurchaseOrderCreate,
@@ -2119,6 +2122,7 @@ def _post_inventory_movement(
     movement_date: date,
     unit: Optional[str] = None,
     production_consumption_id: Optional[int] = None,
+    material_issue_line_id: Optional[int] = None,
     goods_receipt_line_id: Optional[int] = None,
     notes: Optional[str] = None,
 ) -> InventoryMovement:
@@ -2129,6 +2133,7 @@ def _post_inventory_movement(
         source_type=source_type,
         source_id=source_id,
         production_consumption_id=production_consumption_id,
+        material_issue_line_id=material_issue_line_id,
         goods_receipt_line_id=goods_receipt_line_id,
         quantity_delta=round(quantity_delta, 6),
         unit=unit or material.base_unit,
@@ -2156,7 +2161,7 @@ def _daily_consumption(db: Session, material_id: int, days: int = 7) -> Dict[dat
         db.query(InventoryMovement.movement_date, func.sum(InventoryMovement.quantity_delta))
         .filter(
             InventoryMovement.material_id == material_id,
-            InventoryMovement.source_type == "production",
+            InventoryMovement.source_type == "material_issue",
             InventoryMovement.quantity_delta < 0,
             InventoryMovement.movement_date >= date.fromordinal(start),
         )
@@ -2263,17 +2268,6 @@ def _evaluate_mrp(db: Session, material: Material) -> Optional[PurchaseRecommend
     return rec
 
 
-def _consumption_payload(line: ProductionMaterialConsumption) -> dict:
-    return {
-        "id": line.id,
-        "material_id": line.material_id,
-        "material_code": line.material.code,
-        "material_name": line.material.name,
-        "quantity": line.quantity,
-        "unit": line.unit,
-    }
-
-
 def _production_entry_payload(entry: ProductionEntry) -> dict:
     return {
         "id": entry.id,
@@ -2296,7 +2290,27 @@ def _production_entry_payload(entry: ProductionEntry) -> dict:
         "recorded_at": entry.recorded_at,
         "created_at": entry.created_at,
         "is_void": entry.is_void,
-        "material_consumption": [_consumption_payload(l) for l in entry.consumption_lines],
+    }
+
+
+def _material_issue_payload(doc: MaterialIssueDocument) -> dict:
+    return {
+        "id": doc.id,
+        "document_number": doc.document_number,
+        "issue_date": doc.issue_date,
+        "shift": doc.shift,
+        "reference": doc.reference,
+        "status": doc.status,
+        "created_at": doc.created_at,
+        "lines": [{
+            "id": line.id,
+            "material_id": line.material_id,
+            "material_code": line.material.code,
+            "material_name": line.material.name,
+            "quantity": line.quantity,
+            "unit": line.unit,
+            "movement_type": line.movement_type,
+        } for line in doc.lines],
     }
 
 
@@ -2413,42 +2427,8 @@ def create_production_entry(body: ProductionEntryCreate, db: Session = Depends(g
             )
 
     db.add(entry)
-    db.flush()
-
-    for item in body.material_consumption:
-        material = _material_or_404(db, item.material_id, item.material_code)
-        if item.unit != material.base_unit:
-            raise HTTPException(400, f"{material.name} must be consumed in {material.base_unit}")
-        line = ProductionMaterialConsumption(
-            production_entry_id=entry.id,
-            material_id=material.id,
-            quantity=item.quantity,
-            unit=item.unit,
-            created_at=now,
-        )
-        db.add(line)
-        db.flush()
-        _post_inventory_movement(
-            db,
-            material=material,
-            quantity_delta=-item.quantity,
-            movement_type="issue",
-            source_type="production",
-            source_id=entry.id,
-            production_consumption_id=line.id,
-            movement_date=body.entry_date,
-            unit=item.unit,
-            notes=f"Goods issue from production entry {entry.id}",
-        )
-        _evaluate_mrp(db, material)
-
     db.commit()
-    entry = (
-        db.query(ProductionEntry)
-        .options(joinedload(ProductionEntry.consumption_lines).joinedload(ProductionMaterialConsumption.material))
-        .filter_by(id=entry.id)
-        .first()
-    )
+    db.refresh(entry)
     return _production_entry_payload(entry)
 
 
@@ -2461,11 +2441,7 @@ def list_production_entries(
     limit:          int            = 200,
     db: Session = Depends(get_db),
 ):
-    q = (
-        db.query(ProductionEntry)
-        .options(joinedload(ProductionEntry.consumption_lines).joinedload(ProductionMaterialConsumption.material))
-        .filter(ProductionEntry.is_void == False)
-    )
+    q = db.query(ProductionEntry).filter(ProductionEntry.is_void == False)
     if dept_id:
         q = q.filter(ProductionEntry.dept_id == dept_id)
     if shift:
@@ -2484,31 +2460,12 @@ def list_production_entries(
 
 @app.delete("/api/production/entries/{entry_id}", status_code=204)
 def delete_production_entry(entry_id: int, db: Session = Depends(get_db)):
-    entry = (
-        db.query(ProductionEntry)
-        .options(joinedload(ProductionEntry.consumption_lines).joinedload(ProductionMaterialConsumption.material))
-        .filter_by(id=entry_id)
-        .first()
-    )
+    entry = db.query(ProductionEntry).filter_by(id=entry_id).first()
     if not entry:
         raise HTTPException(404, "Production entry not found")
     if entry.is_void:
         return
     now = datetime.now(timezone.utc)
-    for line in entry.consumption_lines:
-        _post_inventory_movement(
-            db,
-            material=line.material,
-            quantity_delta=line.quantity,
-            movement_type="reversal",
-            source_type="production_void",
-            source_id=entry.id,
-            production_consumption_id=line.id,
-            movement_date=date.today(),
-            unit=line.unit,
-            notes=f"Reversal for voided production entry {entry.id}",
-        )
-        _evaluate_mrp(db, line.material)
     entry.is_void = True
     entry.voided_at = now
     entry.void_reason = "Voided from production log"
@@ -2653,6 +2610,77 @@ def list_inventory_movements(
         "notes": r.notes,
         "created_at": r.created_at,
     } for r in rows]
+
+
+@app.post("/api/inventory/material-issues", response_model=MaterialIssueOut, status_code=201)
+def post_material_issue(body: MaterialIssueCreate, db: Session = Depends(get_db)):
+    """
+    Post a SAP-style goods issue document. Inventory owns consumption; production
+    entries are only an operational reference through date/shift/reference.
+    """
+    now = datetime.now(timezone.utc)
+    doc = MaterialIssueDocument(
+        document_number=f"GI-{now.strftime('%Y%m%d%H%M%S')}",
+        issue_date=body.issue_date,
+        shift=body.shift,
+        reference=body.reference or "Daily Production",
+        status="posted",
+        notes=body.notes,
+        created_at=now,
+    )
+    db.add(doc)
+    db.flush()
+
+    for item in body.lines:
+        material = _material_or_404(db, item.material_id)
+        stock = db.query(InventoryStock).filter_by(material_id=material.id).first()
+        on_hand = stock.quantity_on_hand if stock else 0.0
+        if item.quantity > on_hand + 1e-9:
+            raise HTTPException(400, f"Insufficient stock for {material.name}: {on_hand:g} {material.base_unit} available")
+
+        line = MaterialIssueLine(
+            document_id=doc.id,
+            material_id=material.id,
+            quantity=item.quantity,
+            unit=material.base_unit,
+            movement_type="GI",
+        )
+        db.add(line)
+        db.flush()
+        _post_inventory_movement(
+            db,
+            material=material,
+            quantity_delta=-item.quantity,
+            movement_type="issue",
+            source_type="material_issue",
+            source_id=doc.id,
+            material_issue_line_id=line.id,
+            movement_date=body.issue_date,
+            unit=material.base_unit,
+            notes=f"Goods issue {doc.document_number} ({doc.reference})",
+        )
+        _evaluate_mrp(db, material)
+
+    db.commit()
+    doc = (
+        db.query(MaterialIssueDocument)
+        .options(joinedload(MaterialIssueDocument.lines).joinedload(MaterialIssueLine.material))
+        .filter_by(id=doc.id)
+        .first()
+    )
+    return _material_issue_payload(doc)
+
+
+@app.get("/api/inventory/material-issues", response_model=List[MaterialIssueOut])
+def list_material_issues(limit: int = 100, db: Session = Depends(get_db)):
+    rows = (
+        db.query(MaterialIssueDocument)
+        .options(joinedload(MaterialIssueDocument.lines).joinedload(MaterialIssueLine.material))
+        .order_by(MaterialIssueDocument.issue_date.desc(), MaterialIssueDocument.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+    return [_material_issue_payload(doc) for doc in rows]
 
 
 @app.put("/api/materials/{material_id}/planning", response_model=InventoryOverviewItem)

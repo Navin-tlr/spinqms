@@ -83,14 +83,33 @@ const ICONS = {
   guide:    'M4 2h8a1 1 0 011 1v10a1 1 0 01-1 1H4a1 1 0 01-1-1V3a1 1 0 011-1zM8 2v12M4 6h4M4 9h4',
 }
 
-/* ── Production module navigation ────────────────────────────────────────── */
-const PRODUCTION_NAV = [
-  { id: 'dashboard', label: 'Dashboard',      abbr: 'DB', icon: 'M2 2h5.5v5.5H2V2zM8.5 2H14v5.5H8.5V2zM2 8.5h5.5V14H2V8.5zM8.5 8.5H14V14H8.5V8.5z' },
-  { id: 'entry',     label: 'Enter Output',   abbr: 'EO', icon: 'M3 13h2.6L13 5.6 10.4 3 3 10.4V13zm8.8-9.5L13.5 5.2a.6.6 0 000 .9L12 7.5' },
-  { id: 'log',       label: 'Production Log', abbr: 'PL', icon: 'M2 4h12M2 4v8a1 1 0 001 1h10a1 1 0 001-1V4M2 8.5h12M6 4v9M10 4v9' },
-  { id: 'inventory', label: 'Inventory / MRP', abbr: 'IM', icon: 'M3 3h10v3H3V3zm0 5h10v5H3V8zm2-3.5h6M5 10.5h3' },
-  { id: 'purchase',  label: 'Purchasing',     abbr: 'PO', icon: 'M3 3h10v10H3V3zm2 3h6M5 8h6M5 10h3' },
+/* ── Operations module navigation ───────────────────────────────────────── */
+const OPERATIONS_NAV = [
+  {
+    label: 'Inventory / MRP',
+    items: [
+      { id: 'inventory-stock',     label: 'Stock Overview',      abbr: 'SO', icon: 'M2 2h5.5v5.5H2V2zM8.5 2H14v5.5H8.5V2zM2 8.5h5.5V14H2V8.5zM8.5 8.5H14V14H8.5V8.5z' },
+      { id: 'inventory-issue',     label: 'Material Issue',      abbr: 'GI', icon: 'M3 3h10v3H3V3zm0 5h10v5H3V8zm2-3.5h6M5 10.5h3' },
+      { id: 'inventory-movements', label: 'Material Movements',  abbr: 'MM', icon: 'M2 4h12M2 4v8a1 1 0 001 1h10a1 1 0 001-1V4M2 8.5h12M6 4v9M10 4v9' },
+      { id: 'inventory-planning',  label: 'Planning (MRP)',      abbr: 'MR', icon: 'M2.5 2v11.5H14M4.5 11 7 7.5l2.5 2L13 4' },
+    ],
+  },
+  {
+    label: 'Production',
+    items: [
+      { id: 'production-entry', label: 'Enter Output',   abbr: 'EO', icon: 'M3 13h2.6L13 5.6 10.4 3 3 10.4V13zm8.8-9.5L13.5 5.2a.6.6 0 000 .9L12 7.5' },
+      { id: 'production-log',   label: 'Production Log', abbr: 'PL', icon: 'M2 4h12M2 4v8a1 1 0 001 1h10a1 1 0 001-1V4M2 8.5h12M6 4v9M10 4v9' },
+    ],
+  },
+  {
+    label: 'Purchasing',
+    items: [
+      { id: 'purchase-requisitions', label: 'Requisitions', abbr: 'PR', icon: 'M4 2h6l3 3v9a1 1 0 01-1 1H4a1 1 0 01-1-1V3a1 1 0 011-1zm6 0v3h3M5.5 7.5h5M5.5 10h5M5.5 12.5h3' },
+      { id: 'purchase-orders',       label: 'Orders',       abbr: 'PO', icon: 'M3 3h10v10H3V3zm2 3h6M5 8h6M5 10h3' },
+    ],
+  },
 ]
+const OPERATIONS_NAV_ITEMS = OPERATIONS_NAV.flatMap(group => group.items)
 
 /* ── Dept abbreviation (2 chars) ─────────────────────────────────────────── */
 function deptAbbr(name = '') {
@@ -249,30 +268,34 @@ export default function Layout({
           )}
         </div>
 
-        {/* ── Production nav ─────────────────────────────────────────── */}
+        {/* ── Operations nav ─────────────────────────────────────────── */}
         {currentModule === 'production' && (
           <div style={{ padding: collapsed && !isMobile ? '8px 0' : '8px 6px', flex: 1 }}>
-            {(!collapsed || isMobile) && <SideLabel>Production</SideLabel>}
-            {PRODUCTION_NAV.map(item => {
-              const active = productionView === item.id
-              return (
-                <SideItem
-                  key={item.id}
-                  active={active}
-                  collapsed={collapsed && !isMobile}
-                  title={item.label}
-                  onClick={() => { setProductionView && setProductionView(item.id); if (isMobile) setMenuOpen(false) }}
-                >
-                  <NavIcon d={item.icon} active={active} />
-                  {(!collapsed || isMobile) && <span style={{ fontSize: 12 }}>{item.label}</span>}
-                  {(collapsed && !isMobile) && (
-                    <span style={{ fontSize: 9, fontWeight: 600, color: active ? 'var(--claude)' : 'var(--tx-3)', letterSpacing: '.03em' }}>
-                      {item.abbr}
-                    </span>
-                  )}
-                </SideItem>
-              )
-            })}
+            {OPERATIONS_NAV.map(group => (
+              <div key={group.label} style={{ marginBottom: (!collapsed || isMobile) ? 10 : 4 }}>
+                {(!collapsed || isMobile) && <SideLabel>{group.label}</SideLabel>}
+                {group.items.map(item => {
+                  const active = productionView === item.id
+                  return (
+                    <SideItem
+                      key={item.id}
+                      active={active}
+                      collapsed={collapsed && !isMobile}
+                      title={`${group.label} · ${item.label}`}
+                      onClick={() => { setProductionView && setProductionView(item.id); if (isMobile) setMenuOpen(false) }}
+                    >
+                      <NavIcon d={item.icon} active={active} />
+                      {(!collapsed || isMobile) && <span style={{ fontSize: 12 }}>{item.label}</span>}
+                      {(collapsed && !isMobile) && (
+                        <span style={{ fontSize: 9, fontWeight: 600, color: active ? 'var(--claude)' : 'var(--tx-3)', letterSpacing: '.03em' }}>
+                          {item.abbr}
+                        </span>
+                      )}
+                    </SideItem>
+                  )
+                })}
+              </div>
+            ))}
           </div>
         )}
 
@@ -561,12 +584,12 @@ export default function Layout({
             </button>
             <Crumb />
             <span style={{ fontSize: 11, color: 'var(--tx-3)' }}>
-              {currentModule === 'production' ? 'Production' : 'Quality'}
+              {currentModule === 'production' ? 'Operations' : 'Quality'}
             </span>
             <Crumb />
             <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--tx)' }}>
               {currentModule === 'production'
-                ? (PRODUCTION_NAV.find(n => n.id === productionView)?.label ?? 'Production')
+                ? (OPERATIONS_NAV_ITEMS.find(n => n.id === productionView)?.label ?? 'Operations')
                 : currentLabel}
             </span>
           </nav>

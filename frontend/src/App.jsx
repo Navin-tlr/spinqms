@@ -10,7 +10,6 @@ import Settings from './components/views/Settings.jsx'
 import DataLog from './components/views/DataLog.jsx'
 import OperatorGuide from './components/views/OperatorGuide.jsx'
 import YarnLab from './components/views/YarnLab.jsx'
-import ProductionDashboard from './components/views/ProductionDashboard.jsx'
 import ProductionEntry from './components/views/ProductionEntry.jsx'
 import ProductionLog from './components/views/ProductionLog.jsx'
 import InventoryPlanning from './components/views/InventoryPlanning.jsx'
@@ -89,7 +88,7 @@ export default function App() {
   const [machineFilter, setMachineFilter] = useState(null)
   /* ── Module switching ─────────────────────────────────────────────────── */
   const [currentModule,    setCurrentModule]    = useState(null)        // null = landing | 'quality' | 'production'
-  const [productionView,   setProductionView]   = useState('dashboard') // production/inventory/purchase views
+  const [productionView,   setProductionView]   = useState('production-entry')
 
   // Reset machine filter when department changes
   useEffect(() => { setMachineFilter(null) }, [currentDept])
@@ -161,15 +160,16 @@ export default function App() {
       {/* ── Production Module ────────────────────────────────────────────── */}
       {currentModule === 'production' && (
         <>
-          {productionView === 'dashboard' && (
-            <ProductionDashboard setProductionView={setProductionView} />
+          {productionView === 'production-entry' && (
+            <ProductionEntry onSaved={() => setProductionView('production-log')} />
           )}
-          {productionView === 'entry' && (
-            <ProductionEntry onSaved={() => setProductionView('dashboard')} />
-          )}
-          {productionView === 'log' && <ProductionLog />}
-          {productionView === 'inventory' && <InventoryPlanning />}
-          {productionView === 'purchase' && <PurchaseFlow />}
+          {productionView === 'production-log' && <ProductionLog />}
+          {productionView === 'inventory-stock' && <InventoryPlanning mode="stock" />}
+          {productionView === 'inventory-issue' && <InventoryPlanning mode="issue" />}
+          {productionView === 'inventory-movements' && <InventoryPlanning mode="movements" />}
+          {productionView === 'inventory-planning' && <InventoryPlanning mode="planning" />}
+          {productionView === 'purchase-requisitions' && <PurchaseFlow mode="requisitions" />}
+          {productionView === 'purchase-orders' && <PurchaseFlow mode="orders" />}
         </>
       )}
 

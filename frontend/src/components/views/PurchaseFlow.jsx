@@ -18,7 +18,7 @@ function fmt(n, unit) {
   return `${Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 1 })} ${unit || ''}`
 }
 
-export default function PurchaseFlow() {
+export default function PurchaseFlow({ mode = 'requisitions' }) {
   const [recommendations, setRecommendations] = useState([])
   const [orders, setOrders] = useState([])
   const [loading, setLoading] = useState(true)
@@ -68,8 +68,8 @@ export default function PurchaseFlow() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div style={{ background: '#fff', border: '1px solid #d9dadb', padding: '10px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
-          <span style={{ fontSize: 13, fontWeight: 600, color: '#32363a' }}>Purchasing</span>
-          <span style={{ fontSize: 11, color: '#89919a', marginLeft: 12 }}>Recommendations, purchase orders, goods receipts</span>
+          <span style={{ fontSize: 13, fontWeight: 600, color: '#32363a' }}>{mode === 'orders' ? 'Purchase Orders' : 'Purchase Requisitions'}</span>
+          <span style={{ fontSize: 11, color: '#89919a', marginLeft: 12 }}>{mode === 'orders' ? 'Purchase orders and goods receipts' : 'MRP-generated internal recommendations'}</span>
         </div>
         <button onClick={load} style={{ ...inputStyle, cursor: 'pointer' }}>Refresh</button>
       </div>
@@ -78,7 +78,7 @@ export default function PurchaseFlow() {
         <div style={{ background: '#fff', border: '1px solid #d9dadb', padding: 48, textAlign: 'center' }}><Spinner /></div>
       ) : (
         <>
-          <div style={{ background: '#fff', border: '1px solid #d9dadb', overflowX: 'auto' }}>
+          {mode === 'requisitions' && <div style={{ background: '#fff', border: '1px solid #d9dadb', overflowX: 'auto' }}>
             <div style={{ padding: '10px 16px', borderBottom: '1px solid #d9dadb', fontSize: 13, fontWeight: 600 }}>Open Purchase Recommendations</div>
             {recommendations.length === 0 ? (
               <div style={{ padding: 24, fontSize: 13, color: '#89919a' }}>No open recommendations.</div>
@@ -107,9 +107,9 @@ export default function PurchaseFlow() {
                 </tbody>
               </table>
             )}
-          </div>
+          </div>}
 
-          <div style={{ background: '#fff', border: '1px solid #d9dadb', overflowX: 'auto' }}>
+          {mode === 'orders' && <div style={{ background: '#fff', border: '1px solid #d9dadb', overflowX: 'auto' }}>
             <div style={{ padding: '10px 16px', borderBottom: '1px solid #d9dadb', fontSize: 13, fontWeight: 600 }}>Purchase Orders</div>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
@@ -145,7 +145,7 @@ export default function PurchaseFlow() {
                 ))}
               </tbody>
             </table>
-          </div>
+          </div>}
         </>
       )}
 
