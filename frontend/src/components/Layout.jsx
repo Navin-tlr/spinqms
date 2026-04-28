@@ -88,6 +88,8 @@ const PRODUCTION_NAV = [
   { id: 'dashboard', label: 'Dashboard',      abbr: 'DB', icon: 'M2 2h5.5v5.5H2V2zM8.5 2H14v5.5H8.5V2zM2 8.5h5.5V14H2V8.5zM8.5 8.5H14V14H8.5V8.5z' },
   { id: 'entry',     label: 'Enter Output',   abbr: 'EO', icon: 'M3 13h2.6L13 5.6 10.4 3 3 10.4V13zm8.8-9.5L13.5 5.2a.6.6 0 000 .9L12 7.5' },
   { id: 'log',       label: 'Production Log', abbr: 'PL', icon: 'M2 4h12M2 4v8a1 1 0 001 1h10a1 1 0 001-1V4M2 8.5h12M6 4v9M10 4v9' },
+  { id: 'inventory', label: 'Inventory / MRP', abbr: 'IM', icon: 'M3 3h10v3H3V3zm0 5h10v5H3V8zm2-3.5h6M5 10.5h3' },
+  { id: 'purchase',  label: 'Purchasing',     abbr: 'PO', icon: 'M3 3h10v10H3V3zm2 3h6M5 8h6M5 10h3' },
 ]
 
 /* ── Dept abbreviation (2 chars) ─────────────────────────────────────────── */

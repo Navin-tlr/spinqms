@@ -207,6 +207,7 @@ export default function ProductionLog() {
                   { col: 'calc_method',    label: 'Method'       },
                   { col: null,             label: 'Inputs'       },
                   { col: 'primary_kg',     label: 'Output (kg)'  },
+                  { col: null,             label: 'Consumption'  },
                   { col: 'theoretical_kg', label: 'Theoretical'  },
                   { col: null,             label: ''             },
                 ].map(({ col, label }) => (
@@ -254,6 +255,11 @@ export default function ProductionLog() {
                       <span style={{ fontFamily: 'var(--mono)', fontSize: 13, fontWeight: 600, color: SAP_BLUE }}>
                         {fmtKg(e.primary_kg)}
                       </span>
+                    </td>
+                    <td style={{ padding: '7px 12px', fontSize: 11, color: '#6a6d70', fontFamily: 'var(--mono)', borderBottom: '1px solid #eeeeee', whiteSpace: 'nowrap' }}>
+                      {(e.material_consumption || []).length
+                        ? e.material_consumption.map(c => `${c.material_name}: ${c.quantity} ${c.unit}`).join(' · ')
+                        : '—'}
                     </td>
                     <td style={{ padding: '7px 12px', fontFamily: 'var(--mono)', fontSize: 12, color: '#6a6d70', borderBottom: '1px solid #eeeeee' }}>
                       {e.theoretical_kg ? fmtKg(e.theoretical_kg) : '—'}

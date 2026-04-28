@@ -461,8 +461,214 @@ class ProductionEntry(Base):
     recorded_at = Column(DateTime, nullable=False)
     created_at  = Column(DateTime, nullable=False,
                          default=lambda: datetime.now(timezone.utc))
+    is_void    = Column(Boolean,  nullable=False, default=False)
+    voided_at  = Column(DateTime, nullable=True)
+    void_reason = Column(Text,    nullable=True)
+
+    consumption_lines = relationship(
+        "ProductionMaterialConsumption",
+        back_populates="production_entry",
+        cascade="all, delete-orphan",
+    )
 
     __table_args__ = (
         Index("ix_prod_entries_dept_date", "dept_id", "entry_date"),
         Index("ix_prod_entries_date_shift", "entry_date", "shift"),
+    )
+
+
+# ── 14. Material / Inventory / MRP / Purchase Engine ────────────────────────
+class Material(Base):
+    """Raw material master. Stock is never edited here; inventory ledger drives balances."""
+    __tablename__ = "materials"
+
+    id          = Column(Integer, primary_key=True)
+    code        = Column(String(40), nullable=False, unique=True, index=True)
+    name        = Column(String(120), nullable=False)
+    base_unit   = Column(String(20), nullable=False)
+    is_active   = Column(Boolean, nullable=False, default=True)
+    created_at  = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    updated_at  = Column(DateTime, nullable=True)
+
+    planning_params = relationship("MaterialPlanningParam", back_populates="material", uselist=False)
+    stock = relationship("InventoryStock", back_populates="material", uselist=False)
+
+
+class ProductionMaterialConsumption(Base):
+    """Confirmed material consumption captured with a production document."""
+    __tablename__ = "production_material_consumptions"
+
+    id                  = Column(Integer, primary_key=True)
+    production_entry_id = Column(Integer, ForeignKey("production_entries.id"), nullable=False, index=True)
+    material_id         = Column(Integer, ForeignKey("materials.id"), nullable=False, index=True)
+    quantity            = Column(Float, nullable=False)
+    unit                = Column(String(20), nullable=False)
+    created_at          = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+
+    production_entry = relationship("ProductionEntry", back_populates="consumption_lines")
+    material = relationship("Material")
+    inventory_movements = relationship("InventoryMovement", back_populates="production_consumption")
+
+    __table_args__ = (
+        UniqueConstraint("production_entry_id", "material_id", name="uq_prod_consumption_material"),
+    )
+
+
+class InventoryMovement(Base):
+    """
+    Append-only inventory ledger.
+    movement_type: issue, receipt, adjustment, reversal.
+    quantity_delta is signed: issues negative, receipts positive.
+    """
+    __tablename__ = "inventory_movements"
+
+    id                  = Column(Integer, primary_key=True)
+    material_id         = Column(Integer, ForeignKey("materials.id"), nullable=False, index=True)
+    movement_type       = Column(String(30), nullable=False)
+    source_type         = Column(String(40), nullable=False)
+    source_id           = Column(Integer, nullable=True, index=True)
+    production_consumption_id = Column(Integer, ForeignKey("production_material_consumptions.id"), nullable=True)
+    goods_receipt_line_id = Column(Integer, ForeignKey("goods_receipt_lines.id"), nullable=True)
+    quantity_delta      = Column(Float, nullable=False)
+    unit                = Column(String(20), nullable=False)
+    movement_date       = Column(Date, nullable=False, index=True)
+    notes               = Column(Text, nullable=True)
+    created_by          = Column(String(80), nullable=True)
+    created_at          = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc), index=True)
+
+    material = relationship("Material")
+    production_consumption = relationship("ProductionMaterialConsumption", back_populates="inventory_movements")
+    goods_receipt_line = relationship("GoodsReceiptLine", back_populates="inventory_movements")
+
+    __table_args__ = (
+        Index("ix_inventory_movements_material_date", "material_id", "movement_date"),
+    )
+
+
+class InventoryStock(Base):
+    """Cached current stock, maintained only when inventory movements are posted."""
+    __tablename__ = "inventory_stock"
+
+    material_id     = Column(Integer, ForeignKey("materials.id"), primary_key=True)
+    quantity_on_hand = Column(Float, nullable=False, default=0.0)
+    unit            = Column(String(20), nullable=False)
+    last_movement_id = Column(Integer, ForeignKey("inventory_movements.id"), nullable=True)
+    updated_at      = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+
+    material = relationship("Material", back_populates="stock")
+    last_movement = relationship("InventoryMovement")
+
+
+class MaterialPlanningParam(Base):
+    """MRP inputs per material."""
+    __tablename__ = "material_planning_params"
+
+    id                = Column(Integer, primary_key=True)
+    material_id        = Column(Integer, ForeignKey("materials.id"), nullable=False, unique=True, index=True)
+    lead_time_days     = Column(Float, nullable=False, default=5.0)
+    safety_stock_qty   = Column(Float, nullable=False, default=0.0)
+    reorder_qty        = Column(Float, nullable=False, default=0.0)
+    critical_days_left = Column(Float, nullable=False, default=2.0)
+    updated_at         = Column(DateTime, nullable=True)
+
+    material = relationship("Material", back_populates="planning_params")
+
+
+class PurchaseRecommendation(Base):
+    """Internal PR-like recommendation generated by MRP. Not a purchase order."""
+    __tablename__ = "purchase_recommendations"
+
+    id              = Column(Integer, primary_key=True)
+    material_id     = Column(Integer, ForeignKey("materials.id"), nullable=False, index=True)
+    status          = Column(String(30), nullable=False, default="open")
+    suggested_qty   = Column(Float, nullable=False)
+    unit            = Column(String(20), nullable=False)
+    reason          = Column(Text, nullable=False)
+    decision_support = Column(Text, nullable=True)
+    stock_at_creation = Column(Float, nullable=False)
+    reorder_level   = Column(Float, nullable=False)
+    avg_consumption = Column(Float, nullable=False)
+    price_trend     = Column(String(20), nullable=True)
+    created_at      = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc), index=True)
+    converted_at    = Column(DateTime, nullable=True)
+
+    material = relationship("Material")
+
+
+class PurchaseOrder(Base):
+    __tablename__ = "purchase_orders"
+
+    id          = Column(Integer, primary_key=True)
+    po_number   = Column(String(40), nullable=False, unique=True, index=True)
+    supplier    = Column(String(120), nullable=True)
+    status      = Column(String(30), nullable=False, default="open")
+    order_date  = Column(Date, nullable=False)
+    created_at  = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+
+    lines = relationship("PurchaseOrderLine", back_populates="purchase_order", cascade="all, delete-orphan")
+    receipts = relationship("GoodsReceipt", back_populates="purchase_order")
+
+
+class PurchaseOrderLine(Base):
+    __tablename__ = "purchase_order_lines"
+
+    id                 = Column(Integer, primary_key=True)
+    purchase_order_id  = Column(Integer, ForeignKey("purchase_orders.id"), nullable=False, index=True)
+    recommendation_id  = Column(Integer, ForeignKey("purchase_recommendations.id"), nullable=True)
+    material_id        = Column(Integer, ForeignKey("materials.id"), nullable=False, index=True)
+    quantity_ordered   = Column(Float, nullable=False)
+    unit               = Column(String(20), nullable=False)
+    rate               = Column(Float, nullable=False)
+    quantity_received  = Column(Float, nullable=False, default=0.0)
+
+    purchase_order = relationship("PurchaseOrder", back_populates="lines")
+    material = relationship("Material")
+    recommendation = relationship("PurchaseRecommendation")
+
+
+class GoodsReceipt(Base):
+    __tablename__ = "goods_receipts"
+
+    id                = Column(Integer, primary_key=True)
+    gr_number         = Column(String(40), nullable=False, unique=True, index=True)
+    purchase_order_id = Column(Integer, ForeignKey("purchase_orders.id"), nullable=False, index=True)
+    receipt_date      = Column(Date, nullable=False)
+    notes             = Column(Text, nullable=True)
+    created_at        = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+
+    purchase_order = relationship("PurchaseOrder", back_populates="receipts")
+    lines = relationship("GoodsReceiptLine", back_populates="goods_receipt", cascade="all, delete-orphan")
+
+
+class GoodsReceiptLine(Base):
+    __tablename__ = "goods_receipt_lines"
+
+    id                  = Column(Integer, primary_key=True)
+    goods_receipt_id    = Column(Integer, ForeignKey("goods_receipts.id"), nullable=False, index=True)
+    purchase_order_line_id = Column(Integer, ForeignKey("purchase_order_lines.id"), nullable=False, index=True)
+    material_id         = Column(Integer, ForeignKey("materials.id"), nullable=False, index=True)
+    quantity_received   = Column(Float, nullable=False)
+    unit                = Column(String(20), nullable=False)
+    rate                = Column(Float, nullable=False)
+
+    goods_receipt = relationship("GoodsReceipt", back_populates="lines")
+    purchase_order_line = relationship("PurchaseOrderLine")
+    material = relationship("Material")
+    inventory_movements = relationship("InventoryMovement", back_populates="goods_receipt_line")
+
+
+class MaterialMarketPrice(Base):
+    __tablename__ = "material_market_prices"
+
+    id          = Column(Integer, primary_key=True)
+    material_id = Column(Integer, ForeignKey("materials.id"), nullable=False, index=True)
+    price_date  = Column(Date, nullable=False, index=True)
+    price       = Column(Float, nullable=False)
+    unit        = Column(String(20), nullable=False)
+    created_at  = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+
+    material = relationship("Material")
+
+    __table_args__ = (
+        UniqueConstraint("material_id", "price_date", name="uq_material_market_price_date"),
     )

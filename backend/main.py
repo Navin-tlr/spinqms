@@ -31,6 +31,10 @@ from sqlalchemy.orm import Session, joinedload
 from database import get_db
 from models import (
     Department,
+    GoodsReceipt,
+    GoodsReceiptLine,
+    InventoryMovement,
+    InventoryStock,
     LabBenchmark,
     LabRSBCan,
     LabRingframeCop,
@@ -39,7 +43,14 @@ from models import (
     LabSimplexBobbin,
     LabSimplexInput,
     LabTrial,
+    Material,
+    MaterialMarketPrice,
+    MaterialPlanningParam,
     ProductionEntry,
+    ProductionMaterialConsumption,
+    PurchaseOrder,
+    PurchaseOrderLine,
+    PurchaseRecommendation,
     ProductionStdRate,
     Sample,
     SettingsVersion,
@@ -72,6 +83,17 @@ from schemas import (
     ProductionEntryOut,
     ProductionStdRateOut,
     ProductionStdRateUpdate,
+    GoodsReceiptCreate,
+    GoodsReceiptOut,
+    InventoryMovementOut,
+    InventoryOverviewItem,
+    MaterialMarketPriceCreate,
+    MaterialMarketPriceOut,
+    MaterialOut,
+    MaterialPlanningParamUpdate,
+    PurchaseOrderCreate,
+    PurchaseOrderOut,
+    PurchaseRecommendationOut,
     SampleCreate,
     SampleOut,
     SampleUpdate,
@@ -2078,6 +2100,206 @@ def _calc_theoretical(spindle_rpm: float, tpi: float,
     return round(total_yards / (ne_count * 840.0) * 0.453592, 3)
 
 
+def _material_or_404(db: Session, material_id: Optional[int] = None, code: Optional[str] = None) -> Material:
+    q = db.query(Material)
+    material = q.filter(Material.id == material_id).first() if material_id is not None else q.filter(Material.code == code).first()
+    if not material:
+        raise HTTPException(404, "Material not found")
+    return material
+
+
+def _post_inventory_movement(
+    db: Session,
+    *,
+    material: Material,
+    quantity_delta: float,
+    movement_type: str,
+    source_type: str,
+    source_id: Optional[int],
+    movement_date: date,
+    unit: Optional[str] = None,
+    production_consumption_id: Optional[int] = None,
+    goods_receipt_line_id: Optional[int] = None,
+    notes: Optional[str] = None,
+) -> InventoryMovement:
+    """Append one ledger row and update cached stock. This is the only stock write path."""
+    movement = InventoryMovement(
+        material_id=material.id,
+        movement_type=movement_type,
+        source_type=source_type,
+        source_id=source_id,
+        production_consumption_id=production_consumption_id,
+        goods_receipt_line_id=goods_receipt_line_id,
+        quantity_delta=round(quantity_delta, 6),
+        unit=unit or material.base_unit,
+        movement_date=movement_date,
+        notes=notes,
+        created_at=datetime.now(timezone.utc),
+    )
+    db.add(movement)
+    db.flush()
+
+    stock = db.query(InventoryStock).filter_by(material_id=material.id).first()
+    if not stock:
+        stock = InventoryStock(material_id=material.id, quantity_on_hand=0.0, unit=unit or material.base_unit)
+        db.add(stock)
+    stock.quantity_on_hand = round((stock.quantity_on_hand or 0.0) + quantity_delta, 6)
+    stock.unit = unit or material.base_unit
+    stock.last_movement_id = movement.id
+    stock.updated_at = datetime.now(timezone.utc)
+    return movement
+
+
+def _daily_consumption(db: Session, material_id: int, days: int = 7) -> Dict[date, float]:
+    start = date.today().toordinal() - days + 1
+    rows = (
+        db.query(InventoryMovement.movement_date, func.sum(InventoryMovement.quantity_delta))
+        .filter(
+            InventoryMovement.material_id == material_id,
+            InventoryMovement.source_type == "production",
+            InventoryMovement.quantity_delta < 0,
+            InventoryMovement.movement_date >= date.fromordinal(start),
+        )
+        .group_by(InventoryMovement.movement_date)
+        .all()
+    )
+    return {r[0]: abs(float(r[1] or 0.0)) for r in rows}
+
+
+def _avg_consumption(db: Session, material_id: int, days: int = 7) -> float:
+    trend = _daily_consumption(db, material_id, days)
+    return round(sum(trend.values()) / days, 3) if days else 0.0
+
+
+def _price_trend(db: Session, material_id: int) -> str:
+    prices = (
+        db.query(MaterialMarketPrice)
+        .filter_by(material_id=material_id)
+        .order_by(MaterialMarketPrice.price_date.desc())
+        .limit(5)
+        .all()
+    )
+    ordered = list(reversed([p.price for p in prices]))
+    if len(ordered) < 2:
+        return "unknown"
+    if ordered[-1] < ordered[0]:
+        return "falling"
+    if ordered[-1] > ordered[0]:
+        return "rising"
+    return "stable"
+
+
+def _recommendation_payload(r: PurchaseRecommendation) -> dict:
+    return {
+        "id": r.id,
+        "material_id": r.material_id,
+        "material_code": r.material.code,
+        "material_name": r.material.name,
+        "status": r.status,
+        "suggested_qty": r.suggested_qty,
+        "unit": r.unit,
+        "reason": r.reason,
+        "decision_support": r.decision_support,
+        "stock_at_creation": r.stock_at_creation,
+        "reorder_level": r.reorder_level,
+        "avg_consumption": r.avg_consumption,
+        "price_trend": r.price_trend,
+        "created_at": r.created_at,
+    }
+
+
+def _open_recommendation(db: Session, material_id: int) -> Optional[PurchaseRecommendation]:
+    return (
+        db.query(PurchaseRecommendation)
+        .options(joinedload(PurchaseRecommendation.material))
+        .filter_by(material_id=material_id, status="open")
+        .order_by(PurchaseRecommendation.created_at.desc())
+        .first()
+    )
+
+
+def _evaluate_mrp(db: Session, material: Material) -> Optional[PurchaseRecommendation]:
+    params = material.planning_params
+    stock_row = db.query(InventoryStock).filter_by(material_id=material.id).first()
+    stock = stock_row.quantity_on_hand if stock_row else 0.0
+    avg = _avg_consumption(db, material.id, 7)
+    lead_time = params.lead_time_days if params else 5.0
+    safety = params.safety_stock_qty if params else 0.0
+    reorder_qty = params.reorder_qty if params else 0.0
+    critical_days = params.critical_days_left if params else 2.0
+    reorder_level = round(avg * lead_time + safety, 3)
+    days_left = stock / avg if avg > 0 else None
+    existing = _open_recommendation(db, material.id)
+    if stock >= reorder_level or existing:
+        return existing
+
+    trend = _price_trend(db, material.id)
+    critical = days_left is not None and days_left <= critical_days
+    if critical:
+        support = "Stock critical: order immediately."
+    elif trend == "falling":
+        support = "Price falling: order minimum required."
+    elif trend == "rising":
+        support = "Price rising: consider higher quantity."
+    else:
+        support = "Price trend unavailable: order planned quantity."
+
+    suggested = reorder_qty or max(reorder_level - stock, 0.0)
+    rec = PurchaseRecommendation(
+        material_id=material.id,
+        status="open",
+        suggested_qty=round(suggested, 3),
+        unit=material.base_unit,
+        reason="Stock below reorder level",
+        decision_support=support,
+        stock_at_creation=round(stock, 3),
+        reorder_level=reorder_level,
+        avg_consumption=avg,
+        price_trend=trend,
+        created_at=datetime.now(timezone.utc),
+    )
+    db.add(rec)
+    db.flush()
+    return rec
+
+
+def _consumption_payload(line: ProductionMaterialConsumption) -> dict:
+    return {
+        "id": line.id,
+        "material_id": line.material_id,
+        "material_code": line.material.code,
+        "material_name": line.material.name,
+        "quantity": line.quantity,
+        "unit": line.unit,
+    }
+
+
+def _production_entry_payload(entry: ProductionEntry) -> dict:
+    return {
+        "id": entry.id,
+        "dept_id": entry.dept_id,
+        "shift": entry.shift,
+        "entry_date": entry.entry_date,
+        "machine_number": entry.machine_number,
+        "calc_method": entry.calc_method,
+        "efficiency_pct": entry.efficiency_pct,
+        "running_hours": entry.running_hours,
+        "std_rate_kg_per_hr": entry.std_rate_kg_per_hr,
+        "hank_reading": entry.hank_reading,
+        "spindle_count": entry.spindle_count,
+        "ne_count": entry.ne_count,
+        "spindle_rpm": entry.spindle_rpm,
+        "tpi": entry.tpi,
+        "primary_kg": entry.primary_kg,
+        "theoretical_kg": entry.theoretical_kg,
+        "notes": entry.notes,
+        "recorded_at": entry.recorded_at,
+        "created_at": entry.created_at,
+        "is_void": entry.is_void,
+        "material_consumption": [_consumption_payload(l) for l in entry.consumption_lines],
+    }
+
+
 # ── Standard Rates ────────────────────────────────────────────────────────────
 
 @app.get("/api/production/std-rates", response_model=List[ProductionStdRateOut])
@@ -2191,9 +2413,43 @@ def create_production_entry(body: ProductionEntryCreate, db: Session = Depends(g
             )
 
     db.add(entry)
+    db.flush()
+
+    for item in body.material_consumption:
+        material = _material_or_404(db, item.material_id, item.material_code)
+        if item.unit != material.base_unit:
+            raise HTTPException(400, f"{material.name} must be consumed in {material.base_unit}")
+        line = ProductionMaterialConsumption(
+            production_entry_id=entry.id,
+            material_id=material.id,
+            quantity=item.quantity,
+            unit=item.unit,
+            created_at=now,
+        )
+        db.add(line)
+        db.flush()
+        _post_inventory_movement(
+            db,
+            material=material,
+            quantity_delta=-item.quantity,
+            movement_type="issue",
+            source_type="production",
+            source_id=entry.id,
+            production_consumption_id=line.id,
+            movement_date=body.entry_date,
+            unit=item.unit,
+            notes=f"Goods issue from production entry {entry.id}",
+        )
+        _evaluate_mrp(db, material)
+
     db.commit()
-    db.refresh(entry)
-    return entry
+    entry = (
+        db.query(ProductionEntry)
+        .options(joinedload(ProductionEntry.consumption_lines).joinedload(ProductionMaterialConsumption.material))
+        .filter_by(id=entry.id)
+        .first()
+    )
+    return _production_entry_payload(entry)
 
 
 @app.get("/api/production/entries", response_model=List[ProductionEntryOut])
@@ -2205,7 +2461,11 @@ def list_production_entries(
     limit:          int            = 200,
     db: Session = Depends(get_db),
 ):
-    q = db.query(ProductionEntry)
+    q = (
+        db.query(ProductionEntry)
+        .options(joinedload(ProductionEntry.consumption_lines).joinedload(ProductionMaterialConsumption.material))
+        .filter(ProductionEntry.is_void == False)
+    )
     if dept_id:
         q = q.filter(ProductionEntry.dept_id == dept_id)
     if shift:
@@ -2214,19 +2474,44 @@ def list_production_entries(
         q = q.filter(ProductionEntry.entry_date == entry_date)
     if machine_number is not None:
         q = q.filter(ProductionEntry.machine_number == machine_number)
-    return (
+    rows = (
         q.order_by(ProductionEntry.entry_date.desc(), ProductionEntry.created_at.desc())
         .limit(limit)
         .all()
     )
+    return [_production_entry_payload(e) for e in rows]
 
 
 @app.delete("/api/production/entries/{entry_id}", status_code=204)
 def delete_production_entry(entry_id: int, db: Session = Depends(get_db)):
-    entry = db.query(ProductionEntry).filter_by(id=entry_id).first()
+    entry = (
+        db.query(ProductionEntry)
+        .options(joinedload(ProductionEntry.consumption_lines).joinedload(ProductionMaterialConsumption.material))
+        .filter_by(id=entry_id)
+        .first()
+    )
     if not entry:
         raise HTTPException(404, "Production entry not found")
-    db.delete(entry)
+    if entry.is_void:
+        return
+    now = datetime.now(timezone.utc)
+    for line in entry.consumption_lines:
+        _post_inventory_movement(
+            db,
+            material=line.material,
+            quantity_delta=line.quantity,
+            movement_type="reversal",
+            source_type="production_void",
+            source_id=entry.id,
+            production_consumption_id=line.id,
+            movement_date=date.today(),
+            unit=line.unit,
+            notes=f"Reversal for voided production entry {entry.id}",
+        )
+        _evaluate_mrp(db, line.material)
+    entry.is_void = True
+    entry.voided_at = now
+    entry.void_reason = "Voided from production log"
     db.commit()
 
 
@@ -2249,7 +2534,7 @@ def production_dashboard(
             ProductionEntry.shift,
             func.sum(ProductionEntry.primary_kg).label("total_kg"),
         )
-        .filter(ProductionEntry.entry_date == d)
+        .filter(ProductionEntry.entry_date == d, ProductionEntry.is_void == False)
         .group_by(ProductionEntry.dept_id, ProductionEntry.shift)
         .all()
     )
@@ -2263,7 +2548,7 @@ def production_dashboard(
 
     entry_counts = (
         db.query(ProductionEntry.dept_id, func.count(ProductionEntry.id))
-        .filter(ProductionEntry.entry_date == d)
+        .filter(ProductionEntry.entry_date == d, ProductionEntry.is_void == False)
         .group_by(ProductionEntry.dept_id)
         .all()
     )
@@ -2290,3 +2575,268 @@ def production_dashboard(
         depts    = dept_summaries,
         total_kg = round(total_kg, 2),
     )
+
+
+# ── Inventory / MRP / Purchasing ─────────────────────────────────────────────
+
+@app.get("/api/materials", response_model=List[MaterialOut])
+def list_materials(db: Session = Depends(get_db)):
+    return db.query(Material).filter_by(is_active=True).order_by(Material.name).all()
+
+
+@app.get("/api/inventory/overview", response_model=List[InventoryOverviewItem])
+def inventory_overview(db: Session = Depends(get_db)):
+    materials = (
+        db.query(Material)
+        .options(joinedload(Material.stock), joinedload(Material.planning_params))
+        .filter_by(is_active=True)
+        .order_by(Material.name)
+        .all()
+    )
+    out = []
+    for material in materials:
+        rec = _evaluate_mrp(db, material)
+        stock = material.stock.quantity_on_hand if material.stock else 0.0
+        params = material.planning_params
+        avg = _avg_consumption(db, material.id, 7)
+        daily = _daily_consumption(db, material.id, 1).get(date.today(), 0.0)
+        lead = params.lead_time_days if params else 5.0
+        safety = params.safety_stock_qty if params else 0.0
+        reorder_qty = params.reorder_qty if params else 0.0
+        reorder_level = round(avg * lead + safety, 3)
+        days_left = round(stock / avg, 1) if avg > 0 else None
+        status = "BELOW REORDER LEVEL" if stock < reorder_level else ("SAFE (CLOSE)" if stock <= reorder_level * 1.15 and reorder_level > 0 else "SAFE")
+        action = "ORDER NOW" if stock < reorder_level else "MONITOR"
+        out.append({
+            "material_id": material.id,
+            "material_code": material.code,
+            "material_name": material.name,
+            "unit": material.base_unit,
+            "stock": round(stock, 3),
+            "daily_consumption": round(daily, 3),
+            "avg_consumption_7d": avg,
+            "days_left": days_left,
+            "lead_time_days": lead,
+            "safety_stock_qty": safety,
+            "reorder_qty": reorder_qty,
+            "reorder_level": reorder_level,
+            "status": status,
+            "action": action,
+            "price_trend": _price_trend(db, material.id),
+            "recommendation": _recommendation_payload(rec) if rec else None,
+        })
+    db.commit()
+    return out
+
+
+@app.get("/api/inventory/movements", response_model=List[InventoryMovementOut])
+def list_inventory_movements(
+    material_id: Optional[int] = None,
+    limit: int = 200,
+    db: Session = Depends(get_db),
+):
+    q = db.query(InventoryMovement).options(joinedload(InventoryMovement.material))
+    if material_id:
+        q = q.filter(InventoryMovement.material_id == material_id)
+    rows = q.order_by(InventoryMovement.created_at.desc()).limit(limit).all()
+    return [{
+        "id": r.id,
+        "material_id": r.material_id,
+        "material_code": r.material.code,
+        "material_name": r.material.name,
+        "movement_type": r.movement_type,
+        "source_type": r.source_type,
+        "source_id": r.source_id,
+        "quantity_delta": r.quantity_delta,
+        "unit": r.unit,
+        "movement_date": r.movement_date,
+        "notes": r.notes,
+        "created_at": r.created_at,
+    } for r in rows]
+
+
+@app.put("/api/materials/{material_id}/planning", response_model=InventoryOverviewItem)
+def update_material_planning(material_id: int, body: MaterialPlanningParamUpdate, db: Session = Depends(get_db)):
+    material = _material_or_404(db, material_id)
+    params = db.query(MaterialPlanningParam).filter_by(material_id=material.id).first()
+    if not params:
+        params = MaterialPlanningParam(material_id=material.id)
+        db.add(params)
+    params.lead_time_days = body.lead_time_days
+    params.safety_stock_qty = body.safety_stock_qty
+    params.reorder_qty = body.reorder_qty
+    params.critical_days_left = body.critical_days_left
+    params.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    overview = inventory_overview(db)
+    return next(item for item in overview if item["material_id"] == material_id)
+
+
+@app.post("/api/materials/{material_id}/market-prices", response_model=MaterialMarketPriceOut, status_code=201)
+def add_market_price(material_id: int, body: MaterialMarketPriceCreate, db: Session = Depends(get_db)):
+    material = _material_or_404(db, material_id)
+    existing = db.query(MaterialMarketPrice).filter_by(material_id=material.id, price_date=body.price_date).first()
+    if existing:
+        existing.price = body.price
+        existing.unit = body.unit or material.base_unit
+        row = existing
+    else:
+        row = MaterialMarketPrice(
+            material_id=material.id,
+            price_date=body.price_date,
+            price=body.price,
+            unit=body.unit or material.base_unit,
+            created_at=datetime.now(timezone.utc),
+        )
+        db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+@app.get("/api/purchase/recommendations", response_model=List[PurchaseRecommendationOut])
+def list_purchase_recommendations(status: Optional[str] = "open", db: Session = Depends(get_db)):
+    for material in db.query(Material).options(joinedload(Material.planning_params)).filter_by(is_active=True).all():
+        _evaluate_mrp(db, material)
+    db.commit()
+    q = db.query(PurchaseRecommendation).options(joinedload(PurchaseRecommendation.material))
+    if status:
+        q = q.filter(PurchaseRecommendation.status == status)
+    return [_recommendation_payload(r) for r in q.order_by(PurchaseRecommendation.created_at.desc()).all()]
+
+
+def _po_payload(po: PurchaseOrder) -> dict:
+    return {
+        "id": po.id,
+        "po_number": po.po_number,
+        "supplier": po.supplier,
+        "status": po.status,
+        "order_date": po.order_date,
+        "created_at": po.created_at,
+        "lines": [{
+            "id": line.id,
+            "recommendation_id": line.recommendation_id,
+            "material_id": line.material_id,
+            "material_code": line.material.code,
+            "material_name": line.material.name,
+            "quantity_ordered": line.quantity_ordered,
+            "quantity_received": line.quantity_received,
+            "unit": line.unit,
+            "rate": line.rate,
+        } for line in po.lines],
+    }
+
+
+@app.post("/api/purchase/recommendations/{recommendation_id}/convert-to-po", response_model=PurchaseOrderOut, status_code=201)
+def convert_recommendation_to_po(
+    recommendation_id: int,
+    body: PurchaseOrderCreate,
+    db: Session = Depends(get_db),
+):
+    rec = (
+        db.query(PurchaseRecommendation)
+        .options(joinedload(PurchaseRecommendation.material))
+        .filter_by(id=recommendation_id)
+        .first()
+    )
+    if not rec:
+        raise HTTPException(404, "Purchase recommendation not found")
+    if rec.status != "open":
+        raise HTTPException(400, "Recommendation is not open")
+
+    today = date.today()
+    po = PurchaseOrder(
+        po_number=f"PO-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}",
+        supplier=body.supplier,
+        status="open",
+        order_date=body.order_date or today,
+        created_at=datetime.now(timezone.utc),
+    )
+    db.add(po)
+    db.flush()
+    line = PurchaseOrderLine(
+        purchase_order_id=po.id,
+        recommendation_id=rec.id,
+        material_id=rec.material_id,
+        quantity_ordered=body.quantity or rec.suggested_qty,
+        unit=rec.unit,
+        rate=body.rate,
+        quantity_received=0.0,
+    )
+    db.add(line)
+    rec.status = "converted"
+    rec.converted_at = datetime.now(timezone.utc)
+    db.commit()
+    po = db.query(PurchaseOrder).options(joinedload(PurchaseOrder.lines).joinedload(PurchaseOrderLine.material)).filter_by(id=po.id).first()
+    return _po_payload(po)
+
+
+@app.get("/api/purchase/orders", response_model=List[PurchaseOrderOut])
+def list_purchase_orders(db: Session = Depends(get_db)):
+    rows = (
+        db.query(PurchaseOrder)
+        .options(joinedload(PurchaseOrder.lines).joinedload(PurchaseOrderLine.material))
+        .order_by(PurchaseOrder.created_at.desc())
+        .all()
+    )
+    return [_po_payload(po) for po in rows]
+
+
+@app.post("/api/purchase/orders/{po_id}/receive", response_model=GoodsReceiptOut, status_code=201)
+def receive_purchase_order(po_id: int, body: GoodsReceiptCreate, db: Session = Depends(get_db)):
+    po = db.query(PurchaseOrder).filter_by(id=po_id).first()
+    if not po:
+        raise HTTPException(404, "Purchase order not found")
+    gr = GoodsReceipt(
+        gr_number=f"GR-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}",
+        purchase_order_id=po.id,
+        receipt_date=body.receipt_date or date.today(),
+        notes=body.notes,
+        created_at=datetime.now(timezone.utc),
+    )
+    db.add(gr)
+    db.flush()
+    for item in body.lines:
+        po_line = db.query(PurchaseOrderLine).options(joinedload(PurchaseOrderLine.material)).filter_by(id=item.po_line_id, purchase_order_id=po.id).first()
+        if not po_line:
+            raise HTTPException(404, f"PO line {item.po_line_id} not found")
+        remaining = po_line.quantity_ordered - po_line.quantity_received
+        if item.quantity_received > remaining + 1e-9:
+            raise HTTPException(400, f"Receipt exceeds remaining quantity for line {po_line.id}")
+        rate = item.rate or po_line.rate
+        gr_line = GoodsReceiptLine(
+            goods_receipt_id=gr.id,
+            purchase_order_line_id=po_line.id,
+            material_id=po_line.material_id,
+            quantity_received=item.quantity_received,
+            unit=po_line.unit,
+            rate=rate,
+        )
+        db.add(gr_line)
+        db.flush()
+        po_line.quantity_received = round(po_line.quantity_received + item.quantity_received, 6)
+        _post_inventory_movement(
+            db,
+            material=po_line.material,
+            quantity_delta=item.quantity_received,
+            movement_type="receipt",
+            source_type="goods_receipt",
+            source_id=gr.id,
+            goods_receipt_line_id=gr_line.id,
+            movement_date=gr.receipt_date,
+            unit=po_line.unit,
+            notes=f"Goods receipt {gr.gr_number} for {po.po_number}",
+        )
+        _evaluate_mrp(db, po_line.material)
+    if all(line.quantity_received >= line.quantity_ordered for line in po.lines):
+        po.status = "received"
+    else:
+        po.status = "partial"
+    db.commit()
+    return {
+        "id": gr.id,
+        "gr_number": gr.gr_number,
+        "purchase_order_id": gr.purchase_order_id,
+        "receipt_date": gr.receipt_date,
+        "created_at": gr.created_at,
+    }

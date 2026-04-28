@@ -90,6 +90,17 @@ export const getProductionEntries   = (params)        => http.get('/production/e
 export const deleteProductionEntry  = (id)            => http.delete(`/production/entries/${id}`)
 export const getProductionDashboard = (targetDate)    => http.get('/production/dashboard', { params: clean({ target_date: targetDate }) }).then(r => r.data)
 
+// ── Materials / Inventory / MRP / Purchasing ─────────────────────────────────
+export const getMaterials              = ()                  => http.get('/materials').then(r => r.data)
+export const getInventoryOverview      = ()                  => http.get('/inventory/overview').then(r => r.data)
+export const getInventoryMovements     = (params = {})       => http.get('/inventory/movements', { params: clean(params) }).then(r => r.data)
+export const updateMaterialPlanning    = (id, body)          => http.put(`/materials/${id}/planning`, body).then(r => r.data)
+export const addMaterialMarketPrice    = (id, body)          => http.post(`/materials/${id}/market-prices`, body).then(r => r.data)
+export const getPurchaseRecommendations = (status = 'open')  => http.get('/purchase/recommendations', { params: clean({ status }) }).then(r => r.data)
+export const convertRecommendationToPO = (id, body)          => http.post(`/purchase/recommendations/${id}/convert-to-po`, body).then(r => r.data)
+export const getPurchaseOrders         = ()                  => http.get('/purchase/orders').then(r => r.data)
+export const receivePurchaseOrder      = (id, body)          => http.post(`/purchase/orders/${id}/receive`, body).then(r => r.data)
+
 // Client-side formula mirrors (for live preview before save)
 export const calcEfficiencyKg    = (stdRate, effPct, hours) =>
   Math.round(stdRate * (effPct / 100) * hours * 1000) / 1000

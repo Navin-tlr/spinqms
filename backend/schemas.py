@@ -443,6 +443,7 @@ class ProductionEntryCreate(BaseModel):
     # Optional secondary (theoretical)
     spindle_rpm: Optional[float] = Field(None, gt=0)
     tpi:         Optional[float] = Field(None, gt=0, description="Turns per inch")
+    material_consumption: List["MaterialConsumptionCreate"] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def validate_method_inputs(self) -> "ProductionEntryCreate":
@@ -488,6 +489,8 @@ class ProductionEntryOut(BaseModel):
     notes:       Optional[str]
     recorded_at: datetime
     created_at:  datetime
+    is_void:     bool = False
+    material_consumption: List["MaterialConsumptionOut"] = Field(default_factory=list)
 
     model_config = {"from_attributes": True}
 
@@ -507,6 +510,162 @@ class ProductionDashboardOut(BaseModel):
     date:      str
     depts:     List[ProductionDeptSummary]
     total_kg:  float
+
+
+# ── Materials / Inventory / MRP / Purchasing ─────────────────────────────────
+class MaterialOut(BaseModel):
+    id: int
+    code: str
+    name: str
+    base_unit: str
+    is_active: bool
+
+    model_config = {"from_attributes": True}
+
+
+class MaterialConsumptionCreate(BaseModel):
+    material_id: Optional[int] = None
+    material_code: Optional[str] = None
+    quantity: float = Field(..., gt=0)
+    unit: str = Field(..., min_length=1, max_length=20)
+
+    @model_validator(mode="after")
+    def has_material_ref(self) -> "MaterialConsumptionCreate":
+        if self.material_id is None and not self.material_code:
+            raise ValueError("material_id or material_code is required")
+        return self
+
+
+class MaterialConsumptionOut(BaseModel):
+    id: int
+    material_id: int
+    material_code: str
+    material_name: str
+    quantity: float
+    unit: str
+
+
+class InventoryMovementOut(BaseModel):
+    id: int
+    material_id: int
+    material_code: str
+    material_name: str
+    movement_type: str
+    source_type: str
+    source_id: Optional[int]
+    quantity_delta: float
+    unit: str
+    movement_date: date
+    notes: Optional[str]
+    created_at: datetime
+
+
+class MaterialPlanningParamUpdate(BaseModel):
+    lead_time_days: float = Field(..., ge=0)
+    safety_stock_qty: float = Field(..., ge=0)
+    reorder_qty: float = Field(..., gt=0)
+    critical_days_left: float = Field(2.0, ge=0)
+
+
+class MaterialMarketPriceCreate(BaseModel):
+    price_date: date
+    price: float = Field(..., gt=0)
+    unit: Optional[str] = None
+
+
+class MaterialMarketPriceOut(BaseModel):
+    id: int
+    material_id: int
+    price_date: date
+    price: float
+    unit: str
+
+    model_config = {"from_attributes": True}
+
+
+class PurchaseRecommendationOut(BaseModel):
+    id: int
+    material_id: int
+    material_code: str
+    material_name: str
+    status: str
+    suggested_qty: float
+    unit: str
+    reason: str
+    decision_support: Optional[str]
+    stock_at_creation: float
+    reorder_level: float
+    avg_consumption: float
+    price_trend: Optional[str]
+    created_at: datetime
+
+
+class InventoryOverviewItem(BaseModel):
+    material_id: int
+    material_code: str
+    material_name: str
+    unit: str
+    stock: float
+    daily_consumption: float
+    avg_consumption_7d: float
+    days_left: Optional[float]
+    lead_time_days: float
+    safety_stock_qty: float
+    reorder_qty: float
+    reorder_level: float
+    status: str
+    action: str
+    price_trend: str
+    recommendation: Optional[PurchaseRecommendationOut] = None
+
+
+class PurchaseOrderCreate(BaseModel):
+    quantity: Optional[float] = Field(None, gt=0)
+    rate: float = Field(..., gt=0)
+    supplier: Optional[str] = Field(None, max_length=120)
+    order_date: Optional[date] = None
+
+
+class PurchaseOrderLineOut(BaseModel):
+    id: int
+    recommendation_id: Optional[int]
+    material_id: int
+    material_code: str
+    material_name: str
+    quantity_ordered: float
+    quantity_received: float
+    unit: str
+    rate: float
+
+
+class PurchaseOrderOut(BaseModel):
+    id: int
+    po_number: str
+    supplier: Optional[str]
+    status: str
+    order_date: date
+    created_at: datetime
+    lines: List[PurchaseOrderLineOut]
+
+
+class GoodsReceiptLineCreate(BaseModel):
+    po_line_id: int
+    quantity_received: float = Field(..., gt=0)
+    rate: Optional[float] = Field(None, gt=0)
+
+
+class GoodsReceiptCreate(BaseModel):
+    receipt_date: Optional[date] = None
+    notes: Optional[str] = None
+    lines: List[GoodsReceiptLineCreate] = Field(..., min_length=1)
+
+
+class GoodsReceiptOut(BaseModel):
+    id: int
+    gr_number: str
+    purchase_order_id: int
+    receipt_date: date
+    created_at: datetime
 
 
 # ── Error response (used by global exception handler) ────────────────────────

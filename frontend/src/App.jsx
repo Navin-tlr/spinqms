@@ -13,6 +13,8 @@ import YarnLab from './components/views/YarnLab.jsx'
 import ProductionDashboard from './components/views/ProductionDashboard.jsx'
 import ProductionEntry from './components/views/ProductionEntry.jsx'
 import ProductionLog from './components/views/ProductionLog.jsx'
+import InventoryPlanning from './components/views/InventoryPlanning.jsx'
+import PurchaseFlow from './components/views/PurchaseFlow.jsx'
 import { Spinner } from './components/Primitives.jsx'
 import { getDepts, getOverview, getAlerts, getUster } from './api.js'
 
@@ -87,7 +89,7 @@ export default function App() {
   const [machineFilter, setMachineFilter] = useState(null)
   /* ── Module switching ─────────────────────────────────────────────────── */
   const [currentModule,    setCurrentModule]    = useState(null)        // null = landing | 'quality' | 'production'
-  const [productionView,   setProductionView]   = useState('dashboard') // 'dashboard' | 'entry' | 'log'
+  const [productionView,   setProductionView]   = useState('dashboard') // production/inventory/purchase views
 
   // Reset machine filter when department changes
   useEffect(() => { setMachineFilter(null) }, [currentDept])
@@ -166,6 +168,8 @@ export default function App() {
             <ProductionEntry onSaved={() => setProductionView('dashboard')} />
           )}
           {productionView === 'log' && <ProductionLog />}
+          {productionView === 'inventory' && <InventoryPlanning />}
+          {productionView === 'purchase' && <PurchaseFlow />}
         </>
       )}
 
