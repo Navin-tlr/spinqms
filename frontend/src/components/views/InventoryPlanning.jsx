@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
 import {
   addMaterialMarketPrice,
+  createMaterial,
   createMaterialIssue,
+  deactivateMaterial,
   getInventoryMovements,
   getInventoryOverview,
   getMaterials,
@@ -209,6 +211,146 @@ function MaterialMovements({ movements, loading }) {
           </tbody>
         </table>
       )}
+    </div>
+  )
+}
+
+/* ── Common units used in textile mills ── */
+const COMMON_UNITS = ['Bales', 'Kg', 'Cones', 'Bobbins', 'Bags', 'Litres', 'Nos', 'Rolls']
+
+function MaterialMaster({ materials, onChanged }) {
+  const [form, setForm] = useState({ code: '', name: '', base_unit: 'Bales' })
+  const [saving, setSaving]   = useState(false)
+  const [message, setMessage] = useState('')
+  const [error, setError]     = useState('')
+  const [removing, setRemoving] = useState(null)
+
+  const canSave = form.code.trim() && form.name.trim() && form.base_unit.trim()
+
+  const save = async () => {
+    setSaving(true); setError(''); setMessage('')
+    try {
+      const m = await createMaterial(form)
+      setMessage(`Added: ${m.code} — ${m.name}`)
+      setForm({ code: '', name: '', base_unit: 'Bales' })
+      onChanged && onChanged()
+    } catch (e) {
+      setError(e?.response?.data?.detail || 'Could not create material')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const remove = async (id, name) => {
+    if (!window.confirm(`Deactivate "${name}"? This cannot be undone if stock exists.`)) return
+    setRemoving(id)
+    try {
+      await deactivateMaterial(id)
+      onChanged && onChanged()
+    } catch (e) {
+      setError(e?.response?.data?.detail || 'Could not deactivate material')
+    } finally {
+      setRemoving(null)
+    }
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+
+      {/* ── Add new material form ── */}
+      <div style={{ background: '#fff', border: '1px solid #d9dadb', borderBottom: 'none', padding: '14px 16px' }}>
+        <div style={{ fontSize: 11, fontWeight: 600, color: '#6a6d70', textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 12 }}>
+          Add New Material
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr 160px auto', gap: 12, alignItems: 'end' }}>
+          <div>
+            <div style={{ fontSize: 11, color: '#6a6d70', marginBottom: 4 }}>Material Code</div>
+            <input
+              value={form.code}
+              onChange={e => setForm({ ...form, code: e.target.value })}
+              placeholder="e.g. RM-COTTON-01"
+              style={{ ...inputStyle, width: '100%', fontFamily: 'var(--mono)', textTransform: 'uppercase' }}
+            />
+          </div>
+          <div>
+            <div style={{ fontSize: 11, color: '#6a6d70', marginBottom: 4 }}>Material Name</div>
+            <input
+              value={form.name}
+              onChange={e => setForm({ ...form, name: e.target.value })}
+              placeholder="e.g. Raw Cotton — Shankar 6"
+              style={{ ...inputStyle, width: '100%' }}
+            />
+          </div>
+          <div>
+            <div style={{ fontSize: 11, color: '#6a6d70', marginBottom: 4 }}>Unit of Measure</div>
+            <select
+              value={form.base_unit}
+              onChange={e => setForm({ ...form, base_unit: e.target.value })}
+              style={{ ...inputStyle, width: '100%' }}
+            >
+              {COMMON_UNITS.map(u => <option key={u} value={u}>{u}</option>)}
+            </select>
+          </div>
+          <button
+            disabled={!canSave || saving}
+            onClick={save}
+            style={{
+              ...inputStyle,
+              background:  canSave ? SAP_BLUE : '#f2f2f2',
+              color:       canSave ? '#fff' : '#89919a',
+              borderColor: canSave ? SAP_BLUE : '#d9dadb',
+              cursor:      canSave ? 'pointer' : 'not-allowed',
+              fontWeight:  600,
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {saving ? 'Saving…' : 'Add Material'}
+          </button>
+        </div>
+        {(error || message) && (
+          <div style={{ marginTop: 10, fontSize: 12, color: error ? '#bb0000' : '#188f36' }}>
+            {error || message}
+          </div>
+        )}
+      </div>
+
+      {/* ── Material list ── */}
+      <div style={{ background: '#fff', border: '1px solid #d9dadb', overflowX: 'auto' }}>
+        {materials.length === 0 ? (
+          <div style={{ padding: 32, textAlign: 'center', color: '#89919a', fontSize: 13 }}>
+            No materials yet. Add your first material above.
+          </div>
+        ) : (
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr>
+                {['#', 'Code', 'Name', 'Unit', ''].map(h => (
+                  <th key={h} style={{ padding: '7px 12px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#6a6d70', textTransform: 'uppercase', letterSpacing: '.07em', background: '#f5f5f5', borderBottom: '1px solid #d9dadb' }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {materials.map((m, i) => (
+                <tr key={m.id} style={{ background: i % 2 === 0 ? '#fff' : '#fafafa' }}>
+                  <td style={{ padding: '8px 12px', fontFamily: 'var(--mono)', fontSize: 12, color: '#89919a', borderBottom: '1px solid #eeeeee', width: 50 }}>{i + 1}</td>
+                  <td style={{ padding: '8px 12px', fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 600, color: SAP_BLUE, borderBottom: '1px solid #eeeeee' }}>{m.code}</td>
+                  <td style={{ padding: '8px 12px', fontSize: 12, borderBottom: '1px solid #eeeeee' }}>{m.name}</td>
+                  <td style={{ padding: '8px 12px', fontFamily: 'var(--mono)', fontSize: 12, color: '#6a6d70', borderBottom: '1px solid #eeeeee' }}>{m.base_unit}</td>
+                  <td style={{ padding: '8px 12px', borderBottom: '1px solid #eeeeee', width: 100 }}>
+                    <button
+                      disabled={removing === m.id}
+                      onClick={() => remove(m.id, m.name)}
+                      style={{ ...inputStyle, cursor: 'pointer', color: '#bb0000', fontSize: 11 }}
+                    >
+                      {removing === m.id ? '…' : 'Remove'}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
     </div>
   )
 }
@@ -452,17 +594,19 @@ export default function InventoryPlanning({ mode = 'stock' }) {
     receipt:   ['Material Receipt',  'Post direct stock receipt without a purchase order'],
     movements: ['Material Movements','Auditable goods issue and goods receipt ledger'],
     planning:  ['Planning (MRP)',    'Lead time, safety stock, price trend, and reorder parameters'],
+    materials: ['Material Master',   'Create and manage the list of materials used in production'],
   }
   const [title, subtitle] = titles[mode] || titles.stock
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
       <PageBar title={title} subtitle={subtitle} onRefresh={load} />
-      {mode === 'stock'     && <StockOverview   rows={rows}         loading={loading} />}
+      {mode === 'stock'     && <StockOverview   rows={rows}           loading={loading} />}
       {mode === 'issue'     && <MaterialIssue   materials={materials} onPosted={load} />}
       {mode === 'receipt'   && <MaterialReceipt materials={materials} onPosted={load} />}
       {mode === 'movements' && <MaterialMovements movements={movements} loading={loading} />}
-      {mode === 'planning'  && <Planning         rows={rows}         onSaved={load} />}
+      {mode === 'planning'  && <Planning         rows={rows}           onSaved={load} />}
+      {mode === 'materials' && <MaterialMaster   materials={materials} onChanged={load} />}
     </div>
   )
 }

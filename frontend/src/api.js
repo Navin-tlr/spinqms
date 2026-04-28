@@ -92,6 +92,8 @@ export const getProductionDashboard = (targetDate)    => http.get('/production/d
 
 // ── Materials / Inventory / MRP / Purchasing ─────────────────────────────────
 export const getMaterials              = ()                  => http.get('/materials').then(r => r.data)
+export const createMaterial            = (body)              => http.post('/materials', body).then(r => r.data)
+export const deactivateMaterial        = (id)                => http.delete(`/materials/${id}`)
 export const getInventoryOverview      = ()                  => http.get('/inventory/overview').then(r => r.data)
 export const getInventoryMovements     = (params = {})       => http.get('/inventory/movements', { params: clean(params) }).then(r => r.data)
 export const createMaterialIssue       = (body)              => http.post('/inventory/material-issues', body).then(r => r.data)

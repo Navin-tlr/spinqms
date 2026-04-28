@@ -94,6 +94,7 @@ from schemas import (
     MaterialMarketPriceOut,
     MaterialIssueCreate,
     MaterialIssueOut,
+    MaterialCreate,
     MaterialOut,
     MaterialPlanningParamUpdate,
     PurchaseOrderCreate,
@@ -2541,6 +2542,43 @@ def production_dashboard(
 @app.get("/api/materials", response_model=List[MaterialOut])
 def list_materials(db: Session = Depends(get_db)):
     return db.query(Material).filter_by(is_active=True).order_by(Material.name).all()
+
+
+@app.post("/api/materials", response_model=MaterialOut, status_code=201)
+def create_material(body: MaterialCreate, db: Session = Depends(get_db)):
+    """Create a new material in the master list."""
+    # Check for duplicate code (case-insensitive)
+    existing = db.query(Material).filter(
+        Material.code.ilike(body.code.strip())
+    ).first()
+    if existing:
+        raise HTTPException(409, f"Material code '{body.code}' already exists")
+
+    now = datetime.now(timezone.utc)
+    material = Material(
+        code=body.code.strip().upper(),
+        name=body.name.strip(),
+        base_unit=body.base_unit.strip(),
+        is_active=True,
+        created_at=now,
+        updated_at=now,
+    )
+    db.add(material)
+    db.commit()
+    db.refresh(material)
+    return material
+
+
+@app.delete("/api/materials/{material_id}", status_code=204)
+def deactivate_material(material_id: int, db: Session = Depends(get_db)):
+    """Soft-delete a material (marks is_active=False). Cannot delete if stock exists."""
+    material = _material_or_404(db, material_id)
+    stock = db.query(InventoryStock).filter_by(material_id=material.id).first()
+    if stock and stock.quantity_on_hand > 0:
+        raise HTTPException(400, f"Cannot deactivate '{material.name}' — stock on hand: {stock.quantity_on_hand:g} {material.base_unit}")
+    material.is_active = False
+    material.updated_at = datetime.now(timezone.utc)
+    db.commit()
 
 
 @app.get("/api/inventory/overview", response_model=List[InventoryOverviewItem])

@@ -511,6 +511,12 @@ class ProductionDashboardOut(BaseModel):
 
 
 # ── Materials / Inventory / MRP / Purchasing ─────────────────────────────────
+class MaterialCreate(BaseModel):
+    code: str = Field(..., min_length=1, max_length=40, description="Unique material code, e.g. RM-COTTON-001")
+    name: str = Field(..., min_length=1, max_length=120, description="Full material name")
+    base_unit: str = Field(..., min_length=1, max_length=20, description="Unit of measure, e.g. Bales, Kg, Cones")
+
+
 class MaterialOut(BaseModel):
     id: int
     code: str
