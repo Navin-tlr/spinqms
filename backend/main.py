@@ -2121,7 +2121,7 @@ def _post_inventory_movement(
     quantity_delta: float,
     movement_type: str,
     source_type: str,
-    source_id: Optional[int],
+    source_id: Optional[int] = None,
     movement_date: date,
     unit: Optional[str] = None,
     production_consumption_id: Optional[int] = None,
@@ -2944,6 +2944,7 @@ def quick_receipt(body: QuickReceiptCreate, db: Session = Depends(get_db)):
             quantity_delta=item.quantity,
             movement_type="receipt",
             source_type="quick_receipt",
+            source_id=None,          # no parent PO — this is a direct/opening stock receipt
             movement_date=receipt_date,
             unit=material.base_unit,
             notes=f"{gr_number}: {body.reference or 'Direct material receipt'}",
