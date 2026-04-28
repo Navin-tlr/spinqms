@@ -233,7 +233,7 @@ function MaterialMaster({ materials, onChanged }) {
       const m = await createMaterial(form)
       setMessage(`Added: ${m.code} — ${m.name}`)
       setForm({ code: '', name: '', base_unit: 'Bales' })
-      onChanged && onChanged()
+      onChanged && onChanged(m)   // pass the new material for optimistic update
     } catch (e) {
       setError(e?.response?.data?.detail || 'Could not create material')
     } finally {
@@ -246,7 +246,7 @@ function MaterialMaster({ materials, onChanged }) {
     setRemoving(id)
     try {
       await deactivateMaterial(id)
-      onChanged && onChanged()
+      onChanged && onChanged({ _removed: id })  // signal removal for optimistic update
     } catch (e) {
       setError(e?.response?.data?.detail || 'Could not deactivate material')
     } finally {
@@ -608,7 +608,19 @@ export default function InventoryPlanning({ mode = 'stock' }) {
       {mode === 'receipt'   && <MaterialReceipt materials={materials} onPosted={load} />}
       {mode === 'movements' && <MaterialMovements movements={movements} loading={loading} />}
       {mode === 'planning'  && <Planning         rows={rows}           onSaved={load} />}
-      {mode === 'materials' && <MaterialMaster   materials={materials} onChanged={load} />}
+      {mode === 'materials' && <MaterialMaster   materials={materials} onChanged={(hint) => {
+        // Optimistic update so the list reflects the change immediately,
+        // regardless of whether the background load() succeeds.
+        if (hint && hint._removed) {
+          setMaterials(prev => prev.filter(m => m.id !== hint._removed))
+        } else if (hint && hint.id) {
+          setMaterials(prev => {
+            const exists = prev.some(m => m.id === hint.id)
+            return exists ? prev : [...prev, hint]
+          })
+        }
+        load()   // background refresh (will update the list again once it resolves)
+      }} />}
     </div>
   )
 }
