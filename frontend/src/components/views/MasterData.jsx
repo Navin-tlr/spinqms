@@ -51,7 +51,7 @@ const ROLE_META = {
 /* ── Shared input/button style ──────────────────────────────────────────────── */
 const inp = {
   padding: '5px 8px', fontSize: 12,
-  border: `1px solid ${BORDER}`, borderRadius: 2,
+  border: `1px solid ${BORDER}`, borderRadius: 0,
   background: '#fff', color: TXT_MAIN,
   fontFamily: 'var(--font)', boxSizing: 'border-box',
   outline: 'none',
@@ -98,20 +98,22 @@ function SectionLabel({ children }) {
   )
 }
 
+/* Plain SAP-style role tag — no color, monochrome */
 function RoleChip({ role, onRemove }) {
-  const m = ROLE_META[role] || { label: role, color: TXT_MUTED, bg: '#f5f5f5' }
+  const label = ROLE_META[role]?.label || role
   return (
     <span style={{
       display: 'inline-flex', alignItems: 'center', gap: 4,
-      padding: '2px 7px', fontSize: 10, fontWeight: 700,
-      borderRadius: 10, border: `1px solid ${m.color}`,
-      background: m.bg, color: m.color,
+      padding: '1px 6px', fontSize: 10, fontWeight: 600,
+      border: `1px solid #c8cacb`,
+      background: '#f5f5f5', color: TXT_MUTED,
+      letterSpacing: '.02em',
     }}>
-      {m.label}
+      {label}
       {onRemove && (
         <button onClick={onRemove} style={{
           background: 'none', border: 'none', cursor: 'pointer',
-          color: m.color, padding: 0, fontSize: 11, lineHeight: 1,
+          color: TXT_MUTED, padding: 0, fontSize: 11, lineHeight: 1,
         }}>×</button>
       )}
     </span>
@@ -119,24 +121,25 @@ function RoleChip({ role, onRemove }) {
 }
 
 function StatusBadge({ status }) {
-  const active  = status === 'Active'
+  const active = status === 'Active'
   return (
     <span style={{
-      fontSize: 10, fontWeight: 700,
+      fontSize: 10, fontWeight: 600,
       color:  active ? OK_GREEN : ERR_RED,
       background: active ? '#eafbee' : '#fff0f0',
       border: `1px solid ${active ? '#a9e0b5' : '#f5c0c0'}`,
-      borderRadius: 10, padding: '1px 7px',
+      borderRadius: 2, padding: '1px 6px',
     }}>{status}</span>
   )
 }
 
 /* ── SAP value-help field (input + F4 trigger icon) ────────────────────────── */
+/* SAP standard F4 value-help icon: box with diagonal ↗ arrow */
 const VH_ICON = (
-  <svg viewBox="0 0 12 12" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round">
-    <rect x="1" y="1" width="10" height="10" rx="1" />
-    <line x1="1" y1="4" x2="11" y2="4" />
-    <line x1="4" y1="4" x2="4" y2="11" />
+  <svg viewBox="0 0 12 12" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="1" y="1" width="10" height="10" />
+    <polyline points="4.5,7.5 7.5,4.5" />
+    <polyline points="5,4.5 7.5,4.5 7.5,7" />
   </svg>
 )
 
@@ -153,7 +156,7 @@ function VHField({ label, value, onChange, options, placeholder, required, mono,
           onChange={onChange}
           disabled={disabled}
           placeholder={placeholder || label}
-          style={{ ...inp, flex: 1, borderRight: 'none', borderRadius: '2px 0 0 2px',
+          style={{ ...inp, flex: 1, borderRight: 'none',
             ...(mono ? { fontFamily: 'var(--mono)', textTransform: 'uppercase' } : {}),
           }}
         />
@@ -162,7 +165,7 @@ function VHField({ label, value, onChange, options, placeholder, required, mono,
           onClick={() => setOpen(o => !o)}
           disabled={disabled}
           style={{
-            width: 24, border: `1px solid ${BORDER}`, borderRadius: '0 2px 2px 0',
+            width: 24, border: `1px solid ${BORDER}`, borderRadius: 0,
             background: open ? '#e8f1fd' : BG_HDR, color: open ? SAP_BLUE : TXT_MUTED,
             cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
             flexShrink: 0,
@@ -218,68 +221,108 @@ const LANGUAGE_OPTIONS = [
   { value: 'JA', label: 'JA — Japanese' },
 ]
 
-/* ── Role multi-select value-help ───────────────────────────────────────── */
+/* ── Role multi-select value-help — SAP plain table style ───────────────── */
+const ROLE_DESC = {
+  MM_VENDOR:   'Procurement supplier — required for GR / PO',
+  FI_VENDOR:   'Accounts payable (future FI module)',
+  FI_CUSTOMER: 'Accounts receivable (future FI module)',
+  SD_CUSTOMER: 'Sales customer (future SD module)',
+}
+
 function RoleVHField({ selectedRoles, onToggle }) {
   const [open, setOpen] = useState(false)
   return (
     <div style={{ position: 'relative' }}>
-      <div style={{ fontSize: 11, color: TXT_MUTED, marginBottom: 3 }}>
-        BP Role<span style={{ color: ERR_RED }}> *</span>
+      {/* Trigger: plain input-style box showing selected role codes */}
+      <div style={{ display: 'flex', gap: 0 }}>
+        <div
+          onClick={() => setOpen(o => !o)}
+          style={{
+            flex: 1, minHeight: 28, padding: '4px 7px',
+            border: `1px solid ${BORDER}`, borderRight: 'none',
+            background: '#fff', cursor: 'pointer',
+            display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap',
+            userSelect: 'none',
+          }}
+        >
+          {selectedRoles.length === 0
+            ? <span style={{ fontSize: 11, color: TXT_FAINT }}>— Select roles —</span>
+            : selectedRoles.map(r => (
+                <span key={r} style={{
+                  fontSize: 10, fontWeight: 600,
+                  padding: '1px 6px',
+                  border: `1px solid #c8cacb`,
+                  background: '#f5f5f5', color: TXT_MUTED,
+                }}>
+                  {ROLE_META[r]?.label || r}
+                </span>
+              ))
+          }
+        </div>
+        <button
+          type="button"
+          onClick={() => setOpen(o => !o)}
+          style={{
+            width: 24, border: `1px solid ${BORDER}`,
+            background: open ? '#e8f1fd' : BG_HDR, color: open ? SAP_BLUE : TXT_MUTED,
+            cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+            flexShrink: 0,
+          }}
+          title="Select business partner roles"
+        >
+          {VH_ICON}
+        </button>
       </div>
-      <div
-        onClick={() => setOpen(o => !o)}
-        style={{
-          display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap',
-          minHeight: 28, padding: '3px 4px 3px 6px',
-          border: `1px solid ${BORDER}`, borderRadius: 2, cursor: 'pointer',
-          background: '#fff', userSelect: 'none',
-        }}
-      >
-        {selectedRoles.length === 0
-          ? <span style={{ fontSize: 11, color: TXT_FAINT, flex: 1 }}>— Select roles —</span>
-          : selectedRoles.map(r => <RoleChip key={r} role={r} />)
-        }
-        <span style={{ marginLeft: 'auto', color: open ? SAP_BLUE : TXT_MUTED, display: 'flex', alignItems: 'center' }}>{VH_ICON}</span>
-      </div>
+
+      {/* Dropdown: SAP compact table — no colors */}
       {open && (
         <div style={{
           position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 200,
           background: '#fff', border: `1px solid ${BORDER}`,
           boxShadow: '0 4px 12px rgba(0,0,0,.12)',
         }}>
+          {/* Table header */}
+          <div style={{
+            display: 'grid', gridTemplateColumns: '28px 110px 1fr',
+            background: BG_HDR, borderBottom: `1px solid ${BORDER}`,
+            padding: '5px 10px', gap: 8,
+          }}>
+            <div />
+            <div style={{ fontSize: 10, fontWeight: 700, color: TXT_MUTED, textTransform: 'uppercase', letterSpacing: '.07em' }}>Role</div>
+            <div style={{ fontSize: 10, fontWeight: 700, color: TXT_MUTED, textTransform: 'uppercase', letterSpacing: '.07em' }}>Description</div>
+          </div>
           {ALL_ROLES.map(role => {
-            const m = ROLE_META[role]
             const on = selectedRoles.includes(role)
             return (
               <div key={role}
                 onClick={() => onToggle(role)}
                 style={{
-                  display: 'flex', alignItems: 'center', gap: 8,
-                  padding: '8px 12px', cursor: 'pointer',
+                  display: 'grid', gridTemplateColumns: '28px 110px 1fr',
+                  padding: '7px 10px', gap: 8, cursor: 'pointer',
                   background: on ? '#f0f4ff' : '#fff',
                   borderBottom: `1px solid #f0f0f0`,
+                  alignItems: 'center',
                 }}
               >
+                {/* SAP-style checkbox */}
                 <div style={{
-                  width: 14, height: 14, border: `1.5px solid ${on ? SAP_BLUE : BORDER}`,
-                  borderRadius: 2, background: on ? SAP_BLUE : '#fff',
+                  width: 13, height: 13,
+                  border: `1.5px solid ${on ? SAP_BLUE : '#999'}`,
+                  background: on ? SAP_BLUE : '#fff',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   flexShrink: 0,
                 }}>
                   {on && <svg viewBox="0 0 10 10" width="8" height="8"><polyline points="1,5 4,8 9,2" stroke="#fff" strokeWidth="1.5" fill="none" /></svg>}
                 </div>
-                <RoleChip role={role} />
-                <span style={{ fontSize: 11, color: TXT_MUTED, marginLeft: 4 }}>
-                  {role === 'MM_VENDOR' ? '— Procurement supplier (required for GR / PO)'
-                    : role === 'FI_VENDOR' ? '— Accounts payable'
-                    : role === 'FI_CUSTOMER' ? '— Accounts receivable'
-                    : '— Sales customer'}
+                <span style={{ fontSize: 11, fontWeight: on ? 600 : 400, color: on ? SAP_BLUE : TXT_MAIN, fontFamily: 'var(--mono)' }}>
+                  {role}
                 </span>
+                <span style={{ fontSize: 11, color: TXT_MUTED }}>{ROLE_DESC[role]}</span>
               </div>
             )
           })}
-          <div style={{ padding: '6px 12px', fontSize: 11, color: TXT_FAINT, borderTop: `1px solid ${BORDER}` }}>
-            Click to toggle · close by clicking outside
+          <div style={{ padding: '5px 10px', fontSize: 10, color: TXT_FAINT, borderTop: `1px solid ${BORDER}`, background: BG_HDR }}>
+            Click row to select / deselect · {selectedRoles.length} selected
           </div>
         </div>
       )}
@@ -402,8 +445,8 @@ function BusinessPartners({ bps, onChanged }) {
     }}>
       {/* ── LEFT: General Data ── */}
       <div style={{ padding: '16px 20px', borderRight: `1px solid ${BORDER}` }}>
-        <div style={{ fontSize: 11, fontWeight: 700, color: TXT_MUTED, textTransform: 'uppercase',
-          letterSpacing: '.08em', marginBottom: 14, paddingBottom: 6, borderBottom: `1px solid ${BORDER}` }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: TXT_MAIN,
+          marginBottom: 14, paddingBottom: 6, borderBottom: `1px solid ${BORDER}` }}>
           General Data
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '130px 1fr', gap: '10px 0', alignItems: 'start' }}>
@@ -517,8 +560,8 @@ function BusinessPartners({ bps, onChanged }) {
 
       {/* ── RIGHT: Standard Address ── */}
       <div style={{ padding: '16px 20px' }}>
-        <div style={{ fontSize: 11, fontWeight: 700, color: TXT_MUTED, textTransform: 'uppercase',
-          letterSpacing: '.08em', marginBottom: 14, paddingBottom: 6, borderBottom: `1px solid ${BORDER}` }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: TXT_MAIN,
+          marginBottom: 14, paddingBottom: 6, borderBottom: `1px solid ${BORDER}` }}>
           Standard Address
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '100px 1fr', gap: '10px 0', alignItems: 'start' }}>
@@ -658,22 +701,49 @@ function BusinessPartners({ bps, onChanged }) {
                         {editing === bp.id ? (
                           <>
                             {formPanel(editDraft, setEditDraft, true)}
-                            {/* Role live-toggle */}
-                            <div style={{ marginTop: 10, padding: '8px 0', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                              <span style={{ fontSize: 11, color: TXT_MUTED, fontWeight: 600, flexShrink: 0 }}>ROLES (live):</span>
+                            {/* Role live-toggle — SAP plain table style */}
+                            <div style={{ marginTop: 10, border: `1px solid ${BORDER}`, background: '#fff' }}>
+                              <div style={{
+                                display: 'grid', gridTemplateColumns: '28px 110px 1fr 80px',
+                                background: BG_HDR, borderBottom: `1px solid ${BORDER}`,
+                                padding: '5px 10px', gap: 8,
+                              }}>
+                                <div />
+                                {['Role', 'Description', 'Action'].map(h => (
+                                  <div key={h} style={{ fontSize: 10, fontWeight: 700, color: TXT_MUTED, textTransform: 'uppercase', letterSpacing: '.07em' }}>{h}</div>
+                                ))}
+                              </div>
                               {ALL_ROLES.map(role => {
                                 const has = bp.roles.some(r => r.role === role)
                                 return (
-                                  <button key={role} onClick={() => toggleLiveRole(bp, role)}
-                                    style={{
-                                      padding: '2px 8px', fontSize: 10, fontWeight: 700,
-                                      borderRadius: 10, cursor: 'pointer',
-                                      border: `1px solid ${ROLE_META[role]?.color || BORDER}`,
-                                      background: has ? (ROLE_META[role]?.bg || '#f5f5f5') : 'transparent',
-                                      color: ROLE_META[role]?.color || TXT_MUTED,
-                                    }}>
-                                    {has ? '✓ ' : '+ '}{ROLE_META[role]?.label || role}
-                                  </button>
+                                  <div key={role} style={{
+                                    display: 'grid', gridTemplateColumns: '28px 110px 1fr 80px',
+                                    padding: '6px 10px', gap: 8, alignItems: 'center',
+                                    borderBottom: `1px solid #f0f0f0`,
+                                    background: has ? '#f0f4ff' : '#fff',
+                                  }}>
+                                    <div style={{
+                                      width: 10, height: 10, borderRadius: '50%',
+                                      background: has ? OK_GREEN : '#c8cacb',
+                                      flexShrink: 0,
+                                    }} />
+                                    <span style={{ fontSize: 11, fontFamily: 'var(--mono)', color: has ? TXT_MAIN : TXT_MUTED, fontWeight: has ? 600 : 400 }}>
+                                      {role}
+                                    </span>
+                                    <span style={{ fontSize: 11, color: TXT_MUTED }}>{ROLE_DESC[role]}</span>
+                                    <button
+                                      onClick={() => toggleLiveRole(bp, role)}
+                                      style={{
+                                        ...inp, fontSize: 10, cursor: 'pointer',
+                                        background: has ? '#fff0f0' : '#f0f4ff',
+                                        color: has ? ERR_RED : SAP_BLUE,
+                                        borderColor: has ? '#f5c0c0' : '#b8d0f8',
+                                        fontWeight: 600, padding: '2px 8px',
+                                      }}
+                                    >
+                                      {has ? 'Remove' : 'Add'}
+                                    </button>
+                                  </div>
                                 )
                               })}
                             </div>
@@ -689,7 +759,7 @@ function BusinessPartners({ bps, onChanged }) {
                           /* Read-only detail view */
                           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, paddingTop: 10 }}>
                             <div>
-                              <div style={{ fontSize: 11, fontWeight: 700, color: TXT_MUTED, textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 8 }}>General Data</div>
+                              <div style={{ fontSize: 13, fontWeight: 700, color: TXT_MAIN, marginBottom: 8, paddingBottom: 6, borderBottom: `1px solid ${BORDER}` }}>General Data</div>
                               {[
                                 ['BP Code', <span style={{ fontFamily: 'var(--mono)', color: SAP_BLUE }}>{bp.bp_code}</span>],
                                 ['Grouping', bp.grouping || '—'],
@@ -709,7 +779,7 @@ function BusinessPartners({ bps, onChanged }) {
                               ))}
                             </div>
                             <div>
-                              <div style={{ fontSize: 11, fontWeight: 700, color: TXT_MUTED, textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 8 }}>Standard Address</div>
+                              <div style={{ fontSize: 13, fontWeight: 700, color: TXT_MAIN, marginBottom: 8, paddingBottom: 6, borderBottom: `1px solid ${BORDER}` }}>Standard Address</div>
                               {[
                                 ['Street', bp.street || '—'],
                                 ['House No.', bp.house_number || '—'],
@@ -897,11 +967,8 @@ function Materials({ materials, onChanged }) {
                   <td style={{ ...td, fontWeight: 600 }}>{m.name}</td>
                   <td style={{ ...td }}>
                     {m.material_type ? (
-                      <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 10,
-                        background: m.material_type === 'RAW_MATERIAL' ? '#e8f1fd'
-                          : m.material_type === 'MAINTENANCE' ? '#fff4e6' : '#eafbee',
-                        color: m.material_type === 'RAW_MATERIAL' ? SAP_BLUE
-                          : m.material_type === 'MAINTENANCE' ? WARN_AMBER : OK_GREEN,
+                      <span style={{ fontSize: 10, fontWeight: 600, padding: '1px 6px',
+                        border: '1px solid #c8cacb', background: '#f5f5f5', color: TXT_MUTED,
                       }}>{MAT_TYPE_LABELS[m.material_type] || m.material_type}</span>
                     ) : <span style={{ color: TXT_FAINT }}>—</span>}
                   </td>
