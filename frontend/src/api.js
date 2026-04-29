@@ -91,13 +91,16 @@ export const getProductionDashboard = (targetDate)    => http.get('/production/d
 export const getVendors       = ()          => http.get('/vendors').then(r => r.data)
 export const createVendor     = (body)      => http.post('/vendors', body).then(r => r.data)
 export const updateVendor     = (id, body)  => http.put(`/vendors/${id}`, body).then(r => r.data)
-export const deactivateVendor = (id)        => http.delete(`/vendors/${id}`)
+export const deleteVendor     = (id)        => http.delete(`/vendors/${id}`)
+export const deactivateVendor = (id)        => http.post(`/vendors/${id}/deactivate`)
 
 // ── Materials / Inventory / MRP / Purchasing ─────────────────────────────────
 export const getMaterials           = ()              => http.get('/materials').then(r => r.data)
 export const createMaterial         = (body)          => http.post('/materials', body).then(r => r.data)
 export const updateMaterial         = (id, body)      => http.put(`/materials/${id}`, body).then(r => r.data)
-export const deactivateMaterial     = (id)            => http.delete(`/materials/${id}`)
+export const deleteMaterial         = (id)            => http.delete(`/materials/${id}`)
+export const archiveMaterial        = (id)            => http.post(`/materials/${id}/archive`)
+export const deactivateMaterial     = (id)            => http.delete(`/materials/${id}`) // kept for compat
 export const getInventoryOverview   = ()              => http.get('/inventory/overview').then(r => r.data)
 export const getInventoryMovements  = (params = {})   => http.get('/inventory/movements', { params: clean(params) }).then(r => r.data)
 export const createMaterialIssue    = (body)          => http.post('/inventory/material-issues', body).then(r => r.data)
@@ -124,6 +127,14 @@ export const postDirectGR = (params, file = null) => {
     headers: { 'Content-Type': 'multipart/form-data' },
   }).then(r => r.data)
 }
+
+// ── Vendor–Material links ─────────────────────────────────────────────────────
+export const getVendorMaterials     = (params = {})  => http.get('/vendor-materials', { params: clean(params) }).then(r => r.data)
+export const createVendorMaterial   = (body)         => http.post('/vendor-materials', body).then(r => r.data)
+export const deleteVendorMaterial   = (vendorId, materialId) => http.delete(`/vendor-materials/${vendorId}/${materialId}`)
+
+// ── Admin ─────────────────────────────────────────────────────────────────────
+export const resetInventory = () => http.post('/admin/reset-inventory')
 
 // ── Purchase / MRP ────────────────────────────────────────────────────────────
 export const getPurchaseRecommendations = (status = 'open') => http.get('/purchase/recommendations', { params: clean({ status }) }).then(r => r.data)

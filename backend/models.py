@@ -491,6 +491,37 @@ class Vendor(Base):
 
     purchase_orders  = relationship("PurchaseOrder",  back_populates="vendor")
     goods_receipts   = relationship("GoodsReceipt",   back_populates="vendor")
+    vendor_materials = relationship("VendorMaterial",  back_populates="vendor",
+                                   cascade="all, delete-orphan")
+
+
+class VendorMaterial(Base):
+    """
+    Many-to-many join between vendors and materials.
+    Tracks which vendor supplies which material, preferred vendor flags,
+    lead time, and the last traded price (auto-updated on GR posting).
+    """
+    __tablename__ = "vendor_materials"
+
+    id              = Column(Integer, primary_key=True)
+    vendor_id       = Column(Integer, ForeignKey("vendors.id",   ondelete="CASCADE"),
+                             nullable=False, index=True)
+    material_id     = Column(Integer, ForeignKey("materials.id", ondelete="CASCADE"),
+                             nullable=False, index=True)
+    is_preferred    = Column(Boolean, nullable=False, default=False)
+    lead_time_days  = Column(Float,   nullable=True)
+    last_price      = Column(Float,   nullable=True)
+    last_price_date = Column(Date,    nullable=True)
+    notes           = Column(Text,    nullable=True)
+    created_at      = Column(DateTime, nullable=False,
+                             default=lambda: datetime.now(timezone.utc))
+
+    vendor   = relationship("Vendor",   back_populates="vendor_materials")
+    material = relationship("Material", back_populates="vendor_materials")
+
+    __table_args__ = (
+        UniqueConstraint("vendor_id", "material_id", name="uq_vendor_material"),
+    )
 
 
 class Material(Base):
@@ -507,8 +538,10 @@ class Material(Base):
     created_at  = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
     updated_at  = Column(DateTime, nullable=True)
 
-    planning_params = relationship("MaterialPlanningParam", back_populates="material", uselist=False)
-    stock = relationship("InventoryStock", back_populates="material", uselist=False)
+    planning_params  = relationship("MaterialPlanningParam", back_populates="material", uselist=False)
+    stock            = relationship("InventoryStock",         back_populates="material", uselist=False)
+    vendor_materials = relationship("VendorMaterial",         back_populates="material",
+                                   cascade="all, delete-orphan")
 
 
 class ProductionMaterialConsumption(Base):

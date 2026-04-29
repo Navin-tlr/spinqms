@@ -56,6 +56,7 @@ from models import (
     Sample,
     SettingsVersion,
     Vendor,
+    VendorMaterial,
 )
 from schemas import (
     Alert,
@@ -110,6 +111,8 @@ from schemas import (
     SettingsOut,
     SettingsUpdate,
     VendorCreate,
+    VendorMaterialCreate,
+    VendorMaterialOut,
     VendorOut,
     VendorUpdate,
 )
@@ -2664,7 +2667,30 @@ def update_vendor(vendor_id: int, body: VendorUpdate, db: Session = Depends(get_
 
 
 @app.delete("/api/vendors/{vendor_id}", status_code=204)
+def delete_vendor(vendor_id: int, db: Session = Depends(get_db)):
+    """
+    Hard-delete a vendor. Blocked if any GRs or POs reference this vendor,
+    because deleting would orphan financial documents. Deactivate instead.
+    vendor_materials rows are cascaded away automatically.
+    """
+    vendor = db.query(Vendor).filter_by(id=vendor_id).first()
+    if not vendor:
+        raise HTTPException(404, f"Vendor {vendor_id} not found")
+    has_gr  = db.query(GoodsReceipt).filter_by(vendor_id=vendor_id).first()
+    has_po  = db.query(PurchaseOrder).filter_by(vendor_id=vendor_id).first()
+    if has_gr or has_po:
+        raise HTTPException(
+            409,
+            f"Cannot delete '{vendor.name}' — it has linked goods receipts or purchase orders. "
+            "Deactivate it instead to preserve the transaction history.",
+        )
+    db.delete(vendor)
+    db.commit()
+
+
+@app.post("/api/vendors/{vendor_id}/deactivate", status_code=204)
 def deactivate_vendor(vendor_id: int, db: Session = Depends(get_db)):
+    """Soft-deactivate: hides vendor from active lists but keeps all documents intact."""
     vendor = db.query(Vendor).filter_by(id=vendor_id).first()
     if not vendor:
         raise HTTPException(404, f"Vendor {vendor_id} not found")
@@ -2730,10 +2756,38 @@ def update_material(material_id: int, body: MaterialUpdate, db: Session = Depend
 
 
 @app.delete("/api/materials/{material_id}", status_code=204)
+def delete_material(material_id: int, db: Session = Depends(get_db)):
+    """
+    Hard-delete a material. Only allowed if the material has zero transaction history
+    (no movements, GR lines, issue lines, PO lines, or recommendations). If any exist,
+    returns 409 and instructs the caller to archive instead.
+    vendor_materials rows cascade automatically.
+    """
+    material = _material_or_404(db, material_id)
+    checks = [
+        (InventoryMovement,    "inventory_movements"),
+        (GoodsReceiptLine,     "goods receipts"),
+        (MaterialIssueLine,    "goods issues"),
+        (PurchaseOrderLine,    "purchase orders"),
+        (PurchaseRecommendation, "purchase recommendations"),
+    ]
+    for model_cls, label in checks:
+        if db.query(model_cls).filter_by(material_id=material_id).first():
+            raise HTTPException(
+                409,
+                f"Cannot delete '{material.name}' — it has linked {label}. "
+                "Use Archive to hide it without losing history.",
+            )
+    # Safe to hard-delete: cascade takes care of planning_params, stock, vendor_materials
+    db.delete(material)
+    db.commit()
+
+
+@app.post("/api/materials/{material_id}/archive", status_code=204)
 def archive_material(material_id: int, db: Session = Depends(get_db)):
     """
-    Soft-archive — sets is_active=False.  Historical movements / GR lines that
-    reference this material are untouched; they carry the material name inline.
+    Soft-archive — sets is_active=False.  All historical documents that
+    reference this material remain intact.
     Blocked if physical stock on hand > 0 (would create invisible inventory).
     """
     material = _material_or_404(db, material_id)
@@ -2742,10 +2796,128 @@ def archive_material(material_id: int, db: Session = Depends(get_db)):
         raise HTTPException(
             400,
             f"Cannot archive '{material.name}' — {stock.quantity_on_hand:g} {material.base_unit} "
-            f"still on hand. Issue or adjust stock to zero first.",
+            "still on hand. Issue or adjust stock to zero first.",
         )
     material.is_active = False
     material.updated_at = datetime.now(timezone.utc)
+    db.commit()
+
+
+# ── Vendor–Material links ─────────────────────────────────────────────────────
+
+def _vm_payload(vm: VendorMaterial) -> dict:
+    return {
+        "id":             vm.id,
+        "vendor_id":      vm.vendor_id,
+        "vendor_code":    vm.vendor.code,
+        "vendor_name":    vm.vendor.name,
+        "material_id":    vm.material_id,
+        "material_code":  vm.material.code,
+        "material_name":  vm.material.name,
+        "is_preferred":   vm.is_preferred,
+        "lead_time_days": vm.lead_time_days,
+        "last_price":     vm.last_price,
+        "last_price_date": str(vm.last_price_date) if vm.last_price_date else None,
+        "notes":          vm.notes,
+        "created_at":     vm.created_at.isoformat() if vm.created_at else None,
+    }
+
+
+@app.get("/api/vendor-materials", response_model=List[VendorMaterialOut])
+def list_vendor_materials(
+    vendor_id:   Optional[int] = None,
+    material_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+):
+    """Return all vendor–material links, optionally filtered by vendor or material."""
+    from sqlalchemy.orm import joinedload
+    q = db.query(VendorMaterial).options(
+        joinedload(VendorMaterial.vendor),
+        joinedload(VendorMaterial.material),
+    )
+    if vendor_id:
+        q = q.filter(VendorMaterial.vendor_id == vendor_id)
+    if material_id:
+        q = q.filter(VendorMaterial.material_id == material_id)
+    return [_vm_payload(vm) for vm in q.all()]
+
+
+@app.post("/api/vendor-materials", status_code=201)
+def create_vendor_material(body: VendorMaterialCreate, db: Session = Depends(get_db)):
+    """Link a vendor to a material. Idempotent — updates if the pair already exists."""
+    from sqlalchemy.orm import joinedload
+    existing = db.query(VendorMaterial).filter_by(
+        vendor_id=body.vendor_id, material_id=body.material_id
+    ).first()
+    if existing:
+        # Update fields on the existing link
+        for field in ("is_preferred", "lead_time_days", "last_price", "last_price_date", "notes"):
+            val = getattr(body, field)
+            if val is not None:
+                setattr(existing, field, val)
+        db.commit()
+        db.refresh(existing)
+        vm = db.query(VendorMaterial).options(
+            joinedload(VendorMaterial.vendor), joinedload(VendorMaterial.material)
+        ).filter_by(id=existing.id).one()
+    else:
+        if not db.query(Vendor).filter_by(id=body.vendor_id).first():
+            raise HTTPException(404, "Vendor not found")
+        if not db.query(Material).filter_by(id=body.material_id).first():
+            raise HTTPException(404, "Material not found")
+        vm_row = VendorMaterial(
+            vendor_id=body.vendor_id,
+            material_id=body.material_id,
+            is_preferred=body.is_preferred,
+            lead_time_days=body.lead_time_days,
+            last_price=body.last_price,
+            last_price_date=body.last_price_date,
+            notes=body.notes,
+        )
+        db.add(vm_row)
+        db.commit()
+        vm = db.query(VendorMaterial).options(
+            joinedload(VendorMaterial.vendor), joinedload(VendorMaterial.material)
+        ).filter_by(id=vm_row.id).one()
+    return _vm_payload(vm)
+
+
+@app.delete("/api/vendor-materials/{vendor_id}/{material_id}", status_code=204)
+def delete_vendor_material(vendor_id: int, material_id: int, db: Session = Depends(get_db)):
+    """Remove a vendor–material link. Does not affect any transaction documents."""
+    vm = db.query(VendorMaterial).filter_by(
+        vendor_id=vendor_id, material_id=material_id
+    ).first()
+    if not vm:
+        raise HTTPException(404, "Vendor–material link not found")
+    db.delete(vm)
+    db.commit()
+
+
+# ── Admin: inventory data reset ───────────────────────────────────────────────
+
+@app.post("/api/admin/reset-inventory", status_code=204)
+def reset_inventory(db: Session = Depends(get_db)):
+    """
+    DESTRUCTIVE — wipes all inventory master data and transaction history.
+    Quality samples, production entries, and department settings are untouched.
+    Intended for beta / test-data cleanup only.
+    """
+    # Delete in FK-safe order (children before parents)
+    db.query(InventoryMovement).delete(synchronize_session=False)
+    db.query(InventoryStock).delete(synchronize_session=False)
+    db.query(MaterialIssueLine).delete(synchronize_session=False)
+    db.query(MaterialIssueDocument).delete(synchronize_session=False)
+    db.query(GoodsReceiptLine).delete(synchronize_session=False)
+    db.query(GoodsReceipt).delete(synchronize_session=False)
+    db.query(PurchaseOrderLine).delete(synchronize_session=False)
+    db.query(PurchaseOrder).delete(synchronize_session=False)
+    db.query(PurchaseRecommendation).delete(synchronize_session=False)
+    db.query(MaterialMarketPrice).delete(synchronize_session=False)
+    db.query(MaterialPlanningParam).delete(synchronize_session=False)
+    db.query(VendorMaterial).delete(synchronize_session=False)
+    db.query(Material).delete(synchronize_session=False)
+    db.query(Vendor).delete(synchronize_session=False)
     db.commit()
 
 
@@ -3227,6 +3399,14 @@ async def post_direct_gr(
             unit=unit,
             notes=f"{gr_number} | {vendor.name} | {body.reference or 'Direct receipt'}",
         )
+        # Auto-update vendor_materials last_price when rate is provided
+        if item.rate:
+            vm = db.query(VendorMaterial).filter_by(
+                vendor_id=vendor.id, material_id=material.id
+            ).first()
+            if vm:
+                vm.last_price      = item.rate
+                vm.last_price_date = receipt_dt
         _evaluate_mrp(db, material)
 
     db.commit()

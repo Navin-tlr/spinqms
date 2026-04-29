@@ -544,6 +544,35 @@ class VendorOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+# ── Vendor–Material linking ───────────────────────────────────────────────────
+class VendorMaterialCreate(BaseModel):
+    vendor_id:      int
+    material_id:    int
+    is_preferred:   bool           = False
+    lead_time_days: Optional[float] = None
+    last_price:     Optional[float] = None
+    last_price_date: Optional[date] = None
+    notes:          Optional[str]  = None
+
+
+class VendorMaterialOut(BaseModel):
+    id:             int
+    vendor_id:      int
+    vendor_code:    str
+    vendor_name:    str
+    material_id:    int
+    material_code:  str
+    material_name:  str
+    is_preferred:   bool
+    lead_time_days: Optional[float]
+    last_price:     Optional[float]
+    last_price_date: Optional[date]
+    notes:          Optional[str]
+    created_at:     datetime
+
+    model_config = {"from_attributes": True}
+
+
 # ── Materials / Inventory / MRP / Purchasing ─────────────────────────────────
 class MaterialCreate(BaseModel):
     code:        str           = Field(..., min_length=1, max_length=40)

@@ -1,16 +1,22 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   addMaterialMarketPrice,
+  archiveMaterial,
   createMaterial,
   createMaterialIssue,
   createVendor,
-  deactivateMaterial,
+  createVendorMaterial,
+  deleteMaterial,
+  deleteVendor,
+  deleteVendorMaterial,
   deactivateVendor,
   getInventoryMovements,
   getInventoryOverview,
   getMaterials,
+  getVendorMaterials,
   getVendors,
   postDirectGR,
+  resetInventory,
   updateMaterial,
   updateMaterialPlanning,
   updateVendor,
@@ -109,9 +115,15 @@ function VendorMaster({ vendors, onChanged }) {
     } catch (e) { setErr(errMsg(e)) }
   }
 
-  const deactivate = async (id, name) => {
-    if (!window.confirm(`Deactivate vendor "${name}"?`)) return
-    try { await deactivateVendor(id); onChanged({ id }, 'remove') }
+  const deactivate = async (v) => {
+    if (!window.confirm(`Deactivate "${v.name}"?\n\nIt will be hidden from active lists but all linked documents are preserved.`)) return
+    try { await deactivateVendor(v.id); onChanged({ ...v, status: 'inactive' }, 'update') }
+    catch (e) { setErr(errMsg(e)) }
+  }
+
+  const hardDelete = async (v) => {
+    if (!window.confirm(`Permanently DELETE vendor "${v.name}"?\n\nThis cannot be undone. Will fail if the vendor has any goods receipts or purchase orders.`)) return
+    try { await deleteVendor(v.id); onChanged({ id: v.id }, 'remove') }
     catch (e) { setErr(errMsg(e)) }
   }
 
@@ -177,11 +189,14 @@ function VendorMaster({ vendors, onChanged }) {
                       {v.status.toUpperCase()}
                     </span>
                   </td>
-                  <td style={{ ...cell, display: 'flex', gap: 6 }}>
-                    <button onClick={() => { setEditing(v.id); setEditDraft({}) }} style={{ ...inp, cursor: 'pointer', fontSize: 11 }}>Edit</button>
-                    {v.status === 'active' && (
-                      <button onClick={() => deactivate(v.id, v.name)} style={{ ...inp, cursor: 'pointer', color: ERR, fontSize: 11 }}>Deactivate</button>
-                    )}
+                  <td style={{ ...cell, whiteSpace: 'nowrap' }}>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <button onClick={() => { setEditing(v.id); setEditDraft({}) }} style={{ ...inp, cursor: 'pointer', fontSize: 11 }}>Edit</button>
+                      {v.status === 'active' && (
+                        <button onClick={() => deactivate(v)} style={{ ...inp, cursor: 'pointer', color: '#b55b00', borderColor: '#e8a87c', fontSize: 11 }}>Deactivate</button>
+                      )}
+                      <button onClick={() => hardDelete(v)} style={{ ...inp, cursor: 'pointer', color: ERR, fontSize: 11 }}>Delete</button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -243,6 +258,20 @@ function MaterialMaster({ materials, onChanged }) {
     } catch (e) { setErr(errMsg(e)) } finally { setEditSaving(false) }
   }
 
+  /* ── Hard delete ── */
+  const hardDelete = async (m) => {
+    if (!window.confirm(
+      `Permanently DELETE "${m.name}"?\n\n` +
+      `Only allowed if this material has zero transaction history.\n` +
+      `If it has linked receipts or movements, you will get an error — use Archive instead.`
+    )) return
+    setArchiving(m.id)
+    try {
+      await deleteMaterial(m.id)
+      onChanged({ id: m.id }, 'remove')
+    } catch (e) { setErr(errMsg(e)) } finally { setArchiving(null) }
+  }
+
   /* ── Archive (soft delete) ── */
   const archive = async (m) => {
     if (!window.confirm(
@@ -252,7 +281,7 @@ function MaterialMaster({ materials, onChanged }) {
     )) return
     setArchiving(m.id)
     try {
-      await deactivateMaterial(m.id)
+      await archiveMaterial(m.id)
       onChanged({ id: m.id }, 'remove')
     } catch (e) { setErr(errMsg(e)) } finally { setArchiving(null) }
   }
@@ -368,6 +397,12 @@ function MaterialMaster({ materials, onChanged }) {
                         onClick={() => archive(m)}
                         style={{ ...inp, cursor: archiving === m.id ? 'not-allowed' : 'pointer', color: '#b55b00', borderColor: '#e8a87c', fontSize: 11 }}>
                         {archiving === m.id ? '…' : 'Archive'}
+                      </button>
+                      <button
+                        disabled={archiving === m.id}
+                        onClick={() => hardDelete(m)}
+                        style={{ ...inp, cursor: archiving === m.id ? 'not-allowed' : 'pointer', color: ERR, fontSize: 11 }}>
+                        Delete
                       </button>
                     </div>
                   </td>
@@ -797,6 +832,216 @@ function Planning({ rows, onSaved }) {
 }
 
 /* ══════════════════════════════════════════════════════════════════════════════
+   VENDOR–MATERIAL LINKS
+══════════════════════════════════════════════════════════════════════════════ */
+function VendorMaterialLinks({ vendors, materials }) {
+  const [links,       setLinks]     = useState([])
+  const [loading,     setLoading]   = useState(true)
+  const [vendorId,    setVendorId]  = useState('')
+  const [materialId,  setMaterialId]= useState('')
+  const [isPreferred, setIsPreferred] = useState(false)
+  const [leadTime,    setLeadTime]  = useState('')
+  const [lastPrice,   setLastPrice] = useState('')
+  const [notes,       setNotes]     = useState('')
+  const [saving,      setSaving]    = useState(false)
+  const [msg,         setMsg]       = useState('')
+  const [err,         setErr]       = useState('')
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    try { setLinks(await getVendorMaterials()) }
+    catch (e) { setErr(errMsg(e)) }
+    finally { setLoading(false) }
+  }, [])
+
+  useEffect(() => { load() }, [load])
+
+  const canAdd = vendorId && materialId
+
+  const addLink = async () => {
+    setSaving(true); setErr(''); setMsg('')
+    try {
+      const vm = await createVendorMaterial({
+        vendor_id:      Number(vendorId),
+        material_id:    Number(materialId),
+        is_preferred:   isPreferred,
+        lead_time_days: leadTime ? Number(leadTime) : null,
+        last_price:     lastPrice ? Number(lastPrice) : null,
+        notes:          notes || null,
+      })
+      setMsg(`Linked: ${vm.vendor_name} ↔ ${vm.material_name}`)
+      setVendorId(''); setMaterialId(''); setIsPreferred(false); setLeadTime(''); setLastPrice(''); setNotes('')
+      load()
+    } catch (e) { setErr(errMsg(e)) } finally { setSaving(false) }
+  }
+
+  const removeLink = async (vendorId, materialId, label) => {
+    if (!window.confirm(`Remove link: ${label}?`)) return
+    try { await deleteVendorMaterial(vendorId, materialId); load() }
+    catch (e) { setErr(errMsg(e)) }
+  }
+
+  const activeVendors    = vendors.filter(v => v.status === 'active')
+  const activeMaterials  = materials
+
+  // Group links by material for display
+  const byMaterial = {}
+  links.forEach(l => {
+    if (!byMaterial[l.material_id]) byMaterial[l.material_id] = { name: l.material_name, code: l.material_code, vendors: [] }
+    byMaterial[l.material_id].vendors.push(l)
+  })
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+      {/* Add link form */}
+      <div style={{ background: '#fff', border: '1px solid #d9dadb', borderBottom: 'none', padding: '14px 16px' }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: '#6a6d70', textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 12 }}>
+          Link Vendor to Material
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '220px 220px 100px 120px 140px 1fr', gap: 10, alignItems: 'end' }}>
+          <div>
+            <div style={{ fontSize: 11, color: '#6a6d70', marginBottom: 3 }}>Vendor *</div>
+            <select value={vendorId} onChange={e => setVendorId(e.target.value)} style={{ ...inp, width: '100%' }}>
+              <option value="">— Select Vendor —</option>
+              {activeVendors.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <div style={{ fontSize: 11, color: '#6a6d70', marginBottom: 3 }}>Material *</div>
+            <select value={materialId} onChange={e => setMaterialId(e.target.value)} style={{ ...inp, width: '100%' }}>
+              <option value="">— Select Material —</option>
+              {activeMaterials.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <div style={{ fontSize: 11, color: '#6a6d70', marginBottom: 3 }}>Lead Time (days)</div>
+            <input type="number" value={leadTime} onChange={e => setLeadTime(e.target.value)} placeholder="e.g. 7" style={{ ...inp, width: '100%', fontFamily: 'var(--mono)' }} />
+          </div>
+          <div>
+            <div style={{ fontSize: 11, color: '#6a6d70', marginBottom: 3 }}>Last Price (₹)</div>
+            <input type="number" value={lastPrice} onChange={e => setLastPrice(e.target.value)} placeholder="₹ per unit" style={{ ...inp, width: '100%', fontFamily: 'var(--mono)' }} />
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, paddingBottom: 2 }}>
+            <input type="checkbox" id="pref" checked={isPreferred} onChange={e => setIsPreferred(e.target.checked)} style={{ marginTop: 18 }} />
+            <label htmlFor="pref" style={{ fontSize: 12, color: '#32363a', marginTop: 18, cursor: 'pointer' }}>Preferred vendor</label>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'flex-end' }}>
+            <button disabled={!canAdd || saving} onClick={addLink} style={{ ...btn(canAdd && !saving), width: '100%' }}>
+              {saving ? 'Linking…' : 'Add Link'}
+            </button>
+          </div>
+        </div>
+        {(err || msg) && <div style={{ marginTop: 8, fontSize: 12, color: err ? ERR : OK }}>{err || msg}</div>}
+      </div>
+
+      {/* Links table grouped by material */}
+      <div style={{ background: '#fff', border: '1px solid #d9dadb', overflowX: 'auto' }}>
+        {loading ? (
+          <div style={{ padding: 32, textAlign: 'center' }}><Spinner /></div>
+        ) : links.length === 0 ? (
+          <div style={{ padding: 32, textAlign: 'center', color: '#89919a', fontSize: 13 }}>
+            No vendor–material links yet. Add your first link above.
+          </div>
+        ) : (
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr>{['Material', 'Vendor', 'Preferred', 'Lead Time', 'Last Price', 'Price Date', ''].map(h => <th key={h} style={hCell}>{h}</th>)}</tr>
+            </thead>
+            <tbody>
+              {links.map((l, i) => (
+                <tr key={l.id} style={{ background: i % 2 === 0 ? '#fff' : '#fafafa' }}>
+                  <td style={{ ...cell, fontWeight: 600 }}>
+                    <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: '#89919a', marginRight: 6 }}>{l.material_code}</span>
+                    {l.material_name}
+                  </td>
+                  <td style={{ ...cell }}>
+                    <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: B, marginRight: 6 }}>{l.vendor_code}</span>
+                    {l.vendor_name}
+                  </td>
+                  <td style={{ ...cell, textAlign: 'center' }}>
+                    {l.is_preferred ? <span style={{ color: OK, fontWeight: 700 }}>★ Yes</span> : <span style={{ color: '#89919a' }}>—</span>}
+                  </td>
+                  <td style={{ ...cell, fontFamily: 'var(--mono)' }}>
+                    {l.lead_time_days != null ? `${l.lead_time_days}d` : '—'}
+                  </td>
+                  <td style={{ ...cell, fontFamily: 'var(--mono)' }}>
+                    {l.last_price != null ? `₹ ${fmt(l.last_price)}` : '—'}
+                  </td>
+                  <td style={{ ...cell, fontSize: 11, color: '#89919a' }}>{l.last_price_date || '—'}</td>
+                  <td style={cell}>
+                    <button onClick={() => removeLink(l.vendor_id, l.material_id, `${l.vendor_name} ↔ ${l.material_name}`)}
+                      style={{ ...inp, cursor: 'pointer', color: ERR, fontSize: 11 }}>Remove</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  )
+}
+
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   ADMIN RESET
+══════════════════════════════════════════════════════════════════════════════ */
+function AdminReset({ onReset }) {
+  const [confirm, setConfirm] = useState('')
+  const [running, setRunning] = useState(false)
+  const [msg,     setMsg]     = useState('')
+  const [err,     setErr]     = useState('')
+
+  const KEYWORD = 'RESET'
+  const canRun  = confirm === KEYWORD && !running
+
+  const run = async () => {
+    setRunning(true); setErr(''); setMsg('')
+    try {
+      await resetInventory()
+      setMsg('✓ All inventory data wiped. Vendors, materials, movements, GRs — all cleared. Quality samples and production entries untouched.')
+      setConfirm('')
+      onReset && onReset()
+    } catch (e) { setErr(errMsg(e)) } finally { setRunning(false) }
+  }
+
+  return (
+    <div style={{ background: '#fff', border: `2px solid ${ERR}`, padding: 24, maxWidth: 560 }}>
+      <div style={{ fontSize: 13, fontWeight: 700, color: ERR, marginBottom: 12 }}>
+        ⚠ Danger Zone — Full Inventory Reset
+      </div>
+      <div style={{ fontSize: 12, color: '#32363a', lineHeight: 1.6, marginBottom: 16 }}>
+        This will permanently erase:
+        <ul style={{ margin: '8px 0', paddingLeft: 20 }}>
+          <li>All vendors and materials</li>
+          <li>All inventory movements and stock balances</li>
+          <li>All goods receipts and goods issues</li>
+          <li>All purchase orders and recommendations</li>
+        </ul>
+        Quality samples, production entries, and department settings are <strong>not</strong> affected.
+        <br /><br />
+        Type <strong style={{ fontFamily: 'var(--mono)' }}>{KEYWORD}</strong> to confirm:
+      </div>
+      <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+        <input
+          value={confirm}
+          onChange={e => setConfirm(e.target.value.toUpperCase())}
+          placeholder={KEYWORD}
+          style={{ ...inp, width: 120, fontFamily: 'var(--mono)', fontWeight: 700 }}
+        />
+        <button disabled={!canRun} onClick={run} style={btn(canRun, true)}>
+          {running ? 'Resetting…' : 'Reset All Inventory'}
+        </button>
+      </div>
+      {(err || msg) && (
+        <div style={{ marginTop: 12, fontSize: 12, color: err ? ERR : OK, lineHeight: 1.5 }}>{err || msg}</div>
+      )}
+    </div>
+  )
+}
+
+
+/* ══════════════════════════════════════════════════════════════════════════════
    ROOT COMPONENT
 ══════════════════════════════════════════════════════════════════════════════ */
 export default function InventoryPlanning({ mode = 'stock' }) {
@@ -851,13 +1096,15 @@ export default function InventoryPlanning({ mode = 'stock' }) {
   }
 
   const TITLES = {
-    vendors:   ['Vendor Master',       'Central vendor directory used across purchasing and receipts'],
-    materials: ['Material Master',     'Raw materials and consumables registry'],
-    stock:     ['Stock Overview',      'Current stock, days left, and reorder status'],
-    receipt:   ['Material Receipt',    'Post vendor goods receipt — updates stock ledger'],
-    issue:     ['Material Issue',      'Post daily goods issue — reduces stock ledger'],
-    movements: ['Material Movements',  'Append-only inventory ledger (GR/GI audit trail)'],
-    planning:  ['Planning (MRP)',      'Lead time, safety stock, reorder parameters'],
+    vendors:          ['Vendor Master',          'Central vendor directory used across purchasing and receipts'],
+    materials:        ['Material Master',         'Raw materials and consumables registry'],
+    'vendor-links':   ['Vendor–Material Links',  'Define which vendors supply which materials'],
+    stock:            ['Stock Overview',          'Current stock, days left, and reorder status'],
+    receipt:          ['Material Receipt',        'Post vendor goods receipt — updates stock ledger'],
+    issue:            ['Material Issue',          'Post daily goods issue — reduces stock ledger'],
+    movements:        ['Material Movements',      'Append-only inventory ledger (GR/GI audit trail)'],
+    planning:         ['Planning (MRP)',          'Lead time, safety stock, reorder parameters'],
+    'admin-reset':    ['Admin — Data Reset',      'Wipe all inventory test data and start fresh'],
   }
   const [title, subtitle] = TITLES[mode] || TITLES.stock
 
@@ -882,13 +1129,15 @@ export default function InventoryPlanning({ mode = 'stock' }) {
       )}
 
       {/* All modes render immediately — no loading gate blocking forms */}
-      {mode === 'vendors'   && <VendorMaster    vendors={vendors}      onChanged={onVendorChanged} />}
-      {mode === 'materials' && <MaterialMaster  materials={materials}  onChanged={onMaterialChanged} />}
-      {mode === 'stock'     && <StockOverview   rows={rows}            loading={loading} />}
-      {mode === 'receipt'   && <MaterialReceipt materials={materials}  vendors={vendors} onPosted={load} />}
-      {mode === 'issue'     && <MaterialIssue   materials={materials}  stockRows={rows}  onPosted={load} />}
-      {mode === 'movements' && <MaterialMovements movements={movements} loading={loading} />}
-      {mode === 'planning'  && <Planning         rows={rows}           onSaved={load} />}
+      {mode === 'vendors'        && <VendorMaster         vendors={vendors}     onChanged={onVendorChanged} />}
+      {mode === 'materials'      && <MaterialMaster        materials={materials} onChanged={onMaterialChanged} />}
+      {mode === 'vendor-links'   && <VendorMaterialLinks   vendors={vendors}     materials={materials} />}
+      {mode === 'stock'          && <StockOverview         rows={rows}           loading={loading} />}
+      {mode === 'receipt'        && <MaterialReceipt       materials={materials} vendors={vendors}  onPosted={load} />}
+      {mode === 'issue'          && <MaterialIssue         materials={materials} stockRows={rows}   onPosted={load} />}
+      {mode === 'movements'      && <MaterialMovements      movements={movements} loading={loading} />}
+      {mode === 'planning'       && <Planning               rows={rows}           onSaved={load} />}
+      {mode === 'admin-reset'    && <AdminReset             onReset={load} />}
     </div>
   )
 }
