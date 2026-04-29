@@ -253,26 +253,35 @@ def startup() -> None:
         cfg.set_main_option("script_location", os.path.join(os.path.dirname(__file__), "alembic"))
 
         # ── Self-heal: detect if the DB stamp is ahead of the real schema ──
-        # If business_partners table is missing the alembic_version is stale.
+        #
+        # Root cause: Supabase was stamped at head via MCP *without* running
+        # actual DDL.  alembic upgrade head then sees version=latest and is a
+        # no-op even though the tables are missing.
+        #
+        # Fix: check if business_partners exists (added in migration 017).
+        # If it's absent we know the stamp jumped over 017+.  Re-stamp to 016
+        # (last revision before BP module) so only 017→018→019 run.
+        # We deliberately do NOT stamp to "base" because that would try to
+        # re-run migration 001 (CREATE TABLE departments …) on an existing table.
         with engine.connect() as conn:
             dialect = conn.dialect.name
             if dialect == "postgresql":
-                result = conn.execute(sql_text(
+                bp_exists = conn.execute(sql_text(
                     "SELECT COUNT(*) FROM information_schema.tables "
                     "WHERE table_schema = 'public' AND table_name = 'business_partners'"
                 )).scalar()
             else:  # sqlite
-                result = conn.execute(sql_text(
-                    "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='business_partners'"
+                bp_exists = conn.execute(sql_text(
+                    "SELECT COUNT(*) FROM sqlite_master "
+                    "WHERE type='table' AND name='business_partners'"
                 )).scalar()
 
-            if result == 0:
-                # Stamp is ahead of actual schema — reset to base and re-apply
+            if not bp_exists:
                 logger.warning(
                     "business_partners table missing — alembic_version stamp is stale. "
-                    "Re-stamping to base and upgrading."
+                    "Re-stamping to revision 016 so migrations 017-019 run."
                 )
-                command.stamp(cfg, "base")
+                command.stamp(cfg, "016")
 
         command.upgrade(cfg, "head")
         logger.info("Database migrations applied — schema at head")
