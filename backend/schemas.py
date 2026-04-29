@@ -518,9 +518,20 @@ BP_ROLES = ("MM_VENDOR", "FI_VENDOR", "FI_CUSTOMER", "SD_CUSTOMER")
 
 class BPCreate(BaseModel):
     bp_code:        str           = Field(..., min_length=1, max_length=40)
-    name:           str           = Field(..., min_length=1, max_length=120)
+    name:           str           = Field(..., min_length=1, max_length=120)  # Name 1
+    name_2:         Optional[str] = Field(None, max_length=120)
+    grouping:       Optional[str] = Field(None, max_length=40)
+    bp_category:    Optional[str] = Field("Organization", max_length=20)     # Organization|Individual
     status:         str           = "Active"
-    address:        Optional[str] = None
+    # Structured address
+    street:         Optional[str] = Field(None, max_length=120)
+    house_number:   Optional[str] = Field(None, max_length=20)
+    city:           Optional[str] = Field(None, max_length=80)
+    postal_code:    Optional[str] = Field(None, max_length=20)
+    country:        Optional[str] = Field("India", max_length=80)
+    region:         Optional[str] = Field(None, max_length=80)
+    language:       Optional[str] = Field("EN", max_length=20)
+    address:        Optional[str] = None   # LEGACY free-text (kept for compat)
     phone:          Optional[str] = Field(None, max_length=40)
     email:          Optional[str] = Field(None, max_length=120)
     contact_person: Optional[str] = Field(None, max_length=120)
@@ -532,7 +543,17 @@ class BPCreate(BaseModel):
 class BPUpdate(BaseModel):
     bp_code:        Optional[str] = Field(None, min_length=1, max_length=40)
     name:           Optional[str] = Field(None, min_length=1, max_length=120)
+    name_2:         Optional[str] = Field(None, max_length=120)
+    grouping:       Optional[str] = Field(None, max_length=40)
+    bp_category:    Optional[str] = Field(None, max_length=20)
     status:         Optional[str] = None
+    street:         Optional[str] = Field(None, max_length=120)
+    house_number:   Optional[str] = Field(None, max_length=20)
+    city:           Optional[str] = Field(None, max_length=80)
+    postal_code:    Optional[str] = Field(None, max_length=20)
+    country:        Optional[str] = Field(None, max_length=80)
+    region:         Optional[str] = Field(None, max_length=80)
+    language:       Optional[str] = Field(None, max_length=20)
     address:        Optional[str] = None
     phone:          Optional[str] = None
     email:          Optional[str] = None
@@ -551,13 +572,23 @@ class BPOut(BaseModel):
     id:             int
     bp_code:        str
     name:           str
+    name_2:         Optional[str] = None
+    grouping:       Optional[str] = None
+    bp_category:    Optional[str] = None
     status:         str
-    address:        Optional[str]
-    phone:          Optional[str]
-    email:          Optional[str]
-    contact_person: Optional[str]
-    gst_number:     Optional[str]
-    pan:            Optional[str]
+    street:         Optional[str] = None
+    house_number:   Optional[str] = None
+    city:           Optional[str] = None
+    postal_code:    Optional[str] = None
+    country:        Optional[str] = None
+    region:         Optional[str] = None
+    language:       Optional[str] = None
+    address:        Optional[str] = None
+    phone:          Optional[str] = None
+    email:          Optional[str] = None
+    contact_person: Optional[str] = None
+    gst_number:     Optional[str] = None
+    pan:            Optional[str] = None
     roles:          List[BPRoleOut] = []
     created_at:     datetime
     model_config = {"from_attributes": True}

@@ -71,6 +71,22 @@ const APP_TILES = [
       </svg>
     ),
   },
+  {
+    id: 'masterdata',
+    title: 'Master Data',
+    subtitle: 'BP · MM',
+    icon: (
+      <svg viewBox="0 0 36 36" width="36" height="36" fill="none" stroke={SAP_BLUE} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        {/* Building / organisation icon */}
+        <rect x="6" y="10" width="24" height="20" />
+        <line x1="6"  y1="16" x2="30" y2="16" />
+        <rect x="10" y="20" width="5" height="5" />
+        <rect x="21" y="20" width="5" height="5" />
+        <line x1="18" y1="10" x2="18" y2="6" />
+        <line x1="12" y1="6"  x2="24" y2="6" />
+      </svg>
+    ),
+  },
 ]
 
 /* ── Planned tiles ────────────────────────────────────────────────────── */

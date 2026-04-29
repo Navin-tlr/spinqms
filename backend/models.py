@@ -489,9 +489,21 @@ class BusinessPartner(Base):
 
     id              = Column(Integer, primary_key=True)
     bp_code         = Column(String(40),  nullable=False, unique=True, index=True)
-    name            = Column(String(120), nullable=False)
+    name            = Column(String(120), nullable=False)             # Name 1
+    name_2          = Column(String(120), nullable=True)              # Name 2 (optional)
+    grouping        = Column(String(40),  nullable=True)              # BP grouping / account group
+    bp_category     = Column(String(20),  nullable=True,              # Organization | Individual
+                             default="Organization")
     status          = Column(String(20),  nullable=False, default="Active")  # Active|Blocked
-    address         = Column(Text,        nullable=True)
+    # Structured address (SAP-standard fields)
+    street          = Column(String(120), nullable=True)
+    house_number    = Column(String(20),  nullable=True)
+    city            = Column(String(80),  nullable=True)
+    postal_code     = Column(String(20),  nullable=True)
+    country         = Column(String(80),  nullable=True, default="India")
+    region          = Column(String(80),  nullable=True)              # State / Province
+    language        = Column(String(20),  nullable=True, default="EN")
+    address         = Column(Text,        nullable=True)              # LEGACY free-text; keep for compat
     phone           = Column(String(40),  nullable=True)
     email           = Column(String(120), nullable=True)
     contact_person  = Column(String(120), nullable=True)

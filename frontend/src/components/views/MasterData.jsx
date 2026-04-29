@@ -4,7 +4,7 @@
  * SAP Fiori table aesthetic: compact rows, thin borders, blue-accented
  * financial values, status badges, role chips.
  */
-import { useCallback, useEffect, useState } from 'react'
+import { Fragment, useCallback, useEffect, useState } from 'react'
 import {
   createBusinessPartner, deleteBusinessPartner, getBusinessPartners,
   updateBusinessPartner, addBPRole, removeBPRole,
@@ -131,18 +131,193 @@ function StatusBadge({ status }) {
   )
 }
 
+/* ── SAP value-help field (input + F4 trigger icon) ────────────────────────── */
+const VH_ICON = (
+  <svg viewBox="0 0 12 12" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="1" y="1" width="10" height="10" rx="1" />
+    <line x1="1" y1="4" x2="11" y2="4" />
+    <line x1="4" y1="4" x2="4" y2="11" />
+  </svg>
+)
+
+function VHField({ label, value, onChange, options, placeholder, required, mono, disabled }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div style={{ position: 'relative' }}>
+      <div style={{ fontSize: 11, color: TXT_MUTED, marginBottom: 3 }}>
+        {label}{required && <span style={{ color: ERR_RED }}> *</span>}
+      </div>
+      <div style={{ display: 'flex', gap: 0 }}>
+        <input
+          value={value}
+          onChange={onChange}
+          disabled={disabled}
+          placeholder={placeholder || label}
+          style={{ ...inp, flex: 1, borderRight: 'none', borderRadius: '2px 0 0 2px',
+            ...(mono ? { fontFamily: 'var(--mono)', textTransform: 'uppercase' } : {}),
+          }}
+        />
+        <button
+          type="button"
+          onClick={() => setOpen(o => !o)}
+          disabled={disabled}
+          style={{
+            width: 24, border: `1px solid ${BORDER}`, borderRadius: '0 2px 2px 0',
+            background: open ? '#e8f1fd' : BG_HDR, color: open ? SAP_BLUE : TXT_MUTED,
+            cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+            flexShrink: 0,
+          }}
+          title="Open value list"
+        >
+          {VH_ICON}
+        </button>
+      </div>
+      {open && options && (
+        <div style={{
+          position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 200,
+          background: '#fff', border: `1px solid ${BORDER}`,
+          boxShadow: '0 4px 12px rgba(0,0,0,.12)', maxHeight: 180, overflowY: 'auto',
+        }}>
+          {options.map(opt => (
+            <div key={opt.value ?? opt}
+              onClick={() => { onChange({ target: { value: opt.value ?? opt } }); setOpen(false) }}
+              style={{
+                padding: '7px 10px', fontSize: 12, cursor: 'pointer',
+                background: (opt.value ?? opt) === value ? '#e8f1fd' : '#fff',
+                color: (opt.value ?? opt) === value ? SAP_BLUE : TXT_MAIN,
+                borderBottom: `1px solid #f0f0f0`,
+                fontWeight: (opt.value ?? opt) === value ? 600 : 400,
+              }}
+            >
+              {opt.label ?? opt}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+const BP_CATEGORIES = [
+  { value: 'Organization', label: 'Organization' },
+  { value: 'Individual',   label: 'Individual / Person' },
+]
+
+const COUNTRY_OPTIONS = [
+  'India', 'United States', 'United Kingdom', 'Germany', 'China',
+  'Japan', 'Australia', 'Singapore', 'UAE', 'Bangladesh', 'Other',
+]
+
+const LANGUAGE_OPTIONS = [
+  { value: 'EN', label: 'EN — English' },
+  { value: 'HI', label: 'HI — Hindi' },
+  { value: 'DE', label: 'DE — German' },
+  { value: 'FR', label: 'FR — French' },
+  { value: 'AR', label: 'AR — Arabic' },
+  { value: 'ZH', label: 'ZH — Chinese' },
+  { value: 'JA', label: 'JA — Japanese' },
+]
+
+/* ── Role multi-select value-help ───────────────────────────────────────── */
+function RoleVHField({ selectedRoles, onToggle }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div style={{ position: 'relative' }}>
+      <div style={{ fontSize: 11, color: TXT_MUTED, marginBottom: 3 }}>
+        BP Role<span style={{ color: ERR_RED }}> *</span>
+      </div>
+      <div
+        onClick={() => setOpen(o => !o)}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap',
+          minHeight: 28, padding: '3px 4px 3px 6px',
+          border: `1px solid ${BORDER}`, borderRadius: 2, cursor: 'pointer',
+          background: '#fff', userSelect: 'none',
+        }}
+      >
+        {selectedRoles.length === 0
+          ? <span style={{ fontSize: 11, color: TXT_FAINT, flex: 1 }}>— Select roles —</span>
+          : selectedRoles.map(r => <RoleChip key={r} role={r} />)
+        }
+        <span style={{ marginLeft: 'auto', color: open ? SAP_BLUE : TXT_MUTED, display: 'flex', alignItems: 'center' }}>{VH_ICON}</span>
+      </div>
+      {open && (
+        <div style={{
+          position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 200,
+          background: '#fff', border: `1px solid ${BORDER}`,
+          boxShadow: '0 4px 12px rgba(0,0,0,.12)',
+        }}>
+          {ALL_ROLES.map(role => {
+            const m = ROLE_META[role]
+            const on = selectedRoles.includes(role)
+            return (
+              <div key={role}
+                onClick={() => onToggle(role)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 8,
+                  padding: '8px 12px', cursor: 'pointer',
+                  background: on ? '#f0f4ff' : '#fff',
+                  borderBottom: `1px solid #f0f0f0`,
+                }}
+              >
+                <div style={{
+                  width: 14, height: 14, border: `1.5px solid ${on ? SAP_BLUE : BORDER}`,
+                  borderRadius: 2, background: on ? SAP_BLUE : '#fff',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  flexShrink: 0,
+                }}>
+                  {on && <svg viewBox="0 0 10 10" width="8" height="8"><polyline points="1,5 4,8 9,2" stroke="#fff" strokeWidth="1.5" fill="none" /></svg>}
+                </div>
+                <RoleChip role={role} />
+                <span style={{ fontSize: 11, color: TXT_MUTED, marginLeft: 4 }}>
+                  {role === 'MM_VENDOR' ? '— Procurement supplier (required for GR / PO)'
+                    : role === 'FI_VENDOR' ? '— Accounts payable'
+                    : role === 'FI_CUSTOMER' ? '— Accounts receivable'
+                    : '— Sales customer'}
+                </span>
+              </div>
+            )
+          })}
+          <div style={{ padding: '6px 12px', fontSize: 11, color: TXT_FAINT, borderTop: `1px solid ${BORDER}` }}>
+            Click to toggle · close by clicking outside
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* ── SAP two-column form row ─────────────────────────────────────────────── */
+function FormRow({ label, children, required }) {
+  return (
+    <div style={{ display: 'contents' }}>
+      <div style={{ fontSize: 12, color: TXT_MUTED, display: 'flex', alignItems: 'center', paddingRight: 8 }}>
+        {label}{required && <span style={{ color: ERR_RED, marginLeft: 2 }}>*</span>}:
+      </div>
+      <div>{children}</div>
+    </div>
+  )
+}
+
 /* ══════════════════════════════════════════════════════════════════════════════
    BUSINESS PARTNERS
 ══════════════════════════════════════════════════════════════════════════════ */
 function BusinessPartners({ bps, onChanged }) {
-  const blank = { bp_code: '', name: '', contact_person: '', phone: '', email: '',
-                  gst_number: '', pan: '', address: '', roles: [] }
+  const blank = {
+    bp_code: '', grouping: '', bp_category: 'Organization',
+    name: '', name_2: '', contact_person: '', phone: '', email: '',
+    gst_number: '', pan: '',
+    street: '', house_number: '', city: '', postal_code: '',
+    country: 'India', region: '', language: 'EN',
+    roles: [],
+  }
   const [form,      setForm]      = useState(blank)
   const [saving,    setSaving]    = useState(false)
-  const [editing,   setEditing]   = useState(null)
+  const [editing,   setEditing]   = useState(null)       // bp.id being edited
   const [editDraft, setEditDraft] = useState({})
   const [editSave,  setEditSave]  = useState(false)
   const [deleting,  setDeleting]  = useState(null)
+  const [expanded,  setExpanded]  = useState(null)       // expanded bp.id in table
   const [msg, setMsg]  = useState('')
   const [err, setErr]  = useState('')
 
@@ -165,7 +340,19 @@ function BusinessPartners({ bps, onChanged }) {
   }
 
   /* ── Edit metadata ── */
-  const startEdit = bp => { setEditing(bp.id); setEditDraft({ name: bp.name, contact_person: bp.contact_person || '', phone: bp.phone || '', email: bp.email || '', gst_number: bp.gst_number || '', address: bp.address || '' }); setErr('') }
+  const startEdit = bp => {
+    setEditing(bp.id)
+    setEditDraft({
+      name: bp.name, name_2: bp.name_2 || '', grouping: bp.grouping || '',
+      bp_category: bp.bp_category || 'Organization',
+      contact_person: bp.contact_person || '', phone: bp.phone || '',
+      email: bp.email || '', gst_number: bp.gst_number || '', pan: bp.pan || '',
+      street: bp.street || '', house_number: bp.house_number || '',
+      city: bp.city || '', postal_code: bp.postal_code || '',
+      country: bp.country || 'India', region: bp.region || '', language: bp.language || 'EN',
+    })
+    setErr('')
+  }
   const cancelEdit = () => { setEditing(null); setEditDraft({}) }
   const saveEdit = async id => {
     setEditSave(true); setErr('')
@@ -177,7 +364,7 @@ function BusinessPartners({ bps, onChanged }) {
     finally { setEditSave(false) }
   }
 
-  /* ── Role toggles (live patch) ── */
+  /* ── Role toggles (live patch on existing BP) ── */
   const toggleLiveRole = async (bp, role) => {
     const has = bp.roles.some(r => r.role === role)
     try {
@@ -207,46 +394,213 @@ function BusinessPartners({ bps, onChanged }) {
     finally { setDeleting(null) }
   }
 
+  /* ── SAP two-column form panel ── */
+  const formPanel = (draft, setD, isEdit = false) => (
+    <div style={{
+      display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 0,
+      border: `1px solid ${BORDER}`, marginBottom: isEdit ? 0 : undefined,
+    }}>
+      {/* ── LEFT: General Data ── */}
+      <div style={{ padding: '16px 20px', borderRight: `1px solid ${BORDER}` }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: TXT_MUTED, textTransform: 'uppercase',
+          letterSpacing: '.08em', marginBottom: 14, paddingBottom: 6, borderBottom: `1px solid ${BORDER}` }}>
+          General Data
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '130px 1fr', gap: '10px 0', alignItems: 'start' }}>
+
+          <FormRow label="Business Partner" required>
+            <input
+              value={draft.bp_code ?? ''}
+              onChange={e => setD(f => ({ ...f, bp_code: e.target.value }))}
+              disabled={isEdit}
+              style={{ ...inp, width: '100%', fontFamily: 'var(--mono)', textTransform: 'uppercase',
+                background: isEdit ? BG_HDR : '#fff' }}
+              placeholder="e.g. SUP-001"
+            />
+          </FormRow>
+
+          <FormRow label="Grouping">
+            <input
+              value={draft.grouping ?? ''}
+              onChange={e => setD(f => ({ ...f, grouping: e.target.value }))}
+              style={{ ...inp, width: '100%' }}
+              placeholder="Account group / type"
+            />
+          </FormRow>
+
+          <FormRow label="BP Category">
+            <VHField
+              value={draft.bp_category ?? 'Organization'}
+              onChange={e => setD(f => ({ ...f, bp_category: e.target.value }))}
+              options={BP_CATEGORIES}
+              placeholder="Category"
+            />
+          </FormRow>
+
+          <FormRow label="BP Role" required>
+            <RoleVHField
+              selectedRoles={draft.roles ?? []}
+              onToggle={role => setD(f => ({
+                ...f,
+                roles: (f.roles ?? []).includes(role)
+                  ? (f.roles ?? []).filter(r => r !== role)
+                  : [...(f.roles ?? []), role],
+              }))}
+            />
+          </FormRow>
+
+          <FormRow label="Name 1" required>
+            <input
+              value={draft.name ?? ''}
+              onChange={e => setD(f => ({ ...f, name: e.target.value }))}
+              style={{ ...inp, width: '100%' }}
+              placeholder="Primary name"
+            />
+          </FormRow>
+
+          <FormRow label="Name 2">
+            <input
+              value={draft.name_2 ?? ''}
+              onChange={e => setD(f => ({ ...f, name_2: e.target.value }))}
+              style={{ ...inp, width: '100%' }}
+              placeholder="Optional"
+            />
+          </FormRow>
+
+          <FormRow label="GST Number">
+            <input
+              value={draft.gst_number ?? ''}
+              onChange={e => setD(f => ({ ...f, gst_number: e.target.value }))}
+              style={{ ...inp, width: '100%', fontFamily: 'var(--mono)', textTransform: 'uppercase' }}
+              placeholder="27AAPFU0939F1ZV"
+            />
+          </FormRow>
+
+          <FormRow label="PAN">
+            <input
+              value={draft.pan ?? ''}
+              onChange={e => setD(f => ({ ...f, pan: e.target.value }))}
+              style={{ ...inp, width: '100%', fontFamily: 'var(--mono)', textTransform: 'uppercase' }}
+              placeholder="AAPFU0939F"
+            />
+          </FormRow>
+
+          <FormRow label="Contact Person">
+            <input
+              value={draft.contact_person ?? ''}
+              onChange={e => setD(f => ({ ...f, contact_person: e.target.value }))}
+              style={{ ...inp, width: '100%' }}
+              placeholder="Name"
+            />
+          </FormRow>
+
+          <FormRow label="Phone">
+            <input
+              value={draft.phone ?? ''}
+              onChange={e => setD(f => ({ ...f, phone: e.target.value }))}
+              style={{ ...inp, width: '100%' }}
+              placeholder="+91 98765 43210"
+            />
+          </FormRow>
+
+          <FormRow label="Email">
+            <input
+              value={draft.email ?? ''}
+              onChange={e => setD(f => ({ ...f, email: e.target.value }))}
+              style={{ ...inp, width: '100%' }}
+              placeholder="contact@example.com"
+            />
+          </FormRow>
+
+        </div>
+      </div>
+
+      {/* ── RIGHT: Standard Address ── */}
+      <div style={{ padding: '16px 20px' }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: TXT_MUTED, textTransform: 'uppercase',
+          letterSpacing: '.08em', marginBottom: 14, paddingBottom: 6, borderBottom: `1px solid ${BORDER}` }}>
+          Standard Address
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '100px 1fr', gap: '10px 0', alignItems: 'start' }}>
+
+          <FormRow label="Street">
+            <input
+              value={draft.street ?? ''}
+              onChange={e => setD(f => ({ ...f, street: e.target.value }))}
+              style={{ ...inp, width: '100%' }}
+              placeholder="Street name"
+            />
+          </FormRow>
+
+          <FormRow label="House No.">
+            <input
+              value={draft.house_number ?? ''}
+              onChange={e => setD(f => ({ ...f, house_number: e.target.value }))}
+              style={{ ...inp, width: '100%' }}
+              placeholder="12-A"
+            />
+          </FormRow>
+
+          <FormRow label="City">
+            <input
+              value={draft.city ?? ''}
+              onChange={e => setD(f => ({ ...f, city: e.target.value }))}
+              style={{ ...inp, width: '100%' }}
+              placeholder="City"
+            />
+          </FormRow>
+
+          <FormRow label="Postal Code">
+            <input
+              value={draft.postal_code ?? ''}
+              onChange={e => setD(f => ({ ...f, postal_code: e.target.value }))}
+              style={{ ...inp, width: '100%', fontFamily: 'var(--mono)' }}
+              placeholder="600001"
+            />
+          </FormRow>
+
+          <FormRow label="Country">
+            <VHField
+              value={draft.country ?? 'India'}
+              onChange={e => setD(f => ({ ...f, country: e.target.value }))}
+              options={COUNTRY_OPTIONS}
+              placeholder="Country"
+            />
+          </FormRow>
+
+          <FormRow label="Region">
+            <input
+              value={draft.region ?? ''}
+              onChange={e => setD(f => ({ ...f, region: e.target.value }))}
+              style={{ ...inp, width: '100%' }}
+              placeholder="State / Province"
+            />
+          </FormRow>
+
+          <FormRow label="Language">
+            <VHField
+              value={draft.language ?? 'EN'}
+              onChange={e => setD(f => ({ ...f, language: e.target.value }))}
+              options={LANGUAGE_OPTIONS}
+              placeholder="Language"
+            />
+          </FormRow>
+
+        </div>
+      </div>
+    </div>
+  )
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-      {/* ── Add form ── */}
-      <div style={{ background: '#fff', border: `1px solid ${BORDER}`, borderBottom: 'none', padding: '14px 16px' }}>
-        <SectionLabel>Add Business Partner</SectionLabel>
-        <div style={{ display: 'grid', gridTemplateColumns: '130px 1fr 160px 140px', gap: 10, marginBottom: 10 }}>
-          {[['bp_code','BP Code *'],['name','Full Name *'],['gst_number','GST Number'],['phone','Phone']].map(([k,label]) => (
-            <div key={k}>
-              <div style={{ fontSize: 11, color: TXT_MUTED, marginBottom: 3 }}>{label}</div>
-              <input value={form[k]} onChange={set(k)} style={{ ...inp, width: '100%', ...(k === 'bp_code' ? { fontFamily: 'var(--mono)', textTransform: 'uppercase' } : {}) }} placeholder={label.replace(' *','')} />
-            </div>
-          ))}
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 140px', gap: 10, marginBottom: 12 }}>
-          {[['contact_person','Contact Person'],['email','Email'],['pan','PAN']].map(([k,label]) => (
-            <div key={k}>
-              <div style={{ fontSize: 11, color: TXT_MUTED, marginBottom: 3 }}>{label}</div>
-              <input value={form[k]} onChange={set(k)} style={{ ...inp, width: '100%' }} placeholder={label} />
-            </div>
-          ))}
-        </div>
 
-        {/* Roles */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 12, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 11, fontWeight: 600, color: TXT_MUTED }}>ROLES *</span>
-          {ALL_ROLES.map(role => {
-            const m = ROLE_META[role]
-            const on = form.roles.includes(role)
-            return (
-              <label key={role} style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', userSelect: 'none' }}>
-                <input type="checkbox" checked={on} onChange={() => toggleRole(role)} style={{ cursor: 'pointer' }} />
-                <RoleChip role={role} />
-              </label>
-            )
-          })}
-        </div>
-
-        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+      {/* ── Create form ── */}
+      <div style={{ background: '#fff', border: `1px solid ${BORDER}`, borderBottom: 'none', padding: '14px 16px 16px' }}>
+        <SectionLabel>Create Business Partner</SectionLabel>
+        {formPanel(form, setForm, false)}
+        <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginTop: 12 }}>
           <button disabled={!canSave || saving} onClick={save} style={primaryBtn(canSave && !saving)}>
-            {saving ? 'Saving…' : 'Add Business Partner'}
+            {saving ? 'Saving…' : 'Create Business Partner'}
           </button>
           {err && <span style={{ fontSize: 12, color: ERR_RED }}>{err}</span>}
           {msg && <span style={{ fontSize: 12, color: OK_GREEN }}>{msg}</span>}
@@ -260,58 +614,123 @@ function BusinessPartners({ bps, onChanged }) {
         ) : (
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
-              <tr>{['BP Code','Name','GST / PAN','Contact','Roles','Status',''].map(h => <th key={h} style={th}>{h}</th>)}</tr>
+              <tr>{['BP Code','Name 1','Category','City','Roles','Status',''].map(h => <th key={h} style={th}>{h}</th>)}</tr>
             </thead>
             <tbody>
-              {bps.map((bp, i) => editing === bp.id ? (
-                <tr key={bp.id} style={{ background: '#f0f4ff' }}>
-                  <td style={td} colSpan={1}><span style={{ fontFamily: 'var(--mono)', fontWeight: 700, color: SAP_BLUE }}>{bp.bp_code}</span></td>
-                  <td style={inputTd}><input value={editDraft.name} onChange={e => setEditDraft(d => ({ ...d, name: e.target.value }))} style={{ ...inp, width: '100%' }} /></td>
-                  <td style={inputTd}><input value={editDraft.gst_number} placeholder="GST" onChange={e => setEditDraft(d => ({ ...d, gst_number: e.target.value }))} style={{ ...inp, width: 110 }} /></td>
-                  <td style={inputTd}><input value={editDraft.phone} placeholder="Phone" onChange={e => setEditDraft(d => ({ ...d, phone: e.target.value }))} style={{ ...inp, width: 110 }} /></td>
-                  <td style={td}><span style={{ fontSize: 11, color: TXT_FAINT }}>roles editable via chips</span></td>
-                  <td style={td} />
-                  <td style={{ ...inputTd, display: 'flex', gap: 6, alignItems: 'center', minWidth: 140 }}>
-                    <button onClick={() => saveEdit(bp.id)} disabled={editSave} style={primaryBtn(!editSave)}>{editSave ? '…' : 'Save'}</button>
-                    <button onClick={cancelEdit} style={ghostBtn()}>Cancel</button>
-                  </td>
-                </tr>
-              ) : (
-                <tr key={bp.id} style={{ background: bp.status === 'Blocked' ? BLOCKED_BG : i % 2 === 0 ? '#fff' : '#fafafa' }}>
-                  <td style={{ ...td, fontFamily: 'var(--mono)', fontWeight: 700, color: SAP_BLUE }}>{bp.bp_code}</td>
-                  <td style={{ ...td, fontWeight: 600 }}>{bp.name}</td>
-                  <td style={{ ...td, fontSize: 11, fontFamily: 'var(--mono)', color: TXT_MUTED }}>
-                    {bp.gst_number || '—'}{bp.pan ? ` / ${bp.pan}` : ''}
-                  </td>
-                  <td style={{ ...td, fontSize: 11 }}>{bp.phone || bp.email || bp.contact_person || '—'}</td>
-                  <td style={{ ...td }}>
-                    <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                      {bp.roles.map(r => (
-                        <RoleChip key={r.role} role={r.role}
-                          onRemove={() => toggleLiveRole(bp, r.role)} />
-                      ))}
-                      {/* Add role picker */}
-                      {ALL_ROLES.filter(r => !bp.roles.some(x => x.role === r)).map(r => (
-                        <button key={r} onClick={() => toggleLiveRole(bp, r)}
-                          style={{ fontSize: 10, padding: '1px 6px', border: `1px dashed ${BORDER}`, borderRadius: 10, background: 'transparent', color: TXT_FAINT, cursor: 'pointer' }}>
-                          + {ROLE_META[r]?.label}
+              {bps.map((bp, i) => (
+                <Fragment key={bp.id}>
+                  <tr
+                    style={{ background: bp.status === 'Blocked' ? BLOCKED_BG : i % 2 === 0 ? '#fff' : '#fafafa', cursor: 'pointer' }}
+                    onClick={() => setExpanded(e => e === bp.id ? null : bp.id)}
+                  >
+                    <td style={{ ...td, fontFamily: 'var(--mono)', fontWeight: 700, color: SAP_BLUE }}>{bp.bp_code}</td>
+                    <td style={{ ...td }}>
+                      <div style={{ fontWeight: 600 }}>{bp.name}</div>
+                      {bp.name_2 && <div style={{ fontSize: 11, color: TXT_MUTED }}>{bp.name_2}</div>}
+                    </td>
+                    <td style={{ ...td, fontSize: 11, color: TXT_MUTED }}>{bp.bp_category || '—'}</td>
+                    <td style={{ ...td, fontSize: 11, color: TXT_MUTED }}>
+                      {[bp.city, bp.country].filter(Boolean).join(', ') || '—'}
+                    </td>
+                    <td style={{ ...td }}>
+                      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                        {bp.roles.map(r => <RoleChip key={r.role} role={r.role} />)}
+                      </div>
+                    </td>
+                    <td style={td}><StatusBadge status={bp.status} /></td>
+                    <td style={{ ...td, whiteSpace: 'nowrap' }} onClick={e => e.stopPropagation()}>
+                      <div style={{ display: 'flex', gap: 5 }}>
+                        <button onClick={() => { startEdit(bp); setExpanded(bp.id) }} style={{ ...ghostBtn(), fontSize: 11 }}>Edit</button>
+                        <button onClick={() => toggleBlock(bp)} style={{ ...warnBtn(), fontSize: 11 }}>
+                          {bp.status === 'Active' ? 'Block' : 'Unblock'}
                         </button>
-                      ))}
-                    </div>
-                  </td>
-                  <td style={td}><StatusBadge status={bp.status} /></td>
-                  <td style={{ ...td, whiteSpace: 'nowrap' }}>
-                    <div style={{ display: 'flex', gap: 5 }}>
-                      <button onClick={() => startEdit(bp)} style={{ ...ghostBtn(), fontSize: 11 }}>Edit</button>
-                      <button onClick={() => toggleBlock(bp)} style={{ ...warnBtn(), fontSize: 11 }}>
-                        {bp.status === 'Active' ? 'Block' : 'Unblock'}
-                      </button>
-                      <button onClick={() => del(bp)} disabled={deleting === bp.id} style={{ ...dangerBtn(), fontSize: 11 }}>
-                        {deleting === bp.id ? '…' : 'Delete'}
-                      </button>
-                    </div>
-                  </td>
-                </tr>
+                        <button onClick={() => del(bp)} disabled={deleting === bp.id} style={{ ...dangerBtn(), fontSize: 11 }}>
+                          {deleting === bp.id ? '…' : 'Delete'}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+
+                  {/* ── Expanded detail / edit panel ── */}
+                  {expanded === bp.id && (
+                    <tr>
+                      <td colSpan={7} style={{ padding: '0 12px 12px', background: '#f8f9fb' }}>
+                        {editing === bp.id ? (
+                          <>
+                            {formPanel(editDraft, setEditDraft, true)}
+                            {/* Role live-toggle */}
+                            <div style={{ marginTop: 10, padding: '8px 0', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                              <span style={{ fontSize: 11, color: TXT_MUTED, fontWeight: 600, flexShrink: 0 }}>ROLES (live):</span>
+                              {ALL_ROLES.map(role => {
+                                const has = bp.roles.some(r => r.role === role)
+                                return (
+                                  <button key={role} onClick={() => toggleLiveRole(bp, role)}
+                                    style={{
+                                      padding: '2px 8px', fontSize: 10, fontWeight: 700,
+                                      borderRadius: 10, cursor: 'pointer',
+                                      border: `1px solid ${ROLE_META[role]?.color || BORDER}`,
+                                      background: has ? (ROLE_META[role]?.bg || '#f5f5f5') : 'transparent',
+                                      color: ROLE_META[role]?.color || TXT_MUTED,
+                                    }}>
+                                    {has ? '✓ ' : '+ '}{ROLE_META[role]?.label || role}
+                                  </button>
+                                )
+                              })}
+                            </div>
+                            <div style={{ display: 'flex', gap: 8, marginTop: 10, alignItems: 'center' }}>
+                              <button onClick={() => saveEdit(bp.id)} disabled={editSave} style={primaryBtn(!editSave)}>
+                                {editSave ? 'Saving…' : 'Save Changes'}
+                              </button>
+                              <button onClick={cancelEdit} style={ghostBtn()}>Cancel</button>
+                              {err && <span style={{ fontSize: 12, color: ERR_RED }}>{err}</span>}
+                            </div>
+                          </>
+                        ) : (
+                          /* Read-only detail view */
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, paddingTop: 10 }}>
+                            <div>
+                              <div style={{ fontSize: 11, fontWeight: 700, color: TXT_MUTED, textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 8 }}>General Data</div>
+                              {[
+                                ['BP Code', <span style={{ fontFamily: 'var(--mono)', color: SAP_BLUE }}>{bp.bp_code}</span>],
+                                ['Grouping', bp.grouping || '—'],
+                                ['Category', bp.bp_category || '—'],
+                                ['Name 1', bp.name],
+                                ['Name 2', bp.name_2 || '—'],
+                                ['GST', bp.gst_number || '—'],
+                                ['PAN', bp.pan || '—'],
+                                ['Contact', bp.contact_person || '—'],
+                                ['Phone', bp.phone || '—'],
+                                ['Email', bp.email || '—'],
+                              ].map(([k, v]) => (
+                                <div key={k} style={{ display: 'grid', gridTemplateColumns: '110px 1fr', gap: 8, marginBottom: 4 }}>
+                                  <span style={{ fontSize: 11, color: TXT_MUTED }}>{k}:</span>
+                                  <span style={{ fontSize: 12, color: TXT_MAIN }}>{v}</span>
+                                </div>
+                              ))}
+                            </div>
+                            <div>
+                              <div style={{ fontSize: 11, fontWeight: 700, color: TXT_MUTED, textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 8 }}>Standard Address</div>
+                              {[
+                                ['Street', bp.street || '—'],
+                                ['House No.', bp.house_number || '—'],
+                                ['City', bp.city || '—'],
+                                ['Postal Code', bp.postal_code || '—'],
+                                ['Country', bp.country || '—'],
+                                ['Region', bp.region || '—'],
+                                ['Language', bp.language || '—'],
+                              ].map(([k, v]) => (
+                                <div key={k} style={{ display: 'grid', gridTemplateColumns: '90px 1fr', gap: 8, marginBottom: 4 }}>
+                                  <span style={{ fontSize: 11, color: TXT_MUTED }}>{k}:</span>
+                                  <span style={{ fontSize: 12, color: TXT_MAIN }}>{v}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
               ))}
             </tbody>
           </table>

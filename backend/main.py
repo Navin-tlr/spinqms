@@ -239,18 +239,41 @@ def startup() -> None:
     """
     Apply any pending Alembic migrations on startup.
 
-    For Supabase / managed Postgres: the schema is pre-applied via MCP and the
-    alembic_version table is stamped at head, so this becomes a fast no-op.
-    The try/except ensures a misconfigured migration never prevents the app
-    from starting — the error is logged and the app proceeds.
+    Self-healing logic: if the alembic_version table was stamped to a revision
+    that is ahead of the actual schema (e.g. via MCP stamp without DDL), we
+    detect missing critical tables and re-stamp from scratch before upgrading.
     """
     try:
         from alembic.config import Config
         from alembic import command
+        from sqlalchemy import text as sql_text
 
         ini_path = os.path.join(os.path.dirname(__file__), "alembic.ini")
         cfg = Config(ini_path)
         cfg.set_main_option("script_location", os.path.join(os.path.dirname(__file__), "alembic"))
+
+        # ── Self-heal: detect if the DB stamp is ahead of the real schema ──
+        # If business_partners table is missing the alembic_version is stale.
+        with engine.connect() as conn:
+            dialect = conn.dialect.name
+            if dialect == "postgresql":
+                result = conn.execute(sql_text(
+                    "SELECT COUNT(*) FROM information_schema.tables "
+                    "WHERE table_schema = 'public' AND table_name = 'business_partners'"
+                )).scalar()
+            else:  # sqlite
+                result = conn.execute(sql_text(
+                    "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='business_partners'"
+                )).scalar()
+
+            if result == 0:
+                # Stamp is ahead of actual schema — reset to base and re-apply
+                logger.warning(
+                    "business_partners table missing — alembic_version stamp is stale. "
+                    "Re-stamping to base and upgrading."
+                )
+                command.stamp(cfg, "base")
+
         command.upgrade(cfg, "head")
         logger.info("Database migrations applied — schema at head")
     except Exception as exc:
@@ -2633,7 +2656,17 @@ def _bp_payload(bp: "BusinessPartner") -> dict:
         "id":             bp.id,
         "bp_code":        bp.bp_code,
         "name":           bp.name,
+        "name_2":         getattr(bp, "name_2",       None),
+        "grouping":       getattr(bp, "grouping",     None),
+        "bp_category":    getattr(bp, "bp_category",  None),
         "status":         bp.status,
+        "street":         getattr(bp, "street",       None),
+        "house_number":   getattr(bp, "house_number", None),
+        "city":           getattr(bp, "city",         None),
+        "postal_code":    getattr(bp, "postal_code",  None),
+        "country":        getattr(bp, "country",      None),
+        "region":         getattr(bp, "region",       None),
+        "language":       getattr(bp, "language",     None),
         "address":        bp.address,
         "phone":          bp.phone,
         "email":          bp.email,
@@ -2666,6 +2699,10 @@ def create_business_partner(body: BPCreate, db: Session = Depends(get_db)):
     now = datetime.now(timezone.utc)
     bp = BusinessPartner(
         bp_code=code, name=body.name.strip(), status=body.status,
+        name_2=body.name_2, grouping=body.grouping, bp_category=body.bp_category or "Organization",
+        street=body.street, house_number=body.house_number, city=body.city,
+        postal_code=body.postal_code, country=body.country or "India",
+        region=body.region, language=body.language or "EN",
         address=body.address, phone=body.phone, email=body.email,
         contact_person=body.contact_person, gst_number=body.gst_number, pan=body.pan,
         created_at=now, updated_at=now,
@@ -2691,8 +2728,10 @@ def update_business_partner(bp_id: int, body: BPUpdate, db: Session = Depends(ge
                                                 BusinessPartner.id != bp_id).first():
                 raise HTTPException(409, f"BP code '{new_code}' already exists")
         bp.bp_code = new_code
-    for field in ("name","status","address","phone","email","contact_person","gst_number","pan"):
-        val = getattr(body, field)
+    for field in ("name","name_2","grouping","bp_category","status",
+                  "street","house_number","city","postal_code","country","region","language",
+                  "address","phone","email","contact_person","gst_number","pan"):
+        val = getattr(body, field, None)
         if val is not None:
             setattr(bp, field, val)
     bp.updated_at = datetime.now(timezone.utc)
