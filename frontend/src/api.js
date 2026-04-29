@@ -87,7 +87,18 @@ export const getProductionEntries   = (params)        => http.get('/production/e
 export const deleteProductionEntry  = (id)            => http.delete(`/production/entries/${id}`)
 export const getProductionDashboard = (targetDate)    => http.get('/production/dashboard', { params: clean({ target_date: targetDate }) }).then(r => r.data)
 
-// ── Vendor Master ─────────────────────────────────────────────────────────────
+// ── Business Partner (SAP-style unified BP with roles) ────────────────────────
+export const getBusinessPartners   = (role)     => http.get('/business-partners', { params: clean({ role }) }).then(r => r.data)
+export const createBusinessPartner = (body)     => http.post('/business-partners', body).then(r => r.data)
+export const updateBusinessPartner = (id, body) => http.put(`/business-partners/${id}`, body).then(r => r.data)
+export const deleteBusinessPartner = (id)       => http.delete(`/business-partners/${id}`)
+export const addBPRole             = (id, role) => http.post(`/business-partners/${id}/roles?role=${encodeURIComponent(role)}`).then(r => r.data)
+export const removeBPRole          = (id, role) => http.delete(`/business-partners/${id}/roles/${role}`).then(r => r.data)
+
+// ── Admin ─────────────────────────────────────────────────────────────────────
+export const resetInventory = () => http.post('/admin/reset-inventory')
+
+// ── Vendor Master (LEGACY — not used in UI, kept for PO backward compat) ─────
 export const getVendors       = ()          => http.get('/vendors').then(r => r.data)
 export const createVendor     = (body)      => http.post('/vendors', body).then(r => r.data)
 export const updateVendor     = (id, body)  => http.put(`/vendors/${id}`, body).then(r => r.data)
@@ -117,10 +128,11 @@ export const getGoodsReceipts   = ()          => http.get('/goods-receipts').the
  */
 export const postDirectGR = (params, file = null) => {
   const fd = new FormData()
-  fd.append('vendor_id',    params.vendor_id)
-  if (params.receipt_date) fd.append('receipt_date', params.receipt_date)
-  if (params.reference)    fd.append('reference',    params.reference)
-  if (params.notes)        fd.append('notes',        params.notes)
+  fd.append('business_partner_id', params.business_partner_id)
+  if (params.document_date) fd.append('document_date', params.document_date)
+  if (params.receipt_date)  fd.append('receipt_date',  params.receipt_date)
+  if (params.reference)     fd.append('reference',     params.reference)
+  if (params.notes)         fd.append('notes',         params.notes)
   fd.append('lines_json', JSON.stringify(params.lines))
   if (file) fd.append('attachment', file)
   return http.post('/goods-receipts/direct', fd, {
@@ -128,13 +140,10 @@ export const postDirectGR = (params, file = null) => {
   }).then(r => r.data)
 }
 
-// ── Vendor–Material links ─────────────────────────────────────────────────────
+// ── Vendor–Material links (kept for backend compat; UI moved to MasterData) ───
 export const getVendorMaterials     = (params = {})  => http.get('/vendor-materials', { params: clean(params) }).then(r => r.data)
 export const createVendorMaterial   = (body)         => http.post('/vendor-materials', body).then(r => r.data)
 export const deleteVendorMaterial   = (vendorId, materialId) => http.delete(`/vendor-materials/${vendorId}/${materialId}`)
-
-// ── Admin ─────────────────────────────────────────────────────────────────────
-export const resetInventory = () => http.post('/admin/reset-inventory')
 
 // ── Purchase / MRP ────────────────────────────────────────────────────────────
 export const getPurchaseRecommendations = (status = 'open') => http.get('/purchase/recommendations', { params: clean({ status }) }).then(r => r.data)

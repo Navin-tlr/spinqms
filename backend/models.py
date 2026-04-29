@@ -473,8 +473,59 @@ class ProductionEntry(Base):
 
 # ── 14. Material / Inventory / MRP / Purchase Engine ────────────────────────
 
+class BusinessPartner(Base):
+    """
+    Unified Business Partner — SAP-style single entity used across all modules.
+
+    Roles (stored in bp_roles):
+      MM_VENDOR   — supplier used in Procurement / GR
+      FI_VENDOR   — accounts-payable party (FI module, future)
+      FI_CUSTOMER — accounts-receivable party (FI module, future)
+      SD_CUSTOMER — sales customer (SD module, future)
+
+    A single BP can carry multiple roles.
+    """
+    __tablename__ = "business_partners"
+
+    id              = Column(Integer, primary_key=True)
+    bp_code         = Column(String(40),  nullable=False, unique=True, index=True)
+    name            = Column(String(120), nullable=False)
+    status          = Column(String(20),  nullable=False, default="Active")  # Active|Blocked
+    address         = Column(Text,        nullable=True)
+    phone           = Column(String(40),  nullable=True)
+    email           = Column(String(120), nullable=True)
+    contact_person  = Column(String(120), nullable=True)
+    gst_number      = Column(String(40),  nullable=True)
+    pan             = Column(String(20),  nullable=True)
+    created_at      = Column(DateTime,    nullable=False,
+                             default=lambda: datetime.now(timezone.utc))
+    updated_at      = Column(DateTime,    nullable=True)
+
+    roles         = relationship("BPRole",       back_populates="business_partner",
+                                 cascade="all, delete-orphan")
+    goods_receipts = relationship("GoodsReceipt", back_populates="business_partner")
+
+
+class BPRole(Base):
+    """Many roles per Business Partner, stored as explicit rows (not flags)."""
+    __tablename__ = "bp_roles"
+
+    id                  = Column(Integer, primary_key=True)
+    business_partner_id = Column(Integer, ForeignKey("business_partners.id",
+                                  ondelete="CASCADE"), nullable=False, index=True)
+    role                = Column(String(30), nullable=False)
+    created_at          = Column(DateTime, nullable=False,
+                                 default=lambda: datetime.now(timezone.utc))
+
+    business_partner = relationship("BusinessPartner", back_populates="roles")
+
+    __table_args__ = (
+        UniqueConstraint("business_partner_id", "role", name="uq_bp_role"),
+    )
+
+
 class Vendor(Base):
-    """Vendor master — central FK used by POs and direct GRs."""
+    """Vendor master — LEGACY, kept for DB integrity only. Use BusinessPartner."""
     __tablename__ = "vendors"
 
     id              = Column(Integer, primary_key=True)
@@ -528,13 +579,14 @@ class Material(Base):
     """Raw material master. Stock is never edited here; inventory ledger drives balances."""
     __tablename__ = "materials"
 
-    id          = Column(Integer, primary_key=True)
-    code        = Column(String(40), nullable=False, unique=True, index=True)
-    name        = Column(String(120), nullable=False)
-    base_unit   = Column(String(20), nullable=False)
-    category    = Column(String(60),  nullable=True)
-    description = Column(Text,        nullable=True)
-    is_active   = Column(Boolean, nullable=False, default=True)
+    id            = Column(Integer, primary_key=True)
+    code          = Column(String(40), nullable=False, unique=True, index=True)
+    name          = Column(String(120), nullable=False)
+    base_unit     = Column(String(20), nullable=False)
+    material_type = Column(String(40), nullable=True)   # RAW_MATERIAL|MAINTENANCE|CONSUMABLE
+    category      = Column(String(60), nullable=True)   # type-specific sub-category
+    description   = Column(Text,       nullable=True)
+    is_active     = Column(Boolean, nullable=False, default=True)
     created_at  = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
     updated_at  = Column(DateTime, nullable=True)
 
@@ -634,6 +686,7 @@ class MaterialIssueDocument(Base):
     document_number = Column(String(40), nullable=False, unique=True, index=True)
     issue_date      = Column(Date, nullable=False, index=True)
     shift           = Column(String(1), nullable=True, default="D")   # 'D' = daily
+    purpose         = Column(String(40), nullable=True, default="Production")
     reference       = Column(String(120), nullable=True)
     status          = Column(String(30), nullable=False, default="posted")
     notes           = Column(Text, nullable=True)
@@ -721,19 +774,26 @@ class GoodsReceipt(Base):
     """
     __tablename__ = "goods_receipts"
 
-    id                = Column(Integer, primary_key=True)
-    gr_number         = Column(String(40), nullable=False, unique=True, index=True)
-    purchase_order_id = Column(Integer, ForeignKey("purchase_orders.id"), nullable=True, index=True)
-    vendor_id         = Column(Integer, ForeignKey("vendors.id"), nullable=True, index=True)
-    receipt_date      = Column(Date, nullable=False)
-    reference         = Column(String(120), nullable=True)   # invoice / delivery note number
-    attachment_url    = Column(Text, nullable=True)          # Supabase Storage public URL
-    notes             = Column(Text, nullable=True)
-    created_at        = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    id                   = Column(Integer, primary_key=True)
+    gr_number            = Column(String(40), nullable=False, unique=True, index=True)
+    purchase_order_id    = Column(Integer, ForeignKey("purchase_orders.id"), nullable=True, index=True)
+    # New: Business Partner replaces vendor_id
+    business_partner_id  = Column(Integer, ForeignKey("business_partners.id"), nullable=True, index=True)
+    # Legacy vendor_id kept for DB integrity only
+    vendor_id            = Column(Integer, ForeignKey("vendors.id"), nullable=True, index=True)
+    document_date        = Column(Date, nullable=True)       # date on the supplier's invoice
+    receipt_date         = Column(Date, nullable=False)      # posting date in our system
+    reference            = Column(String(120), nullable=True)
+    attachment_url       = Column(Text, nullable=True)
+    notes                = Column(Text, nullable=True)
+    created_at           = Column(DateTime, nullable=False,
+                                  default=lambda: datetime.now(timezone.utc))
 
-    purchase_order = relationship("PurchaseOrder", back_populates="receipts")
-    vendor         = relationship("Vendor", back_populates="goods_receipts")
-    lines          = relationship("GoodsReceiptLine", back_populates="goods_receipt", cascade="all, delete-orphan")
+    purchase_order   = relationship("PurchaseOrder",    back_populates="receipts")
+    vendor           = relationship("Vendor",           back_populates="goods_receipts")
+    business_partner = relationship("BusinessPartner",  back_populates="goods_receipts")
+    lines            = relationship("GoodsReceiptLine", back_populates="goods_receipt",
+                                   cascade="all, delete-orphan")
 
 
 class GoodsReceiptLine(Base):

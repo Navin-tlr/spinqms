@@ -43,6 +43,8 @@ from models import (
     LabSimplexBobbin,
     LabSimplexInput,
     LabTrial,
+    BusinessPartner,
+    BPRole,
     Material,
     MaterialIssueDocument,
     MaterialIssueLine,
@@ -98,6 +100,9 @@ from schemas import (
     MaterialMarketPriceOut,
     MaterialIssueCreate,
     MaterialIssueOut,
+    BPCreate,
+    BPOut,
+    BPUpdate,
     MaterialCreate,
     MaterialOut,
     MaterialUpdate,
@@ -2624,78 +2629,145 @@ def production_dashboard(
 
 # ── Inventory / MRP / Purchasing ─────────────────────────────────────────────
 
-# ── Vendor Master CRUD ────────────────────────────────────────────────────────
-@app.get("/api/vendors", response_model=List[VendorOut])
-def list_vendors(db: Session = Depends(get_db)):
-    return db.query(Vendor).order_by(Vendor.name).all()
+# ── Business Partner CRUD ─────────────────────────────────────────────────────
+def _bp_payload(bp: "BusinessPartner") -> dict:
+    return {
+        "id":             bp.id,
+        "bp_code":        bp.bp_code,
+        "name":           bp.name,
+        "status":         bp.status,
+        "address":        bp.address,
+        "phone":          bp.phone,
+        "email":          bp.email,
+        "contact_person": bp.contact_person,
+        "gst_number":     bp.gst_number,
+        "pan":            bp.pan,
+        "roles":          [{"id": r.id, "role": r.role} for r in bp.roles],
+        "created_at":     bp.created_at,
+    }
 
 
-@app.post("/api/vendors", response_model=VendorOut, status_code=201)
-def create_vendor(body: VendorCreate, db: Session = Depends(get_db)):
-    if db.query(Vendor).filter(Vendor.code.ilike(body.code.strip())).first():
-        raise HTTPException(409, f"Vendor code '{body.code}' already exists")
+@app.get("/api/business-partners", response_model=List[BPOut])
+def list_business_partners(role: Optional[str] = None, db: Session = Depends(get_db)):
+    """List all BPs; filter by ?role=MM_VENDOR to get only procurement suppliers."""
+    q = db.query(BusinessPartner).filter_by(status="Active").order_by(BusinessPartner.name)
+    if role:
+        q = q.join(BPRole).filter(BPRole.role == role)
+    bps = q.all()
+    return [_bp_payload(bp) for bp in bps]
+
+
+@app.post("/api/business-partners", response_model=BPOut, status_code=201)
+def create_business_partner(body: BPCreate, db: Session = Depends(get_db)):
+    code = body.bp_code.strip().upper()
+    if db.query(BusinessPartner).filter(BusinessPartner.bp_code.ilike(code)).first():
+        raise HTTPException(409, f"BP code '{code}' already exists")
+    invalid = [r for r in body.roles if r not in ("MM_VENDOR","FI_VENDOR","FI_CUSTOMER","SD_CUSTOMER")]
+    if invalid:
+        raise HTTPException(400, f"Invalid role(s): {invalid}")
     now = datetime.now(timezone.utc)
-    vendor = Vendor(
-        code=body.code.strip().upper(),
-        name=body.name.strip(),
-        contact_person=body.contact_person,
-        phone=body.phone,
-        email=body.email,
-        gst_number=body.gst_number,
-        address=body.address,
-        status="active",
-        created_at=now,
-        updated_at=now,
+    bp = BusinessPartner(
+        bp_code=code, name=body.name.strip(), status=body.status,
+        address=body.address, phone=body.phone, email=body.email,
+        contact_person=body.contact_person, gst_number=body.gst_number, pan=body.pan,
+        created_at=now, updated_at=now,
     )
-    db.add(vendor)
+    db.add(bp)
+    db.flush()
+    for role in set(body.roles):
+        db.add(BPRole(business_partner_id=bp.id, role=role, created_at=now))
     db.commit()
-    db.refresh(vendor)
-    return vendor
+    db.refresh(bp)
+    return _bp_payload(bp)
 
 
-@app.put("/api/vendors/{vendor_id}", response_model=VendorOut)
-def update_vendor(vendor_id: int, body: VendorUpdate, db: Session = Depends(get_db)):
-    vendor = db.query(Vendor).filter_by(id=vendor_id).first()
-    if not vendor:
-        raise HTTPException(404, f"Vendor {vendor_id} not found")
-    for field, val in body.model_dump(exclude_none=True).items():
-        setattr(vendor, field, val)
-    vendor.updated_at = datetime.now(timezone.utc)
+@app.put("/api/business-partners/{bp_id}", response_model=BPOut)
+def update_business_partner(bp_id: int, body: BPUpdate, db: Session = Depends(get_db)):
+    bp = db.query(BusinessPartner).filter_by(id=bp_id).first()
+    if not bp:
+        raise HTTPException(404, "Business partner not found")
+    if body.bp_code is not None:
+        new_code = body.bp_code.strip().upper()
+        if new_code != bp.bp_code:
+            if db.query(BusinessPartner).filter(BusinessPartner.bp_code.ilike(new_code),
+                                                BusinessPartner.id != bp_id).first():
+                raise HTTPException(409, f"BP code '{new_code}' already exists")
+        bp.bp_code = new_code
+    for field in ("name","status","address","phone","email","contact_person","gst_number","pan"):
+        val = getattr(body, field)
+        if val is not None:
+            setattr(bp, field, val)
+    bp.updated_at = datetime.now(timezone.utc)
     db.commit()
-    db.refresh(vendor)
-    return vendor
+    db.refresh(bp)
+    return _bp_payload(bp)
 
 
-@app.delete("/api/vendors/{vendor_id}", status_code=204)
-def delete_vendor(vendor_id: int, db: Session = Depends(get_db)):
-    """
-    Hard-delete a vendor. Blocked if any GRs or POs reference this vendor,
-    because deleting would orphan financial documents. Deactivate instead.
-    vendor_materials rows are cascaded away automatically.
-    """
-    vendor = db.query(Vendor).filter_by(id=vendor_id).first()
-    if not vendor:
-        raise HTTPException(404, f"Vendor {vendor_id} not found")
-    has_gr  = db.query(GoodsReceipt).filter_by(vendor_id=vendor_id).first()
-    has_po  = db.query(PurchaseOrder).filter_by(vendor_id=vendor_id).first()
-    if has_gr or has_po:
+@app.post("/api/business-partners/{bp_id}/roles", response_model=BPOut, status_code=201)
+def add_bp_role(bp_id: int, role: str, db: Session = Depends(get_db)):
+    bp = db.query(BusinessPartner).filter_by(id=bp_id).first()
+    if not bp:
+        raise HTTPException(404, "Business partner not found")
+    if role not in ("MM_VENDOR","FI_VENDOR","FI_CUSTOMER","SD_CUSTOMER"):
+        raise HTTPException(400, f"Invalid role: {role}")
+    existing = db.query(BPRole).filter_by(business_partner_id=bp_id, role=role).first()
+    if not existing:
+        db.add(BPRole(business_partner_id=bp_id, role=role,
+                      created_at=datetime.now(timezone.utc)))
+        db.commit()
+    db.refresh(bp)
+    return _bp_payload(bp)
+
+
+@app.delete("/api/business-partners/{bp_id}/roles/{role}", response_model=BPOut)
+def remove_bp_role(bp_id: int, role: str, db: Session = Depends(get_db)):
+    bp = db.query(BusinessPartner).filter_by(id=bp_id).first()
+    if not bp:
+        raise HTTPException(404, "Business partner not found")
+    row = db.query(BPRole).filter_by(business_partner_id=bp_id, role=role).first()
+    if row:
+        db.delete(row)
+        db.commit()
+    db.refresh(bp)
+    return _bp_payload(bp)
+
+
+@app.delete("/api/business-partners/{bp_id}", status_code=204)
+def delete_business_partner(bp_id: int, db: Session = Depends(get_db)):
+    """Hard-delete. Blocked if any GRs reference this BP (document integrity)."""
+    bp = db.query(BusinessPartner).filter_by(id=bp_id).first()
+    if not bp:
+        raise HTTPException(404, "Business partner not found")
+    has_gr = db.query(GoodsReceipt).filter_by(business_partner_id=bp_id).first()
+    if has_gr:
         raise HTTPException(
             409,
-            f"Cannot delete '{vendor.name}' — it has linked goods receipts or purchase orders. "
-            "Deactivate it instead to preserve the transaction history.",
+            f"Cannot delete '{bp.name}' — it has posted Goods Receipts. "
+            "Block it instead to preserve transaction history.",
         )
-    db.delete(vendor)
+    db.delete(bp)
     db.commit()
 
 
-@app.post("/api/vendors/{vendor_id}/deactivate", status_code=204)
-def deactivate_vendor(vendor_id: int, db: Session = Depends(get_db)):
-    """Soft-deactivate: hides vendor from active lists but keeps all documents intact."""
-    vendor = db.query(Vendor).filter_by(id=vendor_id).first()
-    if not vendor:
-        raise HTTPException(404, f"Vendor {vendor_id} not found")
-    vendor.status = "inactive"
-    vendor.updated_at = datetime.now(timezone.utc)
+# ── Admin: inventory data reset ───────────────────────────────────────────────
+@app.post("/api/admin/reset-inventory", status_code=204)
+def reset_inventory(db: Session = Depends(get_db)):
+    """
+    DESTRUCTIVE — wipes all inventory transaction data (movements, stock, GRs,
+    GIs, purchase documents, recommendations).  Master data (BPs, Materials) is
+    preserved.  For use in beta / staging only.
+    """
+    from sqlalchemy import text
+    db.execute(text("DELETE FROM inventory_movements"))
+    db.execute(text("DELETE FROM inventory_stock"))
+    db.execute(text("DELETE FROM material_issue_lines"))
+    db.execute(text("DELETE FROM material_issue_documents"))
+    db.execute(text("DELETE FROM goods_receipt_lines"))
+    db.execute(text("DELETE FROM goods_receipts"))
+    db.execute(text("DELETE FROM purchase_order_lines"))
+    db.execute(text("DELETE FROM purchase_orders"))
+    db.execute(text("DELETE FROM purchase_recommendations"))
+    db.execute(text("DELETE FROM production_material_consumptions"))
     db.commit()
 
 
@@ -3017,8 +3089,9 @@ def post_material_issue(body: MaterialIssueCreate, db: Session = Depends(get_db)
     doc = MaterialIssueDocument(
         document_number=f"GI-{now.strftime('%Y%m%d%H%M%S')}",
         issue_date=body.issue_date,
-        shift=body.shift or "D",   # 'D' = daily (no shift distinction)
-        reference=body.reference or "Daily Production",
+        shift="D",
+        purpose=body.purpose or "Production",
+        reference=body.reference,
         status="posted",
         notes=body.notes,
         created_at=now,
@@ -3129,17 +3202,19 @@ def list_purchase_recommendations(status: Optional[str] = "open", db: Session = 
 
 
 def _gr_payload(gr: GoodsReceipt) -> dict:
+    bp = gr.business_partner
     return {
-        "id":                gr.id,
-        "gr_number":         gr.gr_number,
-        "purchase_order_id": gr.purchase_order_id,
-        "vendor_id":         gr.vendor_id,
-        "vendor_name":       gr.vendor.name if gr.vendor else None,
-        "receipt_date":      gr.receipt_date,
-        "reference":         gr.reference,
-        "attachment_url":    gr.attachment_url,
-        "notes":             gr.notes,
-        "created_at":        gr.created_at,
+        "id":                    gr.id,
+        "gr_number":             gr.gr_number,
+        "purchase_order_id":     gr.purchase_order_id,
+        "business_partner_id":   gr.business_partner_id,
+        "business_partner_name": bp.name if bp else None,
+        "document_date":         gr.document_date,
+        "receipt_date":          gr.receipt_date,
+        "reference":             gr.reference,
+        "attachment_url":        gr.attachment_url,
+        "notes":                 gr.notes,
+        "created_at":            gr.created_at,
         "lines": [{
             "id":                line.id,
             "material_id":       line.material_id,
@@ -3148,6 +3223,8 @@ def _gr_payload(gr: GoodsReceipt) -> dict:
             "quantity_received": line.quantity_received,
             "unit":              line.unit,
             "rate":              line.rate,
+            "amount":            round(line.quantity_received * line.rate, 2)
+                                 if line.rate else None,
         } for line in gr.lines],
     }
 
@@ -3317,30 +3394,40 @@ def list_goods_receipts(db: Session = Depends(get_db)):
 
 @app.post("/api/goods-receipts/direct", response_model=GoodsReceiptOut, status_code=201)
 async def post_direct_gr(
-    vendor_id:    int             = Form(...),
-    receipt_date: Optional[str]   = Form(None),
-    reference:    Optional[str]   = Form(None),
-    notes:        Optional[str]   = Form(None),
-    lines_json:   str             = Form(...),   # JSON array of DirectGRLineCreate
-    attachment:   Optional[UploadFile] = File(None),
+    business_partner_id: int             = Form(...),
+    document_date:       Optional[str]   = Form(None),
+    receipt_date:        Optional[str]   = Form(None),
+    reference:           Optional[str]   = Form(None),
+    notes:               Optional[str]   = Form(None),
+    lines_json:          str             = Form(...),
+    attachment:          Optional[UploadFile] = File(None),
     db: Session = Depends(get_db),
 ):
     """
-    Direct Goods Receipt — vendor invoice / opening stock, no PO required.
-    Accepts multipart/form-data so an invoice PDF/image can be attached.
-    lines_json must be a JSON array: [{"material_id":1,"quantity_received":100,"unit":"Bales","rate":null}, ...]
+    Direct Goods Receipt — BP invoice / opening stock, no PO required.
+    BP must carry the MM_VENDOR role.
+    lines_json: [{"material_id":1,"quantity_received":100,"rate":1200}, ...]
     """
     import json as _json
-    vendor = db.query(Vendor).filter_by(id=vendor_id).first()
-    if not vendor:
-        raise HTTPException(404, f"Vendor {vendor_id} not found")
-    if vendor.status != "active":
-        raise HTTPException(400, f"Vendor '{vendor.name}' is inactive")
+    bp = db.query(BusinessPartner).filter_by(id=business_partner_id).first()
+    if not bp:
+        raise HTTPException(404, "Business partner not found")
+    if bp.status == "Blocked":
+        raise HTTPException(400, f"Business partner '{bp.name}' is blocked")
+    has_mm_role = db.query(BPRole).filter_by(
+        business_partner_id=bp.id, role="MM_VENDOR").first()
+    if not has_mm_role:
+        raise HTTPException(
+            400,
+            f"'{bp.name}' does not have the MM_VENDOR role. "
+            "Add it in Master Data → Business Partners first.",
+        )
 
     try:
         lines_raw = _json.loads(lines_json)
         body = DirectGRCreate(
-            vendor_id=vendor_id,
+            business_partner_id=business_partner_id,
+            document_date=date.fromisoformat(document_date) if document_date else None,
             receipt_date=date.fromisoformat(receipt_date) if receipt_date else None,
             reference=reference,
             notes=notes,
@@ -3356,15 +3443,15 @@ async def post_direct_gr(
     gr_number = f"GR-{now.strftime('%Y%m%d%H%M%S')}"
     receipt_dt = body.receipt_date or date.today()
 
-    # Upload attachment first (so we can roll back if upload fails)
     attachment_url = None
     if attachment and attachment.filename:
         attachment_url = await _upload_attachment(attachment, gr_number)
 
     gr = GoodsReceipt(
         gr_number=gr_number,
-        vendor_id=vendor.id,
+        business_partner_id=bp.id,
         purchase_order_id=None,
+        document_date=body.document_date,
         receipt_date=receipt_dt,
         reference=body.reference,
         attachment_url=attachment_url,

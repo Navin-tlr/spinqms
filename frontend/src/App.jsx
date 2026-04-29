@@ -14,6 +14,7 @@ import ProductionEntry from './components/views/ProductionEntry.jsx'
 import ProductionLog from './components/views/ProductionLog.jsx'
 import InventoryPlanning from './components/views/InventoryPlanning.jsx'
 import PurchaseFlow from './components/views/PurchaseFlow.jsx'
+import MasterData from './components/views/MasterData.jsx'
 import { Spinner } from './components/Primitives.jsx'
 import { getDepts, getOverview, getAlerts, getUster } from './api.js'
 
@@ -87,8 +88,9 @@ export default function App() {
   const [loading,       setLoading]       = useState(true)
   const [machineFilter, setMachineFilter] = useState(null)
   /* ── Module switching ─────────────────────────────────────────────────── */
-  const [currentModule,    setCurrentModule]    = useState(null)        // null = landing | 'quality' | 'production'
+  const [currentModule,    setCurrentModule]    = useState(null)        // null = landing | 'quality' | 'production' | 'masterdata'
   const [productionView,   setProductionView]   = useState('production-entry')
+  const [masterdataView,   setMasterdataView]   = useState('masterdata-bp')
 
   // Reset machine filter when department changes
   useEffect(() => { setMachineFilter(null) }, [currentDept])
@@ -156,7 +158,13 @@ export default function App() {
       depts={depts} alerts={alerts} statusTxt={statusTxt} lastSaved={lastSaved}
       currentModule={currentModule} setCurrentModule={setCurrentModule}
       productionView={productionView} setProductionView={setProductionView}
+      masterdataView={masterdataView} setMasterdataView={setMasterdataView}
     >
+      {/* ── Master Data Module ───────────────────────────────────────────── */}
+      {currentModule === 'masterdata' && (
+        <MasterData mode={masterdataView === 'masterdata-bp' ? 'bp' : 'materials'} />
+      )}
+
       {/* ── Production Module ────────────────────────────────────────────── */}
       {currentModule === 'production' && (
         <>
@@ -164,7 +172,7 @@ export default function App() {
             <ProductionEntry onSaved={() => setProductionView('production-log')} />
           )}
           {productionView === 'production-log' && <ProductionLog />}
-          {['inventory-vendors','inventory-materials','inventory-vendor-links','inventory-stock','inventory-issue','inventory-receipt','inventory-movements','inventory-planning','inventory-admin-reset'].includes(productionView) && (
+          {['inventory-materials','inventory-stock','inventory-issue','inventory-receipt','inventory-movements','inventory-planning','inventory-admin-reset'].includes(productionView) && (
             <InventoryPlanning mode={productionView.replace('inventory-', '')} />
           )}
           {productionView === 'purchase-requisitions' && <PurchaseFlow mode="requisitions" />}

@@ -4,22 +4,15 @@ import {
   archiveMaterial,
   createMaterial,
   createMaterialIssue,
-  createVendor,
-  createVendorMaterial,
   deleteMaterial,
-  deleteVendor,
-  deleteVendorMaterial,
-  deactivateVendor,
+  getBusinessPartners,
   getInventoryMovements,
   getInventoryOverview,
   getMaterials,
-  getVendorMaterials,
-  getVendors,
   postDirectGR,
   resetInventory,
   updateMaterial,
   updateMaterialPlanning,
-  updateVendor,
 } from '../../api.js'
 import { Spinner } from '../Primitives.jsx'
 
@@ -82,131 +75,6 @@ function PageBar({ title, subtitle, onRefresh, children }) {
   )
 }
 
-/* ══════════════════════════════════════════════════════════════════════════════
-   VENDOR MASTER
-══════════════════════════════════════════════════════════════════════════════ */
-function VendorMaster({ vendors, onChanged }) {
-  const blank = { code: '', name: '', contact_person: '', phone: '', email: '', gst_number: '', address: '' }
-  const [form, setForm]     = useState(blank)
-  const [saving, setSaving] = useState(false)
-  const [editing, setEditing] = useState(null)   // vendor id being edited
-  const [editDraft, setEditDraft] = useState({})
-  const [msg, setMsg]       = useState('')
-  const [err, setErr]       = useState('')
-
-  const set = k => e => setForm(f => ({ ...f, [k]: e.target.value }))
-  const canSave = form.code.trim() && form.name.trim()
-
-  const save = async () => {
-    setSaving(true); setErr(''); setMsg('')
-    try {
-      const v = await createVendor(form)
-      setMsg(`Created: ${v.code} — ${v.name}`)
-      setForm(blank)
-      onChanged(v, 'add')
-    } catch (e) { setErr(errMsg(e)) } finally { setSaving(false) }
-  }
-
-  const saveEdit = async (id) => {
-    try {
-      const v = await updateVendor(id, editDraft)
-      setEditing(null)
-      onChanged(v, 'update')
-    } catch (e) { setErr(errMsg(e)) }
-  }
-
-  const deactivate = async (v) => {
-    if (!window.confirm(`Deactivate "${v.name}"?\n\nIt will be hidden from active lists but all linked documents are preserved.`)) return
-    try { await deactivateVendor(v.id); onChanged({ ...v, status: 'inactive' }, 'update') }
-    catch (e) { setErr(errMsg(e)) }
-  }
-
-  const hardDelete = async (v) => {
-    if (!window.confirm(`Permanently DELETE vendor "${v.name}"?\n\nThis cannot be undone. Will fail if the vendor has any goods receipts or purchase orders.`)) return
-    try { await deleteVendor(v.id); onChanged({ id: v.id }, 'remove') }
-    catch (e) { setErr(errMsg(e)) }
-  }
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-      {/* Add form */}
-      <div style={{ background: '#fff', border: '1px solid #d9dadb', borderBottom: 'none', padding: '14px 16px' }}>
-        <div style={{ fontSize: 11, fontWeight: 700, color: '#6a6d70', textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 12 }}>Add New Vendor</div>
-        <div style={{ display: 'grid', gridTemplateColumns: '140px 1fr 1fr 140px 140px', gap: 10, marginBottom: 10 }}>
-          {[['code','Vendor Code'],['name','Vendor Name'],['gst_number','GST Number'],['phone','Phone']].map(([k,label]) => (
-            <div key={k}>
-              <div style={{ fontSize: 11, color: '#6a6d70', marginBottom: 3 }}>{label}{k === 'code' || k === 'name' ? ' *' : ''}</div>
-              <input value={form[k]} onChange={set(k)} style={{ ...inp, width: '100%' }} placeholder={label} />
-            </div>
-          ))}
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 10, alignItems: 'end' }}>
-          {[['email','Email'],['address','Address / City']].map(([k,label]) => (
-            <div key={k}>
-              <div style={{ fontSize: 11, color: '#6a6d70', marginBottom: 3 }}>{label}</div>
-              <input value={form[k]} onChange={set(k)} style={{ ...inp, width: '100%' }} placeholder={label} />
-            </div>
-          ))}
-          <button disabled={!canSave || saving} onClick={save} style={btn(canSave && !saving)}>
-            {saving ? 'Saving…' : 'Add Vendor'}
-          </button>
-        </div>
-        {(err || msg) && (
-          <div style={{ marginTop: 8, fontSize: 12, color: err ? ERR : OK }}>{err || msg}</div>
-        )}
-      </div>
-
-      {/* Vendor list */}
-      <div style={{ background: '#fff', border: '1px solid #d9dadb', overflowX: 'auto' }}>
-        {vendors.length === 0 ? (
-          <div style={{ padding: 32, textAlign: 'center', color: '#89919a', fontSize: 13 }}>No vendors yet. Add your first vendor above.</div>
-        ) : (
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead><tr>{['Code','Name','GST Number','Phone','Email','Status',''].map(h => <th key={h} style={hCell}>{h}</th>)}</tr></thead>
-            <tbody>
-              {vendors.map((v, i) => editing === v.id ? (
-                <tr key={v.id} style={{ background: '#f0f4ff' }}>
-                  <td style={cell}><input value={editDraft.code || v.code} onChange={e => setEditDraft(d => ({ ...d, code: e.target.value }))} style={{ ...inp, width: 100 }} disabled /></td>
-                  <td style={cell}><input value={editDraft.name ?? v.name} onChange={e => setEditDraft(d => ({ ...d, name: e.target.value }))} style={{ ...inp, width: '100%' }} /></td>
-                  <td style={cell}><input value={editDraft.gst_number ?? v.gst_number ?? ''} onChange={e => setEditDraft(d => ({ ...d, gst_number: e.target.value }))} style={{ ...inp, width: 130 }} /></td>
-                  <td style={cell}><input value={editDraft.phone ?? v.phone ?? ''} onChange={e => setEditDraft(d => ({ ...d, phone: e.target.value }))} style={{ ...inp, width: 110 }} /></td>
-                  <td style={cell}><input value={editDraft.email ?? v.email ?? ''} onChange={e => setEditDraft(d => ({ ...d, email: e.target.value }))} style={{ ...inp, width: 160 }} /></td>
-                  <td style={cell} />
-                  <td style={{ ...cell, display: 'flex', gap: 6 }}>
-                    <button onClick={() => saveEdit(v.id)} style={btn(true)}>Save</button>
-                    <button onClick={() => setEditing(null)} style={{ ...inp, cursor: 'pointer' }}>Cancel</button>
-                  </td>
-                </tr>
-              ) : (
-                <tr key={v.id} style={{ background: i % 2 === 0 ? '#fff' : '#fafafa' }}>
-                  <td style={{ ...cell, fontFamily: 'var(--mono)', fontWeight: 700, color: B }}>{v.code}</td>
-                  <td style={{ ...cell, fontWeight: 600 }}>{v.name}</td>
-                  <td style={{ ...cell, fontFamily: 'var(--mono)' }}>{v.gst_number || '—'}</td>
-                  <td style={cell}>{v.phone || '—'}</td>
-                  <td style={cell}>{v.email || '—'}</td>
-                  <td style={cell}>
-                    <span style={{ fontSize: 11, fontWeight: 700, color: v.status === 'active' ? OK : '#89919a' }}>
-                      {v.status.toUpperCase()}
-                    </span>
-                  </td>
-                  <td style={{ ...cell, whiteSpace: 'nowrap' }}>
-                    <div style={{ display: 'flex', gap: 6 }}>
-                      <button onClick={() => { setEditing(v.id); setEditDraft({}) }} style={{ ...inp, cursor: 'pointer', fontSize: 11 }}>Edit</button>
-                      {v.status === 'active' && (
-                        <button onClick={() => deactivate(v)} style={{ ...inp, cursor: 'pointer', color: '#b55b00', borderColor: '#e8a87c', fontSize: 11 }}>Deactivate</button>
-                      )}
-                      <button onClick={() => hardDelete(v)} style={{ ...inp, cursor: 'pointer', color: ERR, fontSize: 11 }}>Delete</button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-    </div>
-  )
-}
 
 /* ══════════════════════════════════════════════════════════════════════════════
    MATERIAL MASTER  (with inline Edit + soft Archive)
@@ -456,9 +324,10 @@ function StockOverview({ rows, loading }) {
 /* ══════════════════════════════════════════════════════════════════════════════
    MATERIAL RECEIPT (Direct GR — vendor required, optional file attachment)
 ══════════════════════════════════════════════════════════════════════════════ */
-function MaterialReceipt({ materials, vendors, onPosted }) {
+function MaterialReceipt({ materials, businessPartners, onPosted }) {
   const today = new Date().toISOString().slice(0, 10)
-  const [vendorId,     setVendorId]     = useState('')
+  const [bpId,         setBpId]         = useState('')
+  const [documentDate, setDocumentDate] = useState(today)
   const [receiptDate,  setReceiptDate]  = useState(today)
   const [reference,    setReference]    = useState('')
   const [notes,        setNotes]        = useState('')
@@ -474,16 +343,17 @@ function MaterialReceipt({ materials, vendors, onPosted }) {
   const removeRow = i  => setLines(p => p.length === 1 ? p : p.filter((_, j) => j !== i))
   const updateRow = (i, patch) => setLines(p => p.map((r, j) => j === i ? { ...r, ...patch } : r))
 
-  const canPost = vendorId && lines.every(r => r.material_id && Number(r.quantity) > 0)
+  const canPost = bpId && lines.every(r => r.material_id && Number(r.quantity) > 0)
 
   const post = async () => {
     setPosting(true); setError(''); setMessage('')
     try {
       const doc = await postDirectGR({
-        vendor_id:    Number(vendorId),
-        receipt_date: receiptDate,
-        reference:    reference || undefined,
-        notes:        notes || undefined,
+        business_partner_id: Number(bpId),
+        document_date: documentDate || undefined,
+        receipt_date:  receiptDate,
+        reference:     reference || undefined,
+        notes:         notes || undefined,
         lines: lines.map(r => ({
           material_id:       Number(r.material_id),
           quantity_received: Number(r.quantity),
@@ -497,25 +367,29 @@ function MaterialReceipt({ materials, vendors, onPosted }) {
     } catch (e) { setError(errMsg(e)) } finally { setPosting(false) }
   }
 
-  const activeVendors = vendors.filter(v => v.status === 'active')
+  const activeBPs = (businessPartners || []).filter(bp => bp.status === 'Active')
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
       {/* Header */}
       <div style={{ background: '#fff', border: '1px solid #d9dadb', borderBottom: 'none', padding: '14px 16px' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '220px 180px 1fr 1fr', gap: 12, marginBottom: 12 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '220px 160px 160px 1fr 1fr', gap: 12, marginBottom: 12 }}>
           <div>
-            <div style={{ fontSize: 11, color: '#6a6d70', marginBottom: 3 }}>Vendor *</div>
-            <select value={vendorId} onChange={e => setVendorId(e.target.value)} style={{ ...inp, width: '100%' }}>
-              <option value="">— Select Vendor —</option>
-              {activeVendors.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
+            <div style={{ fontSize: 11, color: '#6a6d70', marginBottom: 3 }}>Business Partner (Vendor) *</div>
+            <select value={bpId} onChange={e => setBpId(e.target.value)} style={{ ...inp, width: '100%' }}>
+              <option value="">— Select BP —</option>
+              {activeBPs.map(bp => <option key={bp.id} value={bp.id}>{bp.bp_code} · {bp.name}</option>)}
             </select>
-            {activeVendors.length === 0 && (
-              <div style={{ fontSize: 11, color: ERR, marginTop: 3 }}>No active vendors — add one in Vendor Master first</div>
+            {activeBPs.length === 0 && (
+              <div style={{ fontSize: 11, color: ERR, marginTop: 3 }}>No active BPs — add one in Master Data → Business Partners</div>
             )}
           </div>
           <div>
-            <div style={{ fontSize: 11, color: '#6a6d70', marginBottom: 3 }}>Receipt Date</div>
+            <div style={{ fontSize: 11, color: '#6a6d70', marginBottom: 3 }}>Invoice Date</div>
+            <input type="date" value={documentDate} max={today} onChange={e => setDocumentDate(e.target.value)} style={{ ...inp, width: '100%' }} />
+          </div>
+          <div>
+            <div style={{ fontSize: 11, color: '#6a6d70', marginBottom: 3 }}>Posting / Receipt Date</div>
             <input type="date" value={receiptDate} max={today} onChange={e => setReceiptDate(e.target.value)} style={{ ...inp, width: '100%' }} />
           </div>
           <div>
@@ -831,157 +705,6 @@ function Planning({ rows, onSaved }) {
   )
 }
 
-/* ══════════════════════════════════════════════════════════════════════════════
-   VENDOR–MATERIAL LINKS
-══════════════════════════════════════════════════════════════════════════════ */
-function VendorMaterialLinks({ vendors, materials }) {
-  const [links,       setLinks]     = useState([])
-  const [loading,     setLoading]   = useState(true)
-  const [vendorId,    setVendorId]  = useState('')
-  const [materialId,  setMaterialId]= useState('')
-  const [isPreferred, setIsPreferred] = useState(false)
-  const [leadTime,    setLeadTime]  = useState('')
-  const [lastPrice,   setLastPrice] = useState('')
-  const [notes,       setNotes]     = useState('')
-  const [saving,      setSaving]    = useState(false)
-  const [msg,         setMsg]       = useState('')
-  const [err,         setErr]       = useState('')
-
-  const load = useCallback(async () => {
-    setLoading(true)
-    try { setLinks(await getVendorMaterials()) }
-    catch (e) { setErr(errMsg(e)) }
-    finally { setLoading(false) }
-  }, [])
-
-  useEffect(() => { load() }, [load])
-
-  const canAdd = vendorId && materialId
-
-  const addLink = async () => {
-    setSaving(true); setErr(''); setMsg('')
-    try {
-      const vm = await createVendorMaterial({
-        vendor_id:      Number(vendorId),
-        material_id:    Number(materialId),
-        is_preferred:   isPreferred,
-        lead_time_days: leadTime ? Number(leadTime) : null,
-        last_price:     lastPrice ? Number(lastPrice) : null,
-        notes:          notes || null,
-      })
-      setMsg(`Linked: ${vm.vendor_name} ↔ ${vm.material_name}`)
-      setVendorId(''); setMaterialId(''); setIsPreferred(false); setLeadTime(''); setLastPrice(''); setNotes('')
-      load()
-    } catch (e) { setErr(errMsg(e)) } finally { setSaving(false) }
-  }
-
-  const removeLink = async (vendorId, materialId, label) => {
-    if (!window.confirm(`Remove link: ${label}?`)) return
-    try { await deleteVendorMaterial(vendorId, materialId); load() }
-    catch (e) { setErr(errMsg(e)) }
-  }
-
-  const activeVendors    = vendors.filter(v => v.status === 'active')
-  const activeMaterials  = materials
-
-  // Group links by material for display
-  const byMaterial = {}
-  links.forEach(l => {
-    if (!byMaterial[l.material_id]) byMaterial[l.material_id] = { name: l.material_name, code: l.material_code, vendors: [] }
-    byMaterial[l.material_id].vendors.push(l)
-  })
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-      {/* Add link form */}
-      <div style={{ background: '#fff', border: '1px solid #d9dadb', borderBottom: 'none', padding: '14px 16px' }}>
-        <div style={{ fontSize: 11, fontWeight: 700, color: '#6a6d70', textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 12 }}>
-          Link Vendor to Material
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '220px 220px 100px 120px 140px 1fr', gap: 10, alignItems: 'end' }}>
-          <div>
-            <div style={{ fontSize: 11, color: '#6a6d70', marginBottom: 3 }}>Vendor *</div>
-            <select value={vendorId} onChange={e => setVendorId(e.target.value)} style={{ ...inp, width: '100%' }}>
-              <option value="">— Select Vendor —</option>
-              {activeVendors.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
-            </select>
-          </div>
-          <div>
-            <div style={{ fontSize: 11, color: '#6a6d70', marginBottom: 3 }}>Material *</div>
-            <select value={materialId} onChange={e => setMaterialId(e.target.value)} style={{ ...inp, width: '100%' }}>
-              <option value="">— Select Material —</option>
-              {activeMaterials.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-            </select>
-          </div>
-          <div>
-            <div style={{ fontSize: 11, color: '#6a6d70', marginBottom: 3 }}>Lead Time (days)</div>
-            <input type="number" value={leadTime} onChange={e => setLeadTime(e.target.value)} placeholder="e.g. 7" style={{ ...inp, width: '100%', fontFamily: 'var(--mono)' }} />
-          </div>
-          <div>
-            <div style={{ fontSize: 11, color: '#6a6d70', marginBottom: 3 }}>Last Price (₹)</div>
-            <input type="number" value={lastPrice} onChange={e => setLastPrice(e.target.value)} placeholder="₹ per unit" style={{ ...inp, width: '100%', fontFamily: 'var(--mono)' }} />
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, paddingBottom: 2 }}>
-            <input type="checkbox" id="pref" checked={isPreferred} onChange={e => setIsPreferred(e.target.checked)} style={{ marginTop: 18 }} />
-            <label htmlFor="pref" style={{ fontSize: 12, color: '#32363a', marginTop: 18, cursor: 'pointer' }}>Preferred vendor</label>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'flex-end' }}>
-            <button disabled={!canAdd || saving} onClick={addLink} style={{ ...btn(canAdd && !saving), width: '100%' }}>
-              {saving ? 'Linking…' : 'Add Link'}
-            </button>
-          </div>
-        </div>
-        {(err || msg) && <div style={{ marginTop: 8, fontSize: 12, color: err ? ERR : OK }}>{err || msg}</div>}
-      </div>
-
-      {/* Links table grouped by material */}
-      <div style={{ background: '#fff', border: '1px solid #d9dadb', overflowX: 'auto' }}>
-        {loading ? (
-          <div style={{ padding: 32, textAlign: 'center' }}><Spinner /></div>
-        ) : links.length === 0 ? (
-          <div style={{ padding: 32, textAlign: 'center', color: '#89919a', fontSize: 13 }}>
-            No vendor–material links yet. Add your first link above.
-          </div>
-        ) : (
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr>{['Material', 'Vendor', 'Preferred', 'Lead Time', 'Last Price', 'Price Date', ''].map(h => <th key={h} style={hCell}>{h}</th>)}</tr>
-            </thead>
-            <tbody>
-              {links.map((l, i) => (
-                <tr key={l.id} style={{ background: i % 2 === 0 ? '#fff' : '#fafafa' }}>
-                  <td style={{ ...cell, fontWeight: 600 }}>
-                    <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: '#89919a', marginRight: 6 }}>{l.material_code}</span>
-                    {l.material_name}
-                  </td>
-                  <td style={{ ...cell }}>
-                    <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: B, marginRight: 6 }}>{l.vendor_code}</span>
-                    {l.vendor_name}
-                  </td>
-                  <td style={{ ...cell, textAlign: 'center' }}>
-                    {l.is_preferred ? <span style={{ color: OK, fontWeight: 700 }}>★ Yes</span> : <span style={{ color: '#89919a' }}>—</span>}
-                  </td>
-                  <td style={{ ...cell, fontFamily: 'var(--mono)' }}>
-                    {l.lead_time_days != null ? `${l.lead_time_days}d` : '—'}
-                  </td>
-                  <td style={{ ...cell, fontFamily: 'var(--mono)' }}>
-                    {l.last_price != null ? `₹ ${fmt(l.last_price)}` : '—'}
-                  </td>
-                  <td style={{ ...cell, fontSize: 11, color: '#89919a' }}>{l.last_price_date || '—'}</td>
-                  <td style={cell}>
-                    <button onClick={() => removeLink(l.vendor_id, l.material_id, `${l.vendor_name} ↔ ${l.material_name}`)}
-                      style={{ ...inp, cursor: 'pointer', color: ERR, fontSize: 11 }}>Remove</button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-    </div>
-  )
-}
-
 
 /* ══════════════════════════════════════════════════════════════════════════════
    ADMIN RESET
@@ -1045,21 +768,21 @@ function AdminReset({ onReset }) {
    ROOT COMPONENT
 ══════════════════════════════════════════════════════════════════════════════ */
 export default function InventoryPlanning({ mode = 'stock' }) {
-  const [rows,      setRows]      = useState([])
-  const [materials, setMaterials] = useState([])
-  const [vendors,   setVendors]   = useState([])
-  const [movements, setMovements] = useState([])
-  const [loading,   setLoading]   = useState(true)
-  const [loadErrors, setLoadErrors] = useState([])
+  const [rows,             setRows]             = useState([])
+  const [materials,        setMaterials]        = useState([])
+  const [businessPartners, setBusinessPartners] = useState([])
+  const [movements,        setMovements]        = useState([])
+  const [loading,          setLoading]          = useState(true)
+  const [loadErrors,       setLoadErrors]       = useState([])
 
   const load = useCallback(async () => {
     setLoading(true)
     setLoadErrors([])
     try {
-      const [ovRes, matRes, venRes, movRes] = await Promise.allSettled([
+      const [ovRes, matRes, bpRes, movRes] = await Promise.allSettled([
         getInventoryOverview(),
         getMaterials(),
-        getVendors(),
+        getBusinessPartners('MM_VENDOR'),
         getInventoryMovements({ limit: 300 }),
       ])
       const errs = []
@@ -1067,8 +790,8 @@ export default function InventoryPlanning({ mode = 'stock' }) {
       else errs.push(`Stock overview: ${errMsg(ovRes.reason)}`)
       if (matRes.status === 'fulfilled') setMaterials(matRes.value)
       else errs.push(`Materials: ${errMsg(matRes.reason)}`)
-      if (venRes.status === 'fulfilled') setVendors(venRes.value)
-      else errs.push(`Vendors: ${errMsg(venRes.reason)}`)
+      if (bpRes.status  === 'fulfilled') setBusinessPartners(bpRes.value)
+      else errs.push(`Business Partners: ${errMsg(bpRes.reason)}`)
       if (movRes.status === 'fulfilled') setMovements(movRes.value)
       else errs.push(`Movements: ${errMsg(movRes.reason)}`)
       if (errs.length) setLoadErrors(errs)
@@ -1081,30 +804,22 @@ export default function InventoryPlanning({ mode = 'stock' }) {
 
   useEffect(() => { load() }, [load])
 
-  /* Optimistic updates so list reflects changes instantly */
+  /* Optimistic material updates so list reflects changes instantly */
   const onMaterialChanged = (item, op) => {
     if (op === 'add')    setMaterials(p => p.some(m => m.id === item.id) ? p : [...p, item])
     if (op === 'remove') setMaterials(p => p.filter(m => m.id !== item.id))
     if (op === 'update') setMaterials(p => p.map(m => m.id === item.id ? item : m))
     load()
   }
-  const onVendorChanged = (item, op) => {
-    if (op === 'add')    setVendors(p => p.some(v => v.id === item.id) ? p : [...p, item])
-    if (op === 'remove') setVendors(p => p.filter(v => v.id !== item.id))
-    if (op === 'update') setVendors(p => p.map(v => v.id === item.id ? item : v))
-    load()
-  }
 
   const TITLES = {
-    vendors:          ['Vendor Master',          'Central vendor directory used across purchasing and receipts'],
-    materials:        ['Material Master',         'Raw materials and consumables registry'],
-    'vendor-links':   ['Vendor–Material Links',  'Define which vendors supply which materials'],
-    stock:            ['Stock Overview',          'Current stock, days left, and reorder status'],
-    receipt:          ['Material Receipt',        'Post vendor goods receipt — updates stock ledger'],
-    issue:            ['Material Issue',          'Post daily goods issue — reduces stock ledger'],
-    movements:        ['Material Movements',      'Append-only inventory ledger (GR/GI audit trail)'],
-    planning:         ['Planning (MRP)',          'Lead time, safety stock, reorder parameters'],
-    'admin-reset':    ['Admin — Data Reset',      'Wipe all inventory test data and start fresh'],
+    materials:     ['Material Master',    'Raw materials and consumables registry'],
+    stock:         ['Stock Overview',     'Current stock, days left, and reorder status'],
+    receipt:       ['Material Receipt',   'Post goods receipt from vendor — updates stock ledger'],
+    issue:         ['Material Issue',     'Post daily goods issue — reduces stock ledger'],
+    movements:     ['Material Movements', 'Append-only inventory ledger (GR/GI audit trail)'],
+    planning:      ['Planning (MRP)',     'Lead time, safety stock, reorder parameters'],
+    'admin-reset': ['Admin — Data Reset', 'Wipe all inventory test data and start fresh'],
   }
   const [title, subtitle] = TITLES[mode] || TITLES.stock
 
@@ -1129,15 +844,13 @@ export default function InventoryPlanning({ mode = 'stock' }) {
       )}
 
       {/* All modes render immediately — no loading gate blocking forms */}
-      {mode === 'vendors'        && <VendorMaster         vendors={vendors}     onChanged={onVendorChanged} />}
-      {mode === 'materials'      && <MaterialMaster        materials={materials} onChanged={onMaterialChanged} />}
-      {mode === 'vendor-links'   && <VendorMaterialLinks   vendors={vendors}     materials={materials} />}
-      {mode === 'stock'          && <StockOverview         rows={rows}           loading={loading} />}
-      {mode === 'receipt'        && <MaterialReceipt       materials={materials} vendors={vendors}  onPosted={load} />}
-      {mode === 'issue'          && <MaterialIssue         materials={materials} stockRows={rows}   onPosted={load} />}
-      {mode === 'movements'      && <MaterialMovements      movements={movements} loading={loading} />}
-      {mode === 'planning'       && <Planning               rows={rows}           onSaved={load} />}
-      {mode === 'admin-reset'    && <AdminReset             onReset={load} />}
+      {mode === 'materials'  && <MaterialMaster   materials={materials}  onChanged={onMaterialChanged} />}
+      {mode === 'stock'      && <StockOverview    rows={rows}            loading={loading} />}
+      {mode === 'receipt'    && <MaterialReceipt  materials={materials}  businessPartners={businessPartners} onPosted={load} />}
+      {mode === 'issue'      && <MaterialIssue    materials={materials}  stockRows={rows}  onPosted={load} />}
+      {mode === 'movements'  && <MaterialMovements movements={movements} loading={loading} />}
+      {mode === 'planning'   && <Planning         rows={rows}            onSaved={load} />}
+      {mode === 'admin-reset' && <AdminReset      onReset={load} />}
     </div>
   )
 }

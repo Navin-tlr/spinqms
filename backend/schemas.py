@@ -511,6 +511,58 @@ class ProductionDashboardOut(BaseModel):
 
 
 # ── Vendor Master ────────────────────────────────────────────────────────────
+# ── Business Partner ──────────────────────────────────────────────────────────
+# Valid roles for the role field
+BP_ROLES = ("MM_VENDOR", "FI_VENDOR", "FI_CUSTOMER", "SD_CUSTOMER")
+
+
+class BPCreate(BaseModel):
+    bp_code:        str           = Field(..., min_length=1, max_length=40)
+    name:           str           = Field(..., min_length=1, max_length=120)
+    status:         str           = "Active"
+    address:        Optional[str] = None
+    phone:          Optional[str] = Field(None, max_length=40)
+    email:          Optional[str] = Field(None, max_length=120)
+    contact_person: Optional[str] = Field(None, max_length=120)
+    gst_number:     Optional[str] = Field(None, max_length=40)
+    pan:            Optional[str] = Field(None, max_length=20)
+    roles:          List[str]     = []   # list of role strings from BP_ROLES
+
+
+class BPUpdate(BaseModel):
+    bp_code:        Optional[str] = Field(None, min_length=1, max_length=40)
+    name:           Optional[str] = Field(None, min_length=1, max_length=120)
+    status:         Optional[str] = None
+    address:        Optional[str] = None
+    phone:          Optional[str] = None
+    email:          Optional[str] = None
+    contact_person: Optional[str] = None
+    gst_number:     Optional[str] = None
+    pan:            Optional[str] = None
+
+
+class BPRoleOut(BaseModel):
+    id:   int
+    role: str
+    model_config = {"from_attributes": True}
+
+
+class BPOut(BaseModel):
+    id:             int
+    bp_code:        str
+    name:           str
+    status:         str
+    address:        Optional[str]
+    phone:          Optional[str]
+    email:          Optional[str]
+    contact_person: Optional[str]
+    gst_number:     Optional[str]
+    pan:            Optional[str]
+    roles:          List[BPRoleOut] = []
+    created_at:     datetime
+    model_config = {"from_attributes": True}
+
+
 class VendorCreate(BaseModel):
     code:           str            = Field(..., min_length=1, max_length=40)
     name:           str            = Field(..., min_length=1, max_length=120)
@@ -575,30 +627,33 @@ class VendorMaterialOut(BaseModel):
 
 # ── Materials / Inventory / MRP / Purchasing ─────────────────────────────────
 class MaterialCreate(BaseModel):
-    code:        str           = Field(..., min_length=1, max_length=40)
-    name:        str           = Field(..., min_length=1, max_length=120)
-    base_unit:   str           = Field(..., min_length=1, max_length=20)
-    category:    Optional[str] = Field(None, max_length=60)
-    description: Optional[str] = None
+    code:          str           = Field(..., min_length=1, max_length=40)
+    name:          str           = Field(..., min_length=1, max_length=120)
+    base_unit:     str           = Field(..., min_length=1, max_length=20)
+    material_type: Optional[str] = Field(None, max_length=40)
+    category:      Optional[str] = Field(None, max_length=60)
+    description:   Optional[str] = None
 
 
 class MaterialUpdate(BaseModel):
     """All fields optional — only provided fields are updated."""
-    code:        Optional[str] = Field(None, min_length=1, max_length=40)
-    name:        Optional[str] = Field(None, min_length=1, max_length=120)
-    base_unit:   Optional[str] = Field(None, min_length=1, max_length=20)
-    category:    Optional[str] = Field(None, max_length=60)
-    description: Optional[str] = None
+    code:          Optional[str] = Field(None, min_length=1, max_length=40)
+    name:          Optional[str] = Field(None, min_length=1, max_length=120)
+    base_unit:     Optional[str] = Field(None, min_length=1, max_length=20)
+    material_type: Optional[str] = Field(None, max_length=40)
+    category:      Optional[str] = Field(None, max_length=60)
+    description:   Optional[str] = None
 
 
 class MaterialOut(BaseModel):
-    id:          int
-    code:        str
-    name:        str
-    base_unit:   str
-    category:    Optional[str]
-    description: Optional[str]
-    is_active:   bool
+    id:            int
+    code:          str
+    name:          str
+    base_unit:     str
+    material_type: Optional[str]
+    category:      Optional[str]
+    description:   Optional[str]
+    is_active:     bool
 
     model_config = {"from_attributes": True}
 
@@ -625,10 +680,10 @@ class MaterialIssueLineCreate(BaseModel):
 
 class MaterialIssueCreate(BaseModel):
     issue_date: date
-    shift: Optional[str] = Field(None, max_length=1)   # deprecated — daily issues only; stored as 'D'
-    reference: Optional[str] = Field("Daily Production", max_length=120)
-    notes: Optional[str] = None
-    lines: List[MaterialIssueLineCreate] = Field(..., min_length=1)
+    purpose:    str           = "Production"   # Production|Maintenance|General
+    reference:  Optional[str] = Field(None, max_length=120)
+    notes:      Optional[str] = None
+    lines:      List[MaterialIssueLineCreate] = Field(..., min_length=1)
 
 
 class MaterialIssueLineOut(BaseModel):
@@ -766,11 +821,12 @@ class DirectGRLineCreate(BaseModel):
 
 
 class DirectGRCreate(BaseModel):
-    vendor_id:    int                             # mandatory — vendor must exist
-    receipt_date: Optional[date]   = None
-    reference:    Optional[str]    = Field(None, max_length=120)   # invoice / DN no.
-    notes:        Optional[str]    = None
-    lines:        List[DirectGRLineCreate] = Field(..., min_length=1)
+    business_partner_id: int               # must have MM_VENDOR role
+    document_date:       Optional[date] = None   # date on supplier invoice
+    receipt_date:        Optional[date] = None   # posting date (defaults to today)
+    reference:           Optional[str]  = Field(None, max_length=120)
+    notes:               Optional[str]  = None
+    lines:               List[DirectGRLineCreate] = Field(..., min_length=1)
 
 
 class GoodsReceiptLineOut(BaseModel):
@@ -781,20 +837,22 @@ class GoodsReceiptLineOut(BaseModel):
     quantity_received: float
     unit:              str
     rate:              Optional[float]
+    amount:            Optional[float]   # rate × quantity_received
 
 
 class GoodsReceiptOut(BaseModel):
-    id:                 int
-    gr_number:          str
-    purchase_order_id:  Optional[int]
-    vendor_id:          Optional[int]
-    vendor_name:        Optional[str]
-    receipt_date:       date
-    reference:          Optional[str]
-    attachment_url:     Optional[str]
-    notes:              Optional[str]
-    created_at:         datetime
-    lines:              List[GoodsReceiptLineOut]
+    id:                    int
+    gr_number:             str
+    purchase_order_id:     Optional[int]
+    business_partner_id:   Optional[int]
+    business_partner_name: Optional[str]
+    document_date:         Optional[date]
+    receipt_date:          date
+    reference:             Optional[str]
+    attachment_url:        Optional[str]
+    notes:                 Optional[str]
+    created_at:            datetime
+    lines:                 List[GoodsReceiptLineOut]
 
 
 # ── Quick receipt (legacy / opening stock — kept for backward compat) ─────────
