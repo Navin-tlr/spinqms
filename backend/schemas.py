@@ -596,7 +596,36 @@ class VendorOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
-# ── Vendor–Material linking ───────────────────────────────────────────────────
+# ── BP–Material linking (replaces VendorMaterial) ────────────────────────────
+class BPMaterialCreate(BaseModel):
+    business_partner_id: int
+    material_id:         int
+    is_preferred:        bool           = False
+    lead_time_days:      Optional[float] = None
+    last_price:          Optional[float] = None
+    last_price_date:     Optional[date]  = None
+    notes:               Optional[str]  = None
+
+
+class BPMaterialOut(BaseModel):
+    id:                  int
+    business_partner_id: int
+    bp_code:             str
+    bp_name:             str
+    material_id:         int
+    material_code:       str
+    material_name:       str
+    is_preferred:        bool
+    lead_time_days:      Optional[float]
+    last_price:          Optional[float]
+    last_price_date:     Optional[date]
+    notes:               Optional[str]
+    created_at:          datetime
+
+    model_config = {"from_attributes": True}
+
+
+# ── Legacy Vendor schemas (kept for backward-compat imports; no active endpoints) ──
 class VendorMaterialCreate(BaseModel):
     vendor_id:      int
     material_id:    int
@@ -767,11 +796,11 @@ class InventoryOverviewItem(BaseModel):
 
 
 class PurchaseOrderCreate(BaseModel):
-    quantity:   Optional[float] = Field(None, gt=0)
-    rate:       float           = Field(..., gt=0)
-    vendor_id:  Optional[int]   = None
-    supplier:   Optional[str]   = Field(None, max_length=120)
-    order_date: Optional[date]  = None
+    quantity:            Optional[float] = Field(None, gt=0)
+    rate:                float           = Field(..., gt=0)
+    business_partner_id: Optional[int]  = None   # must have MM_VENDOR role
+    supplier:            Optional[str]  = Field(None, max_length=120)   # free-text fallback
+    order_date:          Optional[date] = None
 
 
 class PurchaseOrderLineOut(BaseModel):
@@ -787,15 +816,15 @@ class PurchaseOrderLineOut(BaseModel):
 
 
 class PurchaseOrderOut(BaseModel):
-    id:         int
-    po_number:  str
-    vendor_id:  Optional[int]
-    vendor_name: Optional[str]
-    supplier:   Optional[str]
-    status:     str
-    order_date: date
-    created_at: datetime
-    lines:      List[PurchaseOrderLineOut]
+    id:                    int
+    po_number:             str
+    business_partner_id:   Optional[int]
+    business_partner_name: Optional[str]
+    supplier:              Optional[str]
+    status:                str
+    order_date:            date
+    created_at:            datetime
+    lines:                 List[PurchaseOrderLineOut]
 
 
 # ── GR: PO-based (receive against an open PO) ────────────────────────────────

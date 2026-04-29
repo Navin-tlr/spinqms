@@ -44,6 +44,7 @@ from models import (
     LabSimplexInput,
     LabTrial,
     BusinessPartner,
+    BPMaterial,
     BPRole,
     Material,
     MaterialIssueDocument,
@@ -101,6 +102,8 @@ from schemas import (
     MaterialIssueCreate,
     MaterialIssueOut,
     BPCreate,
+    BPMaterialCreate,
+    BPMaterialOut,
     BPOut,
     BPUpdate,
     MaterialCreate,
@@ -115,11 +118,6 @@ from schemas import (
     SampleUpdate,
     SettingsOut,
     SettingsUpdate,
-    VendorCreate,
-    VendorMaterialCreate,
-    VendorMaterialOut,
-    VendorOut,
-    VendorUpdate,
 )
 import logic
 
@@ -220,7 +218,7 @@ def health(db: Session = Depends(get_db)):
         material_count  = db.query(Material).count()
         movement_count  = db.query(InventoryMovement).count()
         stock_count     = db.query(InventoryStock).count()
-        vendor_count    = db.query(Vendor).count()
+        bp_count        = db.query(BusinessPartner).count()
     except Exception as e:
         return {"db_type": db_type, "db": db_display, "error": str(e)}
 
@@ -229,7 +227,7 @@ def health(db: Session = Depends(get_db)):
         "db":                  db_display,
         "storage_configured":  bool(SUPABASE_URL and SUPABASE_SERVICE_KEY),
         "materials":           material_count,
-        "vendors":             vendor_count,
+        "business_partners":   bp_count,
         "inventory_movements": movement_count,
         "inventory_stock_rows": stock_count,
     }
@@ -2875,70 +2873,76 @@ def archive_material(material_id: int, db: Session = Depends(get_db)):
     db.commit()
 
 
-# ── Vendor–Material links ─────────────────────────────────────────────────────
 
-def _vm_payload(vm: VendorMaterial) -> dict:
+# ── BP–Material links ─────────────────────────────────────────────────────────
+
+def _bpm_payload(bpm: BPMaterial) -> dict:
+    bp = bpm.business_partner
     return {
-        "id":             vm.id,
-        "vendor_id":      vm.vendor_id,
-        "vendor_code":    vm.vendor.code,
-        "vendor_name":    vm.vendor.name,
-        "material_id":    vm.material_id,
-        "material_code":  vm.material.code,
-        "material_name":  vm.material.name,
-        "is_preferred":   vm.is_preferred,
-        "lead_time_days": vm.lead_time_days,
-        "last_price":     vm.last_price,
-        "last_price_date": str(vm.last_price_date) if vm.last_price_date else None,
-        "notes":          vm.notes,
-        "created_at":     vm.created_at.isoformat() if vm.created_at else None,
+        "id":                  bpm.id,
+        "business_partner_id": bpm.business_partner_id,
+        "bp_code":             bp.bp_code if bp else None,
+        "bp_name":             bp.name    if bp else None,
+        "material_id":         bpm.material_id,
+        "material_code":       bpm.material.code,
+        "material_name":       bpm.material.name,
+        "is_preferred":        bpm.is_preferred,
+        "lead_time_days":      bpm.lead_time_days,
+        "last_price":          bpm.last_price,
+        "last_price_date":     str(bpm.last_price_date) if bpm.last_price_date else None,
+        "notes":               bpm.notes,
+        "created_at":          bpm.created_at.isoformat() if bpm.created_at else None,
     }
 
 
-@app.get("/api/vendor-materials", response_model=List[VendorMaterialOut])
-def list_vendor_materials(
-    vendor_id:   Optional[int] = None,
-    material_id: Optional[int] = None,
+@app.get("/api/bp-materials", response_model=List[BPMaterialOut])
+def list_bp_materials(
+    business_partner_id: Optional[int] = None,
+    material_id:         Optional[int] = None,
     db: Session = Depends(get_db),
 ):
-    """Return all vendor–material links, optionally filtered by vendor or material."""
-    from sqlalchemy.orm import joinedload
-    q = db.query(VendorMaterial).options(
-        joinedload(VendorMaterial.vendor),
-        joinedload(VendorMaterial.material),
+    """Return all BP–material procurement links, optionally filtered."""
+    q = db.query(BPMaterial).options(
+        joinedload(BPMaterial.business_partner),
+        joinedload(BPMaterial.material),
     )
-    if vendor_id:
-        q = q.filter(VendorMaterial.vendor_id == vendor_id)
+    if business_partner_id:
+        q = q.filter(BPMaterial.business_partner_id == business_partner_id)
     if material_id:
-        q = q.filter(VendorMaterial.material_id == material_id)
-    return [_vm_payload(vm) for vm in q.all()]
+        q = q.filter(BPMaterial.material_id == material_id)
+    return [_bpm_payload(bpm) for bpm in q.all()]
 
 
-@app.post("/api/vendor-materials", status_code=201)
-def create_vendor_material(body: VendorMaterialCreate, db: Session = Depends(get_db)):
-    """Link a vendor to a material. Idempotent — updates if the pair already exists."""
-    from sqlalchemy.orm import joinedload
-    existing = db.query(VendorMaterial).filter_by(
-        vendor_id=body.vendor_id, material_id=body.material_id
+@app.post("/api/bp-materials", response_model=BPMaterialOut, status_code=201)
+def create_bp_material(body: BPMaterialCreate, db: Session = Depends(get_db)):
+    """Link a BP (MM_VENDOR) to a material. Idempotent — updates if the pair already exists."""
+    # Validate BP exists and has MM_VENDOR role
+    bp = db.query(BusinessPartner).filter_by(id=body.business_partner_id).first()
+    if not bp:
+        raise HTTPException(404, "Business partner not found")
+    has_mm_role = db.query(BPRole).filter_by(
+        business_partner_id=bp.id, role="MM_VENDOR").first()
+    if not has_mm_role:
+        raise HTTPException(400,
+            f"'{bp.name}' does not have the MM_VENDOR role")
+    if not db.query(Material).filter_by(id=body.material_id).first():
+        raise HTTPException(404, "Material not found")
+
+    existing = db.query(BPMaterial).filter_by(
+        business_partner_id=body.business_partner_id, material_id=body.material_id
     ).first()
     if existing:
-        # Update fields on the existing link
         for field in ("is_preferred", "lead_time_days", "last_price", "last_price_date", "notes"):
             val = getattr(body, field)
             if val is not None:
                 setattr(existing, field, val)
         db.commit()
-        db.refresh(existing)
-        vm = db.query(VendorMaterial).options(
-            joinedload(VendorMaterial.vendor), joinedload(VendorMaterial.material)
-        ).filter_by(id=existing.id).one()
+        bpm = (db.query(BPMaterial)
+               .options(joinedload(BPMaterial.business_partner), joinedload(BPMaterial.material))
+               .filter_by(id=existing.id).one())
     else:
-        if not db.query(Vendor).filter_by(id=body.vendor_id).first():
-            raise HTTPException(404, "Vendor not found")
-        if not db.query(Material).filter_by(id=body.material_id).first():
-            raise HTTPException(404, "Material not found")
-        vm_row = VendorMaterial(
-            vendor_id=body.vendor_id,
+        bpm_row = BPMaterial(
+            business_partner_id=body.business_partner_id,
             material_id=body.material_id,
             is_preferred=body.is_preferred,
             lead_time_days=body.lead_time_days,
@@ -2946,23 +2950,23 @@ def create_vendor_material(body: VendorMaterialCreate, db: Session = Depends(get
             last_price_date=body.last_price_date,
             notes=body.notes,
         )
-        db.add(vm_row)
+        db.add(bpm_row)
         db.commit()
-        vm = db.query(VendorMaterial).options(
-            joinedload(VendorMaterial.vendor), joinedload(VendorMaterial.material)
-        ).filter_by(id=vm_row.id).one()
-    return _vm_payload(vm)
+        bpm = (db.query(BPMaterial)
+               .options(joinedload(BPMaterial.business_partner), joinedload(BPMaterial.material))
+               .filter_by(id=bpm_row.id).one())
+    return _bpm_payload(bpm)
 
 
-@app.delete("/api/vendor-materials/{vendor_id}/{material_id}", status_code=204)
-def delete_vendor_material(vendor_id: int, material_id: int, db: Session = Depends(get_db)):
-    """Remove a vendor–material link. Does not affect any transaction documents."""
-    vm = db.query(VendorMaterial).filter_by(
-        vendor_id=vendor_id, material_id=material_id
+@app.delete("/api/bp-materials/{business_partner_id}/{material_id}", status_code=204)
+def delete_bp_material(business_partner_id: int, material_id: int, db: Session = Depends(get_db)):
+    """Remove a BP–material link. Does not affect any transaction documents."""
+    bpm = db.query(BPMaterial).filter_by(
+        business_partner_id=business_partner_id, material_id=material_id
     ).first()
-    if not vm:
-        raise HTTPException(404, "Vendor–material link not found")
-    db.delete(vm)
+    if not bpm:
+        raise HTTPException(404, "BP–material link not found")
+    db.delete(bpm)
     db.commit()
 
 
@@ -2987,9 +2991,9 @@ def reset_inventory(db: Session = Depends(get_db)):
     db.query(PurchaseRecommendation).delete(synchronize_session=False)
     db.query(MaterialMarketPrice).delete(synchronize_session=False)
     db.query(MaterialPlanningParam).delete(synchronize_session=False)
-    db.query(VendorMaterial).delete(synchronize_session=False)
+    db.query(BPMaterial).delete(synchronize_session=False)
     db.query(Material).delete(synchronize_session=False)
-    db.query(Vendor).delete(synchronize_session=False)
+    # BusinessPartners are master data — not wiped by inventory reset
     db.commit()
 
 
@@ -3230,15 +3234,16 @@ def _gr_payload(gr: GoodsReceipt) -> dict:
 
 
 def _po_payload(po: PurchaseOrder) -> dict:
+    bp = po.business_partner
     return {
-        "id":          po.id,
-        "po_number":   po.po_number,
-        "vendor_id":   po.vendor_id,
-        "vendor_name": po.vendor.name if po.vendor else None,
-        "supplier":    po.supplier,
-        "status":      po.status,
-        "order_date":  po.order_date,
-        "created_at":  po.created_at,
+        "id":                    po.id,
+        "po_number":             po.po_number,
+        "business_partner_id":   po.business_partner_id,
+        "business_partner_name": bp.name if bp else po.supplier,
+        "supplier":              po.supplier,
+        "status":                po.status,
+        "order_date":            po.order_date,
+        "created_at":            po.created_at,
         "lines": [{
             "id":                line.id,
             "recommendation_id": line.recommendation_id,
@@ -3268,16 +3273,26 @@ def convert_recommendation_to_po(
     if rec.status != "open":
         raise HTTPException(400, "Recommendation is not open")
 
-    vendor = None
-    if body.vendor_id:
-        vendor = db.query(Vendor).filter_by(id=body.vendor_id).first()
-        if not vendor:
-            raise HTTPException(404, f"Vendor {body.vendor_id} not found")
+    bp = None
+    if body.business_partner_id:
+        bp = db.query(BusinessPartner).filter_by(id=body.business_partner_id).first()
+        if not bp:
+            raise HTTPException(404, f"Business partner {body.business_partner_id} not found")
+        if bp.status == "Blocked":
+            raise HTTPException(400, f"Business partner '{bp.name}' is blocked")
+        has_mm_role = db.query(BPRole).filter_by(
+            business_partner_id=bp.id, role="MM_VENDOR").first()
+        if not has_mm_role:
+            raise HTTPException(
+                400,
+                f"'{bp.name}' does not have the MM_VENDOR role. "
+                "Assign it in Master Data → Business Partners first.",
+            )
 
     po = PurchaseOrder(
         po_number=f"PO-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}",
-        vendor_id=body.vendor_id,
-        supplier=vendor.name if vendor else body.supplier,
+        business_partner_id=bp.id if bp else None,
+        supplier=bp.name if bp else body.supplier,
         status="open",
         order_date=body.order_date or date.today(),
         created_at=datetime.now(timezone.utc),
@@ -3298,7 +3313,7 @@ def convert_recommendation_to_po(
     rec.converted_at = datetime.now(timezone.utc)
     db.commit()
     po = (db.query(PurchaseOrder)
-          .options(joinedload(PurchaseOrder.vendor),
+          .options(joinedload(PurchaseOrder.business_partner),
                    joinedload(PurchaseOrder.lines).joinedload(PurchaseOrderLine.material))
           .filter_by(id=po.id).first())
     return _po_payload(po)
@@ -3307,7 +3322,7 @@ def convert_recommendation_to_po(
 @app.get("/api/purchase/orders", response_model=List[PurchaseOrderOut])
 def list_purchase_orders(db: Session = Depends(get_db)):
     rows = (db.query(PurchaseOrder)
-            .options(joinedload(PurchaseOrder.vendor),
+            .options(joinedload(PurchaseOrder.business_partner),
                      joinedload(PurchaseOrder.lines).joinedload(PurchaseOrderLine.material))
             .order_by(PurchaseOrder.created_at.desc()).all())
     return [_po_payload(po) for po in rows]
@@ -3316,17 +3331,30 @@ def list_purchase_orders(db: Session = Depends(get_db)):
 @app.post("/api/purchase/orders/{po_id}/receive", response_model=GoodsReceiptOut, status_code=201)
 def receive_purchase_order(po_id: int, body: GoodsReceiptCreate, db: Session = Depends(get_db)):
     """Receive against an open PO. Updates PO line received quantities and posts GR movements."""
-    po = db.query(PurchaseOrder).options(joinedload(PurchaseOrder.vendor)).filter_by(id=po_id).first()
+    po = (db.query(PurchaseOrder)
+          .options(joinedload(PurchaseOrder.business_partner))
+          .filter_by(id=po_id).first())
     if not po:
         raise HTTPException(404, "Purchase order not found")
     if po.status == "received":
         raise HTTPException(400, "Purchase order is already fully received")
 
+    # Validate that the PO's BP still has the MM_VENDOR role
+    if po.business_partner_id:
+        has_mm_role = db.query(BPRole).filter_by(
+            business_partner_id=po.business_partner_id, role="MM_VENDOR").first()
+        if not has_mm_role:
+            bp_name = po.business_partner.name if po.business_partner else str(po.business_partner_id)
+            raise HTTPException(400,
+                f"'{bp_name}' no longer has the MM_VENDOR role. "
+                "Correct the Business Partner assignment before receiving.")
+
     now = datetime.now(timezone.utc)
+    bp_name = po.business_partner.name if po.business_partner else (po.supplier or "Unknown")
     gr = GoodsReceipt(
         gr_number=f"GR-{now.strftime('%Y%m%d%H%M%S')}",
         purchase_order_id=po.id,
-        vendor_id=po.vendor_id,
+        business_partner_id=po.business_partner_id,
         receipt_date=body.receipt_date or date.today(),
         reference=body.reference,
         notes=body.notes,
@@ -3367,7 +3395,7 @@ def receive_purchase_order(po_id: int, body: GoodsReceiptCreate, db: Session = D
             goods_receipt_line_id=gr_line.id,
             movement_date=gr.receipt_date,
             unit=po_line.unit,
-            notes=f"{gr.gr_number} ← {po.po_number}",
+            notes=f"{gr.gr_number} ← {po.po_number} | {bp_name}",
         )
         _evaluate_mrp(db, po_line.material)
 
@@ -3377,7 +3405,7 @@ def receive_purchase_order(po_id: int, body: GoodsReceiptCreate, db: Session = D
     db.commit()
 
     gr = (db.query(GoodsReceipt)
-          .options(joinedload(GoodsReceipt.vendor),
+          .options(joinedload(GoodsReceipt.business_partner),
                    joinedload(GoodsReceipt.lines).joinedload(GoodsReceiptLine.material))
           .filter_by(id=gr.id).first())
     return _gr_payload(gr)
@@ -3386,7 +3414,7 @@ def receive_purchase_order(po_id: int, body: GoodsReceiptCreate, db: Session = D
 @app.get("/api/goods-receipts", response_model=List[GoodsReceiptOut])
 def list_goods_receipts(db: Session = Depends(get_db)):
     rows = (db.query(GoodsReceipt)
-            .options(joinedload(GoodsReceipt.vendor),
+            .options(joinedload(GoodsReceipt.business_partner),
                      joinedload(GoodsReceipt.lines).joinedload(GoodsReceiptLine.material))
             .order_by(GoodsReceipt.created_at.desc()).limit(200).all())
     return [_gr_payload(gr) for gr in rows]
@@ -3484,21 +3512,21 @@ async def post_direct_gr(
             goods_receipt_line_id=gr_line.id,
             movement_date=receipt_dt,
             unit=unit,
-            notes=f"{gr_number} | {vendor.name} | {body.reference or 'Direct receipt'}",
+            notes=f"{gr_number} | {bp.name} | {body.reference or 'Direct receipt'}",
         )
-        # Auto-update vendor_materials last_price when rate is provided
+        # Auto-update bp_materials last_price when rate is provided
         if item.rate:
-            vm = db.query(VendorMaterial).filter_by(
-                vendor_id=vendor.id, material_id=material.id
+            bpm = db.query(BPMaterial).filter_by(
+                business_partner_id=bp.id, material_id=material.id
             ).first()
-            if vm:
-                vm.last_price      = item.rate
-                vm.last_price_date = receipt_dt
+            if bpm:
+                bpm.last_price      = item.rate
+                bpm.last_price_date = receipt_dt
         _evaluate_mrp(db, material)
 
     db.commit()
     gr = (db.query(GoodsReceipt)
-          .options(joinedload(GoodsReceipt.vendor),
+          .options(joinedload(GoodsReceipt.business_partner),
                    joinedload(GoodsReceipt.lines).joinedload(GoodsReceiptLine.material))
           .filter_by(id=gr.id).first())
     return _gr_payload(gr)

@@ -501,9 +501,12 @@ class BusinessPartner(Base):
                              default=lambda: datetime.now(timezone.utc))
     updated_at      = Column(DateTime,    nullable=True)
 
-    roles         = relationship("BPRole",       back_populates="business_partner",
-                                 cascade="all, delete-orphan")
-    goods_receipts = relationship("GoodsReceipt", back_populates="business_partner")
+    roles           = relationship("BPRole",        back_populates="business_partner",
+                                   cascade="all, delete-orphan")
+    goods_receipts  = relationship("GoodsReceipt",  back_populates="business_partner")
+    purchase_orders = relationship("PurchaseOrder",  back_populates="business_partner")
+    bp_materials    = relationship("BPMaterial",     back_populates="business_partner",
+                                   cascade="all, delete-orphan")
 
 
 class BPRole(Base):
@@ -524,8 +527,41 @@ class BPRole(Base):
     )
 
 
+class BPMaterial(Base):
+    """
+    Business Partner – Material procurement link.
+    Tracks which BP (MM_VENDOR) supplies which material.
+    Auto-updated on GR posting: last_price, last_price_date.
+    Replaces the legacy VendorMaterial table for all active business logic.
+    """
+    __tablename__ = "bp_materials"
+
+    id                  = Column(Integer, primary_key=True)
+    business_partner_id = Column(Integer, ForeignKey("business_partners.id",
+                                  ondelete="CASCADE"), nullable=False, index=True)
+    material_id         = Column(Integer, ForeignKey("materials.id",
+                                  ondelete="CASCADE"), nullable=False, index=True)
+    is_preferred        = Column(Boolean, nullable=False, default=False)
+    lead_time_days      = Column(Float,   nullable=True)
+    last_price          = Column(Float,   nullable=True)
+    last_price_date     = Column(Date,    nullable=True)
+    notes               = Column(Text,    nullable=True)
+    created_at          = Column(DateTime, nullable=False,
+                                 default=lambda: datetime.now(timezone.utc))
+
+    business_partner = relationship("BusinessPartner", back_populates="bp_materials")
+    material         = relationship("Material",         back_populates="bp_materials")
+
+    __table_args__ = (
+        UniqueConstraint("business_partner_id", "material_id", name="uq_bp_material"),
+    )
+
+
 class Vendor(Base):
-    """Vendor master — LEGACY, kept for DB integrity only. Use BusinessPartner."""
+    """
+    LEGACY — Vendor master. No longer used in business logic.
+    Table kept in DB for historical reference only. Use BusinessPartner instead.
+    """
     __tablename__ = "vendors"
 
     id              = Column(Integer, primary_key=True)
@@ -539,18 +575,14 @@ class Vendor(Base):
     status          = Column(String(20),  nullable=False, default="active")
     created_at      = Column(DateTime,    nullable=False, default=lambda: datetime.now(timezone.utc))
     updated_at      = Column(DateTime,    nullable=True)
-
-    purchase_orders  = relationship("PurchaseOrder",  back_populates="vendor")
-    goods_receipts   = relationship("GoodsReceipt",   back_populates="vendor")
-    vendor_materials = relationship("VendorMaterial",  back_populates="vendor",
-                                   cascade="all, delete-orphan")
+    # No active ORM relationships — all business logic now uses BusinessPartner.
 
 
 class VendorMaterial(Base):
     """
-    Many-to-many join between vendors and materials.
-    Tracks which vendor supplies which material, preferred vendor flags,
-    lead time, and the last traded price (auto-updated on GR posting).
+    LEGACY — Vendor–Material join table.
+    No longer used in business logic. Replaced by BPMaterial.
+    Table kept in DB for historical reference only.
     """
     __tablename__ = "vendor_materials"
 
@@ -566,9 +598,7 @@ class VendorMaterial(Base):
     notes           = Column(Text,    nullable=True)
     created_at      = Column(DateTime, nullable=False,
                              default=lambda: datetime.now(timezone.utc))
-
-    vendor   = relationship("Vendor",   back_populates="vendor_materials")
-    material = relationship("Material", back_populates="vendor_materials")
+    # No active ORM relationships — use BPMaterial instead.
 
     __table_args__ = (
         UniqueConstraint("vendor_id", "material_id", name="uq_vendor_material"),
@@ -592,8 +622,8 @@ class Material(Base):
 
     planning_params  = relationship("MaterialPlanningParam", back_populates="material", uselist=False)
     stock            = relationship("InventoryStock",         back_populates="material", uselist=False)
-    vendor_materials = relationship("VendorMaterial",         back_populates="material",
-                                   cascade="all, delete-orphan")
+    bp_materials     = relationship("BPMaterial",             back_populates="material",
+                                    cascade="all, delete-orphan")
 
 
 class ProductionMaterialConsumption(Base):
@@ -734,15 +764,18 @@ class PurchaseRecommendation(Base):
 class PurchaseOrder(Base):
     __tablename__ = "purchase_orders"
 
-    id          = Column(Integer, primary_key=True)
-    po_number   = Column(String(40), nullable=False, unique=True, index=True)
-    vendor_id   = Column(Integer, ForeignKey("vendors.id"), nullable=True, index=True)
-    supplier    = Column(String(120), nullable=True)   # legacy free-text fallback
-    status      = Column(String(30), nullable=False, default="open")
-    order_date  = Column(Date, nullable=False)
-    created_at  = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    id                  = Column(Integer, primary_key=True)
+    po_number           = Column(String(40), nullable=False, unique=True, index=True)
+    business_partner_id = Column(Integer, ForeignKey("business_partners.id"),
+                                 nullable=True, index=True)
+    vendor_id           = Column(Integer, ForeignKey("vendors.id"), nullable=True, index=True)
+    # LEGACY: vendor_id kept as nullable dead column for DB compat; use business_partner_id.
+    supplier            = Column(String(120), nullable=True)   # free-text fallback / display name
+    status              = Column(String(30), nullable=False, default="open")
+    order_date          = Column(Date, nullable=False)
+    created_at          = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
 
-    vendor   = relationship("Vendor", back_populates="purchase_orders")
+    business_partner = relationship("BusinessPartner", back_populates="purchase_orders")
     lines    = relationship("PurchaseOrderLine", back_populates="purchase_order", cascade="all, delete-orphan")
     receipts = relationship("GoodsReceipt", back_populates="purchase_order")
 
@@ -790,10 +823,10 @@ class GoodsReceipt(Base):
                                   default=lambda: datetime.now(timezone.utc))
 
     purchase_order   = relationship("PurchaseOrder",    back_populates="receipts")
-    vendor           = relationship("Vendor",           back_populates="goods_receipts")
     business_partner = relationship("BusinessPartner",  back_populates="goods_receipts")
     lines            = relationship("GoodsReceiptLine", back_populates="goods_receipt",
                                    cascade="all, delete-orphan")
+    # vendor_id column kept as nullable dead column for DB compat; no ORM relationship.
 
 
 class GoodsReceiptLine(Base):

@@ -140,10 +140,10 @@ export const postDirectGR = (params, file = null) => {
   }).then(r => r.data)
 }
 
-// ── Vendor–Material links (kept for backend compat; UI moved to MasterData) ───
-export const getVendorMaterials     = (params = {})  => http.get('/vendor-materials', { params: clean(params) }).then(r => r.data)
-export const createVendorMaterial   = (body)         => http.post('/vendor-materials', body).then(r => r.data)
-export const deleteVendorMaterial   = (vendorId, materialId) => http.delete(`/vendor-materials/${vendorId}/${materialId}`)
+// ── BP–Material links ─────────────────────────────────────────────────────────
+export const getBPMaterials    = (params = {})             => http.get('/bp-materials', { params: clean(params) }).then(r => r.data)
+export const createBPMaterial  = (body)                    => http.post('/bp-materials', body).then(r => r.data)
+export const deleteBPMaterial  = (bpId, materialId)        => http.delete(`/bp-materials/${bpId}/${materialId}`)
 
 // ── Purchase / MRP ────────────────────────────────────────────────────────────
 export const getPurchaseRecommendations = (status = 'open') => http.get('/purchase/recommendations', { params: clean({ status }) }).then(r => r.data)
