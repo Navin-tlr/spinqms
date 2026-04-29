@@ -30,6 +30,9 @@ from sqlalchemy.orm import Session, joinedload
 
 from database import get_db
 from models import (
+    BusinessPartner,
+    BPMaterial,
+    BPRole,
     Department,
     GoodsReceipt,
     GoodsReceiptLine,
@@ -43,23 +46,21 @@ from models import (
     LabSimplexBobbin,
     LabSimplexInput,
     LabTrial,
-    BusinessPartner,
-    BPMaterial,
-    BPRole,
     Material,
     MaterialIssueDocument,
     MaterialIssueLine,
     MaterialMarketPrice,
     MaterialPlanningParam,
     ProductionEntry,
+    ProductionMaterialConsumption,
+    ProductionStdRate,
     PurchaseOrder,
     PurchaseOrderLine,
     PurchaseRecommendation,
-    ProductionStdRate,
     Sample,
     SettingsVersion,
-    Vendor,
-    VendorMaterial,
+    # Vendor / VendorMaterial ORM classes kept in models.py for DB compat only
+    # — not imported here; no active endpoint references them
 )
 from schemas import (
     Alert,
@@ -2689,10 +2690,16 @@ def _bp_payload(bp: "BusinessPartner") -> dict:
 
 @app.get("/api/business-partners", response_model=List[BPOut])
 def list_business_partners(role: Optional[str] = None, db: Session = Depends(get_db)):
-    """List all BPs; filter by ?role=MM_VENDOR to get only procurement suppliers."""
-    q = db.query(BusinessPartner).filter_by(status="Active").order_by(BusinessPartner.name)
+    """
+    List Business Partners.
+    - No params → all BPs (Active + Blocked) for the Master Data table.
+    - ?role=MM_VENDOR → only Active BPs with that role (used by GR/PO dropdowns).
+    """
+    q = db.query(BusinessPartner).order_by(BusinessPartner.name)
     if role:
-        q = q.join(BPRole).filter(BPRole.role == role)
+        # Dropdown context: only Active BPs that have the requested role
+        q = (q.filter(BusinessPartner.status == "Active")
+               .join(BPRole).filter(BPRole.role == role))
     bps = q.all()
     return [_bp_payload(bp) for bp in bps]
 
@@ -2796,27 +2803,6 @@ def delete_business_partner(bp_id: int, db: Session = Depends(get_db)):
 
 
 # ── Admin: inventory data reset ───────────────────────────────────────────────
-@app.post("/api/admin/reset-inventory", status_code=204)
-def reset_inventory(db: Session = Depends(get_db)):
-    """
-    DESTRUCTIVE — wipes all inventory transaction data (movements, stock, GRs,
-    GIs, purchase documents, recommendations).  Master data (BPs, Materials) is
-    preserved.  For use in beta / staging only.
-    """
-    from sqlalchemy import text
-    db.execute(text("DELETE FROM inventory_movements"))
-    db.execute(text("DELETE FROM inventory_stock"))
-    db.execute(text("DELETE FROM material_issue_lines"))
-    db.execute(text("DELETE FROM material_issue_documents"))
-    db.execute(text("DELETE FROM goods_receipt_lines"))
-    db.execute(text("DELETE FROM goods_receipts"))
-    db.execute(text("DELETE FROM purchase_order_lines"))
-    db.execute(text("DELETE FROM purchase_orders"))
-    db.execute(text("DELETE FROM purchase_recommendations"))
-    db.execute(text("DELETE FROM production_material_consumptions"))
-    db.commit()
-
-
 # ── Material Master CRUD ──────────────────────────────────────────────────────
 @app.get("/api/materials", response_model=List[MaterialOut])
 def list_materials(db: Session = Depends(get_db)):
@@ -2833,8 +2819,9 @@ def create_material(body: MaterialCreate, db: Session = Depends(get_db)):
         code=body.code.strip().upper(),
         name=body.name.strip(),
         base_unit=body.base_unit.strip(),
-        category=body.category,
-        description=body.description,
+        material_type=body.material_type or None,
+        category=body.category or None,
+        description=body.description or None,
         is_active=True,
         created_at=now,
         updated_at=now,
@@ -2863,6 +2850,8 @@ def update_material(material_id: int, body: MaterialUpdate, db: Session = Depend
         material.name = body.name.strip()
     if body.base_unit is not None:
         material.base_unit = body.base_unit.strip()
+    if body.material_type is not None:
+        material.material_type = body.material_type or None
     if body.category is not None:
         material.category = body.category or None
     if body.description is not None:
@@ -3023,25 +3012,55 @@ def delete_bp_material(business_partner_id: int, material_id: int, db: Session =
 @app.post("/api/admin/reset-inventory", status_code=204)
 def reset_inventory(db: Session = Depends(get_db)):
     """
-    DESTRUCTIVE — wipes all inventory master data and transaction history.
-    Quality samples, production entries, and department settings are untouched.
-    Intended for beta / test-data cleanup only.
+    DESTRUCTIVE — wipes all inventory + material master data and transaction
+    history.  Quality samples, production entries, department settings, and
+    Business Partners are untouched.  Intended for beta / test-data cleanup only.
+
+    FK-safe deletion order (children must be deleted before parents):
+
+      inventory_stock.last_movement_id → inventory_movements  (null first)
+      inventory_movements → goods_receipt_lines, material_issue_lines
+      inventory_stock → (safe after movements cleared)
+      material_issue_lines → material_issue_documents
+      goods_receipt_lines → goods_receipts, purchase_order_lines
+      purchase_order_lines → purchase_orders, purchase_recommendations
     """
-    # Delete in FK-safe order (children before parents)
+    from sqlalchemy import text as _text
+
+    # ── Step 1: break the self-referential FK that blocks bulk delete ──────────
+    # inventory_stock.last_movement_id references inventory_movements.id (NO ACTION).
+    # NULL it out first so we can delete inventory_movements freely.
+    db.execute(_text("UPDATE inventory_stock SET last_movement_id = NULL"))
+    db.flush()
+
+    # ── Step 2: transaction tables — children before parents ──────────────────
+    # inventory_movements must go before goods_receipt_lines and material_issue_lines
     db.query(InventoryMovement).delete(synchronize_session=False)
     db.query(InventoryStock).delete(synchronize_session=False)
+
+    # material_issue_lines before material_issue_documents
     db.query(MaterialIssueLine).delete(synchronize_session=False)
     db.query(MaterialIssueDocument).delete(synchronize_session=False)
+
+    # goods_receipt_lines before goods_receipts and before purchase_order_lines
     db.query(GoodsReceiptLine).delete(synchronize_session=False)
     db.query(GoodsReceipt).delete(synchronize_session=False)
+
+    # purchase_order_lines before purchase_orders and purchase_recommendations
     db.query(PurchaseOrderLine).delete(synchronize_session=False)
     db.query(PurchaseOrder).delete(synchronize_session=False)
     db.query(PurchaseRecommendation).delete(synchronize_session=False)
+
+    # legacy consumption table
+    db.query(ProductionMaterialConsumption).delete(synchronize_session=False)
+
+    # ── Step 3: material master data (prices, planning, BP links, materials) ──
     db.query(MaterialMarketPrice).delete(synchronize_session=False)
-    db.query(MaterialPlanningParam).delete(synchronize_session=False)
     db.query(BPMaterial).delete(synchronize_session=False)
+    db.query(MaterialPlanningParam).delete(synchronize_session=False)
     db.query(Material).delete(synchronize_session=False)
-    # BusinessPartners are master data — not wiped by inventory reset
+
+    # BusinessPartners are permanent master data — never wiped here
     db.commit()
 
 
