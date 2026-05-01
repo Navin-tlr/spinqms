@@ -3077,7 +3077,7 @@ def reset_inventory(db: Session = Depends(get_db)):
 def inventory_overview(db: Session = Depends(get_db)):
     materials = (
         db.query(Material)
-        .options(joinedload(Material.stock), joinedload(Material.planning_params))
+        .options(joinedload(Material.stock_lots), joinedload(Material.planning_params))
         .filter_by(is_active=True)
         .order_by(Material.name)
         .all()
@@ -3603,7 +3603,8 @@ async def post_direct_gr(
             lines=[{"material_id": l["material_id"],
                     "quantity_received": l["quantity_received"],
                     "unit": l.get("unit"),
-                    "rate": l.get("rate")} for l in lines_raw],
+                    "rate": l.get("rate"),
+                    "lot_id": l.get("lot_id")} for l in lines_raw],
         )
     except Exception as e:
         raise HTTPException(422, f"Invalid lines_json: {e}")
