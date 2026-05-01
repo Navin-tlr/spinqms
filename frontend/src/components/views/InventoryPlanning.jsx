@@ -142,13 +142,13 @@ function StockOverview({ stockLots, loading }) {
 ══════════════════════════════════════════════════════════════════════════════ */
 function MaterialReceipt({ materials, businessPartners, onPosted }) {
   const today = new Date().toISOString().slice(0, 10)
-  const blankLine = { material_id: '', quantity: '', rate: '', lot_id: '' }
+  const blankLine = () => ({ _id: Math.random(), material_id: '', quantity: '', rate: '', lot_id: '' })
   const [bpId,         setBpId]         = useState('')
   const [documentDate, setDocumentDate] = useState(today)
   const [receiptDate,  setReceiptDate]  = useState(today)
   const [reference,    setReference]    = useState('')
   const [notes,        setNotes]        = useState('')
-  const [lines,        setLines]        = useState([{ ...blankLine }])
+  const [lines,        setLines]        = useState([blankLine()])
   const [file,         setFile]         = useState(null)
   const [posting,      setPosting]      = useState(false)
   const [message,      setMessage]      = useState('')
@@ -156,7 +156,7 @@ function MaterialReceipt({ materials, businessPartners, onPosted }) {
   const fileRef = useRef()
 
   const matMap = Object.fromEntries(materials.map(m => [String(m.id), m]))
-  const addRow    = () => setLines(p => [...p, { ...blankLine }])
+  const addRow    = () => setLines(p => [...p, blankLine()])
   const removeRow = i  => setLines(p => p.length === 1 ? p : p.filter((_, j) => j !== i))
   const updateRow = (i, patch) => setLines(p => p.map((r, j) => j === i ? { ...r, ...patch } : r))
 
@@ -179,7 +179,7 @@ function MaterialReceipt({ materials, businessPartners, onPosted }) {
         })),
       }, file)
       setMessage(`Posted ${doc.gr_number} — ${doc.lines.length} line(s) ✓`)
-      setLines([{ ...blankLine }])
+      setLines([blankLine()])
       setReference(''); setNotes(''); setFile(null)
       if (fileRef.current) fileRef.current.value = ''
       onPosted && onPosted()
@@ -249,7 +249,7 @@ function MaterialReceipt({ materials, businessPartners, onPosted }) {
                 ? Number(line.quantity) * Number(line.rate)
                 : null
               return (
-                <tr key={idx}>
+                <tr key={line._id}>
                   <td style={{ ...cell, width: 50, fontFamily: 'var(--mono)', color: '#89919a' }}>{idx + 1}</td>
                   <td style={{ padding: '5px 12px', borderBottom: '1px solid #eee', minWidth: 200 }}>
                     <select value={line.material_id} onChange={e => updateRow(idx, { material_id: e.target.value, lot_id: '' })} style={{ ...inp, width: '100%' }}>
@@ -262,6 +262,7 @@ function MaterialReceipt({ materials, businessPartners, onPosted }) {
                   </td>
                   <td style={{ padding: '5px 12px', borderBottom: '1px solid #eee', minWidth: 120 }}>
                     <input
+                      type="text"
                       value={line.lot_id}
                       onChange={e => updateRow(idx, { lot_id: e.target.value })}
                       placeholder="e.g. Lot-A"
@@ -413,28 +414,27 @@ function MaterialIssue({ materials, stockLots, onPosted }) {
                   <td style={{ ...cell, width: 50, fontFamily: 'var(--mono)', color: '#89919a' }}>{idx + 1}</td>
                   <td style={{ padding: '5px 12px', borderBottom: '1px solid #eee', minWidth: 200 }}>
                     <select value={line.material_id}
-                      onChange={e => updateRow(idx, { material_id: e.target.value, lot_id: '', quantity: '' })}
+                      onChange={e => {
+                        const matId = e.target.value
+                        const avail = stockLots.filter(r => r.material_id === Number(matId) && r.closing_stock > 0)
+                        // Auto-select the lot when exactly one is available
+                        const autoLot = avail.length === 1 ? (avail[0].lot_id || '') : ''
+                        updateRow(idx, { material_id: matId, lot_id: autoLot, quantity: '' })
+                      }}
                       style={{ ...inp, width: '100%' }}>
                       <option value="">Select material</option>
                       {materials.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
                     </select>
                   </td>
                   <td style={{ padding: '5px 12px', borderBottom: '1px solid #eee', minWidth: 130 }}>
-                    {availLots.length > 1 ? (
-                      <select value={line.lot_id}
-                        onChange={e => updateRow(idx, { lot_id: e.target.value, quantity: '' })}
-                        style={{ ...inp, width: '100%', fontFamily: 'var(--mono)', fontSize: 11 }}>
-                        <option value="">No Lot</option>
-                        {availLots.filter(l => l.lot_id).map(l => (
-                          <option key={l.lot_id} value={l.lot_id}>{l.lot_id} ({l.closing_stock} {l.unit})</option>
-                        ))}
-                      </select>
-                    ) : (
-                      <span style={{ fontSize: 11, color: availLots[0]?.lot_id ? '#32363a' : '#c0c0c0',
-                                     fontFamily: 'var(--mono)', padding: '0 4px' }}>
-                        {availLots[0]?.lot_id || 'No Lot'}
-                      </span>
-                    )}
+                    <select value={line.lot_id}
+                      onChange={e => updateRow(idx, { lot_id: e.target.value, quantity: '' })}
+                      style={{ ...inp, width: '100%', fontFamily: 'var(--mono)', fontSize: 11 }}>
+                      <option value="">No Lot</option>
+                      {availLots.filter(l => l.lot_id).map(l => (
+                        <option key={l.lot_id} value={l.lot_id}>{l.lot_id} ({l.closing_stock} {l.unit})</option>
+                      ))}
+                    </select>
                   </td>
                   <td style={{ ...cell, fontFamily: 'var(--mono)', fontWeight: 700, width: 140,
                                color: onHand === 0 ? ERR : onHand > 0 ? OK : '#89919a' }}>

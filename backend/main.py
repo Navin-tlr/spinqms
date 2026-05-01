@@ -2263,7 +2263,7 @@ def _post_inventory_movement(
         goods_receipt_line_id=goods_receipt_line_id,
         quantity_delta=round(quantity_delta, 6),
         unit=unit or material.base_unit,
-        lot_id=lot_id or None,
+        lot_id=lot_id or '',
         movement_date=movement_date,
         notes=notes,
         created_at=datetime.now(timezone.utc),
@@ -3186,7 +3186,7 @@ def get_stock_lots(db: Session = Depends(get_db)):
             return float(
                 db.query(func.sum(InventoryMovement.quantity_delta))
                 .filter(InventoryMovement.material_id == mat.id,
-                        InventoryMovement.lot_id == (lot or None),
+                        InventoryMovement.lot_id == (lot or ''),
                         *filters)
                 .scalar() or 0.0
             )
@@ -3250,7 +3250,7 @@ def post_material_issue(body: MaterialIssueCreate, db: Session = Depends(get_db)
             quantity=item.quantity,
             unit=material.base_unit,
             movement_type="GI",
-            lot_id=lot_id or None,
+            lot_id=lot_id or '',
         )
         db.add(line)
         db.flush()
@@ -3520,7 +3520,7 @@ def receive_purchase_order(po_id: int, body: GoodsReceiptCreate, db: Session = D
             quantity_received=item.quantity_received,
             unit=po_line.unit,
             rate=item.rate or po_line.rate,
-            lot_id=po_lot_id or None,
+            lot_id=po_lot_id or '',
         )
         db.add(gr_line)
         db.flush()
@@ -3642,7 +3642,7 @@ async def post_direct_gr(
             quantity_received=item.quantity_received,
             unit=unit,
             rate=item.rate,
-            lot_id=lot_id or None,
+            lot_id=lot_id or '',
         )
         db.add(gr_line)
         db.flush()
