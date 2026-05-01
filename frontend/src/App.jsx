@@ -172,7 +172,7 @@ export default function App() {
             <ProductionEntry onSaved={() => setProductionView('production-log')} />
           )}
           {productionView === 'production-log' && <ProductionLog />}
-          {['inventory-materials','inventory-stock','inventory-issue','inventory-receipt','inventory-movements','inventory-planning','inventory-admin-reset'].includes(productionView) && (
+          {['inventory-stock','inventory-issue','inventory-receipt','inventory-movements','inventory-planning','inventory-admin-reset'].includes(productionView) && (
             <InventoryPlanning mode={productionView.replace('inventory-', '')} />
           )}
           {productionView === 'purchase-requisitions' && <PurchaseFlow mode="requisitions" />}

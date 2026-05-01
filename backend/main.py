@@ -117,6 +117,7 @@ from schemas import (
     SampleCreate,
     SampleOut,
     SampleUpdate,
+    StockLotItem,
     SettingsOut,
     SettingsUpdate,
 )
@@ -2245,6 +2246,7 @@ def _post_inventory_movement(
     source_id: Optional[int] = None,
     movement_date: date,
     unit: Optional[str] = None,
+    lot_id: str = '',
     production_consumption_id: Optional[int] = None,
     material_issue_line_id: Optional[int] = None,
     goods_receipt_line_id: Optional[int] = None,
@@ -2261,6 +2263,7 @@ def _post_inventory_movement(
         goods_receipt_line_id=goods_receipt_line_id,
         quantity_delta=round(quantity_delta, 6),
         unit=unit or material.base_unit,
+        lot_id=lot_id or None,
         movement_date=movement_date,
         notes=notes,
         created_at=datetime.now(timezone.utc),
@@ -2268,9 +2271,10 @@ def _post_inventory_movement(
     db.add(movement)
     db.flush()
 
-    stock = db.query(InventoryStock).filter_by(material_id=material.id).first()
+    stock = db.query(InventoryStock).filter_by(material_id=material.id, lot_id=lot_id).first()
     if not stock:
-        stock = InventoryStock(material_id=material.id, quantity_on_hand=0.0, unit=unit or material.base_unit)
+        stock = InventoryStock(material_id=material.id, lot_id=lot_id,
+                               quantity_on_hand=0.0, unit=unit or material.base_unit)
         db.add(stock)
     stock.quantity_on_hand = round((stock.quantity_on_hand or 0.0) + quantity_delta, 6)
     stock.unit = unit or material.base_unit
@@ -2349,8 +2353,9 @@ def _open_recommendation(db: Session, material_id: int) -> Optional[PurchaseReco
 
 def _evaluate_mrp(db: Session, material: Material) -> Optional[PurchaseRecommendation]:
     params = material.planning_params
-    stock_row = db.query(InventoryStock).filter_by(material_id=material.id).first()
-    stock = stock_row.quantity_on_hand if stock_row else 0.0
+    stock = (db.query(func.sum(InventoryStock.quantity_on_hand))
+             .filter(InventoryStock.material_id == material.id)
+             .scalar() or 0.0)
     avg = _avg_consumption(db, material.id, 7)
     lead_time = params.lead_time_days if params else 5.0
     safety = params.safety_stock_qty if params else 0.0
@@ -2431,6 +2436,7 @@ def _material_issue_payload(doc: MaterialIssueDocument) -> dict:
             "material_id": line.material_id,
             "material_code": line.material.code,
             "material_name": line.material.name,
+            "lot_id": line.lot_id,
             "quantity": line.quantity,
             "unit": line.unit,
             "movement_type": line.movement_type,
@@ -2821,7 +2827,7 @@ def create_material(body: MaterialCreate, db: Session = Depends(get_db)):
         base_unit=body.base_unit.strip(),
         material_type=body.material_type or None,
         category=body.category or None,
-        description=body.description or None,
+        description=(body.notes or body.description) or None,
         is_active=True,
         created_at=now,
         updated_at=now,
@@ -2854,8 +2860,9 @@ def update_material(material_id: int, body: MaterialUpdate, db: Session = Depend
         material.material_type = body.material_type or None
     if body.category is not None:
         material.category = body.category or None
-    if body.description is not None:
-        material.description = body.description or None
+    notes_val = body.notes if body.notes is not None else body.description
+    if notes_val is not None:
+        material.description = notes_val or None
     material.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(material)
@@ -2898,11 +2905,13 @@ def archive_material(material_id: int, db: Session = Depends(get_db)):
     Blocked if physical stock on hand > 0 (would create invisible inventory).
     """
     material = _material_or_404(db, material_id)
-    stock = db.query(InventoryStock).filter_by(material_id=material.id).first()
-    if stock and stock.quantity_on_hand > 0:
+    total_stock = (db.query(func.sum(InventoryStock.quantity_on_hand))
+                   .filter(InventoryStock.material_id == material.id)
+                   .scalar() or 0.0)
+    if total_stock > 1e-9:
         raise HTTPException(
             400,
-            f"Cannot archive '{material.name}' — {stock.quantity_on_hand:g} {material.base_unit} "
+            f"Cannot archive '{material.name}' — {total_stock:g} {material.base_unit} "
             "still on hand. Issue or adjust stock to zero first.",
         )
     material.is_active = False
@@ -3082,7 +3091,9 @@ def inventory_overview(db: Session = Depends(get_db)):
         except Exception:
             rec = None
         try:
-            stock = material.stock.quantity_on_hand if material.stock else 0.0
+            stock = (db.query(func.sum(InventoryStock.quantity_on_hand))
+                     .filter(InventoryStock.material_id == material.id)
+                     .scalar() or 0.0)
             params = material.planning_params
             avg = _avg_consumption(db, material.id, 7)
             daily = _daily_consumption(db, material.id, 1).get(date.today(), 0.0)
@@ -3144,10 +3155,62 @@ def list_inventory_movements(
         "source_id": r.source_id,
         "quantity_delta": r.quantity_delta,
         "unit": r.unit,
+        "lot_id": r.lot_id,
         "movement_date": r.movement_date,
         "notes": r.notes,
         "created_at": r.created_at,
     } for r in rows]
+
+
+@app.get("/api/inventory/stock-lots", response_model=List[StockLotItem])
+def get_stock_lots(db: Session = Depends(get_db)):
+    """Per-lot stock with month-to-date opening / receipts / issues / closing."""
+    today = date.today()
+    month_start = today.replace(day=1)
+
+    rows = (
+        db.query(InventoryStock)
+        .options(joinedload(InventoryStock.material))
+        .order_by(InventoryStock.material_id, InventoryStock.lot_id)
+        .all()
+    )
+
+    result = []
+    for row in rows:
+        mat = row.material
+        if not mat or not mat.is_active:
+            continue
+        lot = row.lot_id
+
+        def _sum(filters):
+            return float(
+                db.query(func.sum(InventoryMovement.quantity_delta))
+                .filter(InventoryMovement.material_id == mat.id,
+                        InventoryMovement.lot_id == (lot or None),
+                        *filters)
+                .scalar() or 0.0
+            )
+
+        opening  = _sum([InventoryMovement.movement_date < month_start])
+        receipts = _sum([InventoryMovement.movement_date >= month_start,
+                         InventoryMovement.quantity_delta > 0])
+        issues   = abs(_sum([InventoryMovement.movement_date >= month_start,
+                             InventoryMovement.quantity_delta < 0]))
+
+        result.append(StockLotItem(
+            material_id=mat.id,
+            material_code=mat.code,
+            material_name=mat.name,
+            material_category=mat.category,
+            lot_id=lot,
+            unit=row.unit,
+            opening_stock=round(opening, 3),
+            receipts_mtd=round(receipts, 3),
+            issues_mtd=round(issues, 3),
+            closing_stock=round(row.quantity_on_hand, 3),
+        ))
+
+    return result
 
 
 @app.post("/api/inventory/material-issues", response_model=MaterialIssueOut, status_code=201)
@@ -3172,10 +3235,14 @@ def post_material_issue(body: MaterialIssueCreate, db: Session = Depends(get_db)
 
     for item in body.lines:
         material = _material_or_404(db, item.material_id)
-        stock = db.query(InventoryStock).filter_by(material_id=material.id).first()
+        lot_id = item.lot_id or ''
+        stock = db.query(InventoryStock).filter_by(material_id=material.id, lot_id=lot_id).first()
         on_hand = stock.quantity_on_hand if stock else 0.0
         if item.quantity > on_hand + 1e-9:
-            raise HTTPException(400, f"Insufficient stock for {material.name}: {on_hand:g} {material.base_unit} available")
+            lot_label = f" [Lot: {lot_id}]" if lot_id else ""
+            raise HTTPException(400,
+                f"Insufficient stock for {material.name}{lot_label}: "
+                f"{on_hand:g} {material.base_unit} available")
 
         line = MaterialIssueLine(
             document_id=doc.id,
@@ -3183,6 +3250,7 @@ def post_material_issue(body: MaterialIssueCreate, db: Session = Depends(get_db)
             quantity=item.quantity,
             unit=material.base_unit,
             movement_type="GI",
+            lot_id=lot_id or None,
         )
         db.add(line)
         db.flush()
@@ -3196,6 +3264,7 @@ def post_material_issue(body: MaterialIssueCreate, db: Session = Depends(get_db)
             material_issue_line_id=line.id,
             movement_date=body.issue_date,
             unit=material.base_unit,
+            lot_id=lot_id,
             notes=f"Goods issue {doc.document_number} ({doc.reference})",
         )
         _evaluate_mrp(db, material)
@@ -3291,6 +3360,8 @@ def _gr_payload(gr: GoodsReceipt) -> dict:
             "material_id":       line.material_id,
             "material_code":     line.material.code,
             "material_name":     line.material.name,
+            "material_category": line.material.category,
+            "lot_id":            line.lot_id,
             "quantity_received": line.quantity_received,
             "unit":              line.unit,
             "rate":              line.rate,
@@ -3441,6 +3512,7 @@ def receive_purchase_order(po_id: int, body: GoodsReceiptCreate, db: Session = D
             raise HTTPException(400,
                 f"{po_line.material.name}: trying to receive {item.quantity_received:g} but only "
                 f"{remaining:g} {po_line.unit} remaining")
+        po_lot_id = item.lot_id or ''
         gr_line = GoodsReceiptLine(
             goods_receipt_id=gr.id,
             purchase_order_line_id=po_line.id,
@@ -3448,6 +3520,7 @@ def receive_purchase_order(po_id: int, body: GoodsReceiptCreate, db: Session = D
             quantity_received=item.quantity_received,
             unit=po_line.unit,
             rate=item.rate or po_line.rate,
+            lot_id=po_lot_id or None,
         )
         db.add(gr_line)
         db.flush()
@@ -3462,6 +3535,7 @@ def receive_purchase_order(po_id: int, body: GoodsReceiptCreate, db: Session = D
             goods_receipt_line_id=gr_line.id,
             movement_date=gr.receipt_date,
             unit=po_line.unit,
+            lot_id=po_lot_id,
             notes=f"{gr.gr_number} ← {po.po_number} | {bp_name}",
         )
         _evaluate_mrp(db, po_line.material)
@@ -3559,6 +3633,7 @@ async def post_direct_gr(
     for item in body.lines:
         material = _material_or_404(db, item.material_id)
         unit = item.unit or material.base_unit
+        lot_id = item.lot_id or ''
         gr_line = GoodsReceiptLine(
             goods_receipt_id=gr.id,
             purchase_order_line_id=None,
@@ -3566,6 +3641,7 @@ async def post_direct_gr(
             quantity_received=item.quantity_received,
             unit=unit,
             rate=item.rate,
+            lot_id=lot_id or None,
         )
         db.add(gr_line)
         db.flush()
@@ -3579,6 +3655,7 @@ async def post_direct_gr(
             goods_receipt_line_id=gr_line.id,
             movement_date=receipt_dt,
             unit=unit,
+            lot_id=lot_id,
             notes=f"{gr_number} | {bp.name} | {body.reference or 'Direct receipt'}",
         )
         # Auto-update bp_materials last_price when rate is provided

@@ -113,6 +113,7 @@ export const deleteMaterial         = (id)            => http.delete(`/materials
 export const archiveMaterial        = (id)            => http.post(`/materials/${id}/archive`)
 export const deactivateMaterial     = (id)            => http.delete(`/materials/${id}`) // kept for compat
 export const getInventoryOverview   = ()              => http.get('/inventory/overview').then(r => r.data)
+export const getStockLots           = ()              => http.get('/inventory/stock-lots').then(r => r.data)
 export const getInventoryMovements  = (params = {})   => http.get('/inventory/movements', { params: clean(params) }).then(r => r.data)
 export const createMaterialIssue    = (body)          => http.post('/inventory/material-issues', body).then(r => r.data)
 export const getMaterialIssues      = (params = {})   => http.get('/inventory/material-issues', { params: clean(params) }).then(r => r.data)

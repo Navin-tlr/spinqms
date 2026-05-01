@@ -693,6 +693,7 @@ class MaterialCreate(BaseModel):
     material_type: Optional[str] = Field(None, max_length=40)
     category:      Optional[str] = Field(None, max_length=60)
     description:   Optional[str] = None
+    notes:         Optional[str] = None   # alias — stored in description column
 
 
 class MaterialUpdate(BaseModel):
@@ -703,6 +704,7 @@ class MaterialUpdate(BaseModel):
     material_type: Optional[str] = Field(None, max_length=40)
     category:      Optional[str] = Field(None, max_length=60)
     description:   Optional[str] = None
+    notes:         Optional[str] = None   # alias — stored in description column
 
 
 class MaterialOut(BaseModel):
@@ -713,9 +715,16 @@ class MaterialOut(BaseModel):
     material_type: Optional[str]
     category:      Optional[str]
     description:   Optional[str]
+    notes:         Optional[str] = None  # client alias for description
     is_active:     bool
 
     model_config = {"from_attributes": True}
+
+    @classmethod
+    def model_validate(cls, obj, **kw):
+        inst = super().model_validate(obj, **kw)
+        inst.notes = inst.description
+        return inst
 
 
 class InventoryMovementOut(BaseModel):
@@ -728,6 +737,7 @@ class InventoryMovementOut(BaseModel):
     source_id: Optional[int]
     quantity_delta: float
     unit: str
+    lot_id: Optional[str]
     movement_date: date
     notes: Optional[str]
     created_at: datetime
@@ -736,6 +746,7 @@ class InventoryMovementOut(BaseModel):
 class MaterialIssueLineCreate(BaseModel):
     material_id: int
     quantity: float = Field(..., gt=0)
+    lot_id: Optional[str] = None
 
 
 class MaterialIssueCreate(BaseModel):
@@ -753,6 +764,7 @@ class MaterialIssueLineOut(BaseModel):
     material_name: str
     quantity: float
     unit: str
+    lot_id: Optional[str]
     movement_type: str
 
 
@@ -863,6 +875,7 @@ class GoodsReceiptLineCreate(BaseModel):
     po_line_id:        int
     quantity_received: float        = Field(..., gt=0)
     rate:              Optional[float] = Field(None, gt=0)
+    lot_id:            Optional[str] = None
 
 
 class GoodsReceiptCreate(BaseModel):
@@ -878,6 +891,7 @@ class DirectGRLineCreate(BaseModel):
     quantity_received: float        = Field(..., gt=0)
     unit:              Optional[str] = None  # falls back to material.base_unit
     rate:              Optional[float] = Field(None, ge=0)
+    lot_id:            Optional[str] = None
 
 
 class DirectGRCreate(BaseModel):
@@ -894,6 +908,8 @@ class GoodsReceiptLineOut(BaseModel):
     material_id:       int
     material_code:     str
     material_name:     str
+    material_category: Optional[str]
+    lot_id:            Optional[str]
     quantity_received: float
     unit:              str
     rate:              Optional[float]
@@ -931,6 +947,20 @@ class QuickReceiptOut(BaseModel):
     receipt_date: date
     lines_posted: int
     created_at:   datetime
+
+
+# ── Lot-level stock overview ──────────────────────────────────────────────────
+class StockLotItem(BaseModel):
+    material_id:       int
+    material_code:     str
+    material_name:     str
+    material_category: Optional[str]
+    lot_id:            str          # '' means no lot assigned
+    unit:              str
+    opening_stock:     float        # stock at start of current month
+    receipts_mtd:      float        # receipts month-to-date
+    issues_mtd:        float        # issues month-to-date (positive number)
+    closing_stock:     float        # current balance
 
 
 # ── Error response (used by global exception handler) ────────────────────────

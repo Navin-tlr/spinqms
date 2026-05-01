@@ -8,6 +8,7 @@ import {
   getBusinessPartners,
   getInventoryMovements,
   getInventoryOverview,
+  getStockLots,
   getMaterials,
   postDirectGR,
   resetInventory,
@@ -17,8 +18,8 @@ import {
 import { Spinner } from '../Primitives.jsx'
 
 /* ── Design tokens (SAP Fiori-inspired) ────────────────────────────────────── */
-const B   = '#012169'   // SAP blue
-const BD  = '#89919a'   // border
+const B   = '#012169'
+const BD  = '#89919a'
 const ERR = '#bb0000'
 const OK  = '#188f36'
 
@@ -51,6 +52,10 @@ function fmt(n, unit = '') {
   if (n === null || n === undefined) return '-'
   return `${Number(n).toLocaleString('en-IN', { maximumFractionDigits: 2 })}${unit ? ' ' + unit : ''}`
 }
+function fmtMoney(n) {
+  if (n === null || n === undefined || n === '') return '—'
+  return `₹${Number(n).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`
+}
 function statusColor(s) {
   if (s === 'BELOW REORDER LEVEL') return ERR
   if (s === 'SAFE (CLOSE)') return '#b55b00'
@@ -77,202 +82,49 @@ function PageBar({ title, subtitle, onRefresh, children }) {
 
 
 /* ══════════════════════════════════════════════════════════════════════════════
-   MATERIAL MASTER  (with inline Edit + soft Archive)
+   STOCK OVERVIEW  (per-lot — opening / receipts MTD / issues MTD / closing)
 ══════════════════════════════════════════════════════════════════════════════ */
-function MaterialMaster({ materials, onChanged }) {
-  const blank = { code: '', name: '', base_unit: 'Bales', category: '', description: '' }
-  const [form,     setForm]     = useState(blank)
-  const [saving,   setSaving]   = useState(false)
-  const [editing,  setEditing]  = useState(null)   // material id being edited
-  const [editDraft, setEditDraft] = useState({})
-  const [editSaving, setEditSaving] = useState(false)
-  const [archiving, setArchiving] = useState(null)  // material id being archived
-  const [msg, setMsg] = useState('')
-  const [err, setErr] = useState('')
-
-  const setF = k => e => setForm(f => ({ ...f, [k]: e.target.value }))
-  const canSave = form.code.trim() && form.name.trim() && form.base_unit.trim()
-
-  /* ── Add new ── */
-  const save = async () => {
-    setSaving(true); setErr(''); setMsg('')
-    try {
-      const m = await createMaterial(form)
-      setMsg(`Added: ${m.code} — ${m.name}`)
-      setForm(blank)
-      onChanged(m, 'add')
-    } catch (e) { setErr(errMsg(e)) } finally { setSaving(false) }
-  }
-
-  /* ── Inline edit ── */
-  const startEdit = (m) => {
-    setEditing(m.id)
-    setEditDraft({ code: m.code, name: m.name, base_unit: m.base_unit, category: m.category || '', description: m.description || '' })
-    setErr('')
-  }
-  const cancelEdit = () => { setEditing(null); setEditDraft({}) }
-  const saveEdit = async (id) => {
-    setEditSaving(true); setErr('')
-    try {
-      const updated = await updateMaterial(id, {
-        code:        editDraft.code?.trim() || undefined,
-        name:        editDraft.name?.trim() || undefined,
-        base_unit:   editDraft.base_unit?.trim() || undefined,
-        category:    editDraft.category  || undefined,
-        description: editDraft.description || undefined,
-      })
-      setEditing(null)
-      onChanged(updated, 'update')
-    } catch (e) { setErr(errMsg(e)) } finally { setEditSaving(false) }
-  }
-
-  /* ── Hard delete ── */
-  const hardDelete = async (m) => {
-    if (!window.confirm(
-      `Permanently DELETE "${m.name}"?\n\n` +
-      `Only allowed if this material has zero transaction history.\n` +
-      `If it has linked receipts or movements, you will get an error — use Archive instead.`
-    )) return
-    setArchiving(m.id)
-    try {
-      await deleteMaterial(m.id)
-      onChanged({ id: m.id }, 'remove')
-    } catch (e) { setErr(errMsg(e)) } finally { setArchiving(null) }
-  }
-
-  /* ── Archive (soft delete) ── */
-  const archive = async (m) => {
-    if (!window.confirm(
-      `Archive "${m.name}"?\n\n` +
-      `It will be hidden from all operator dropdowns immediately.\n` +
-      `Historical receipts and movements that reference this material will remain intact.`
-    )) return
-    setArchiving(m.id)
-    try {
-      await archiveMaterial(m.id)
-      onChanged({ id: m.id }, 'remove')
-    } catch (e) { setErr(errMsg(e)) } finally { setArchiving(null) }
-  }
+function StockOverview({ stockLots, loading }) {
+  const today = new Date()
+  const monthLabel = today.toLocaleString('en-IN', { month: 'long', year: 'numeric' })
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-      {/* ── Add form ── */}
-      <div style={{ background: '#fff', border: '1px solid #d9dadb', borderBottom: 'none', padding: '14px 16px' }}>
-        <div style={{ fontSize: 11, fontWeight: 700, color: '#6a6d70', textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 12 }}>Add New Material</div>
-        <div style={{ display: 'grid', gridTemplateColumns: '150px 1fr 150px 180px', gap: 10, marginBottom: 10 }}>
-          <div>
-            <div style={{ fontSize: 11, color: '#6a6d70', marginBottom: 3 }}>Material Code *</div>
-            <input value={form.code} onChange={setF('code')}
-              placeholder="e.g. RM-COTTON-01" style={{ ...inp, width: '100%', fontFamily: 'var(--mono)', textTransform: 'uppercase' }} />
-          </div>
-          <div>
-            <div style={{ fontSize: 11, color: '#6a6d70', marginBottom: 3 }}>Material Name *</div>
-            <input value={form.name} onChange={setF('name')}
-              placeholder="e.g. Raw Cotton — Shankar 6" style={{ ...inp, width: '100%' }} />
-          </div>
-          <div>
-            <div style={{ fontSize: 11, color: '#6a6d70', marginBottom: 3 }}>Unit of Measure *</div>
-            <select value={form.base_unit} onChange={setF('base_unit')} style={{ ...inp, width: '100%' }}>
-              {COMMON_UNITS.map(u => <option key={u}>{u}</option>)}
-            </select>
-          </div>
-          <div>
-            <div style={{ fontSize: 11, color: '#6a6d70', marginBottom: 3 }}>Category</div>
-            <select value={form.category} onChange={setF('category')} style={{ ...inp, width: '100%' }}>
-              <option value="">— Select —</option>
-              {MAT_CATEGORIES.map(c => <option key={c}>{c}</option>)}
-            </select>
-          </div>
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 10, alignItems: 'end' }}>
-          <div>
-            <div style={{ fontSize: 11, color: '#6a6d70', marginBottom: 3 }}>Description</div>
-            <input value={form.description} onChange={setF('description')}
-              placeholder="Optional description" style={{ ...inp, width: '100%' }} />
-          </div>
-          <button disabled={!canSave || saving} onClick={save} style={btn(canSave && !saving)}>
-            {saving ? 'Saving…' : 'Add Material'}
-          </button>
-        </div>
-        {(err || msg) && <div style={{ marginTop: 8, fontSize: 12, color: err ? ERR : OK }}>{err || msg}</div>}
+      <div style={{ background: '#f5f5f5', borderBottom: '1px solid #d9dadb', padding: '6px 16px',
+                    fontSize: 11, color: '#6a6d70' }}>
+        Month-to-date summary · <strong>{monthLabel}</strong> · Each row = one lot bucket
       </div>
-
-      {/* ── Material list ── */}
       <div style={{ background: '#fff', border: '1px solid #d9dadb', overflowX: 'auto' }}>
-        {materials.length === 0 ? (
-          <div style={{ padding: 32, textAlign: 'center', color: '#89919a', fontSize: 13 }}>No materials yet. Add your first material above.</div>
+        {loading ? (
+          <div style={{ padding: 48, textAlign: 'center' }}><Spinner /></div>
+        ) : stockLots.length === 0 ? (
+          <div style={{ padding: 32, textAlign: 'center', color: '#89919a', fontSize: 13 }}>
+            No stock data. Post a Goods Receipt to add opening stock.
+          </div>
         ) : (
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
-              <tr>{['#', 'Code', 'Name', 'Unit', 'Category', 'Description', ''].map(h => <th key={h} style={hCell}>{h}</th>)}</tr>
+              <tr>{['Material','Category','Lot ID','Unit','Opening Stock','Receipts (MTD)','Issues (MTD)','Closing Stock'].map(h =>
+                <th key={h} style={hCell}>{h}</th>
+              )}</tr>
             </thead>
             <tbody>
-              {materials.map((m, i) => editing === m.id ? (
-                /* ── Edit row ── */
-                <tr key={m.id} style={{ background: '#f0f4ff' }}>
-                  <td style={{ ...cell, color: '#89919a', width: 40 }}>{i + 1}</td>
-                  <td style={{ padding: '5px 12px', borderBottom: '1px solid #eee' }}>
-                    <input value={editDraft.code} onChange={e => setEditDraft(d => ({ ...d, code: e.target.value }))}
-                      style={{ ...inp, width: 130, fontFamily: 'var(--mono)', textTransform: 'uppercase' }} />
+              {stockLots.map((r, i) => (
+                <tr key={`${r.material_id}-${r.lot_id}`} style={{ background: i % 2 === 0 ? '#fff' : '#fafafa' }}>
+                  <td style={{ ...cell, fontWeight: 600 }}>{r.material_name}</td>
+                  <td style={{ ...cell, fontSize: 11, color: '#6a6d70' }}>{r.material_category || '—'}</td>
+                  <td style={{ ...cell, fontFamily: 'var(--mono)', color: r.lot_id ? B : '#c0c0c0', fontSize: 11 }}>
+                    {r.lot_id || <span style={{ fontStyle: 'italic' }}>No Lot</span>}
                   </td>
-                  <td style={{ padding: '5px 12px', borderBottom: '1px solid #eee' }}>
-                    <input value={editDraft.name} onChange={e => setEditDraft(d => ({ ...d, name: e.target.value }))}
-                      style={{ ...inp, width: '100%' }} />
+                  <td style={{ ...cell, fontFamily: 'var(--mono)', color: '#89919a' }}>{r.unit}</td>
+                  <td style={{ ...cell, fontFamily: 'var(--mono)' }}>{fmt(r.opening_stock)}</td>
+                  <td style={{ ...cell, fontFamily: 'var(--mono)', color: OK }}>{r.receipts_mtd > 0 ? `+${fmt(r.receipts_mtd)}` : '—'}</td>
+                  <td style={{ ...cell, fontFamily: 'var(--mono)', color: r.issues_mtd > 0 ? ERR : '#89919a' }}>
+                    {r.issues_mtd > 0 ? `-${fmt(r.issues_mtd)}` : '—'}
                   </td>
-                  <td style={{ padding: '5px 12px', borderBottom: '1px solid #eee', width: 120 }}>
-                    <select value={editDraft.base_unit} onChange={e => setEditDraft(d => ({ ...d, base_unit: e.target.value }))} style={{ ...inp, width: '100%' }}>
-                      {COMMON_UNITS.map(u => <option key={u}>{u}</option>)}
-                    </select>
-                  </td>
-                  <td style={{ padding: '5px 12px', borderBottom: '1px solid #eee', width: 150 }}>
-                    <select value={editDraft.category} onChange={e => setEditDraft(d => ({ ...d, category: e.target.value }))} style={{ ...inp, width: '100%' }}>
-                      <option value="">— None —</option>
-                      {MAT_CATEGORIES.map(c => <option key={c}>{c}</option>)}
-                    </select>
-                  </td>
-                  <td style={{ padding: '5px 12px', borderBottom: '1px solid #eee' }}>
-                    <input value={editDraft.description} onChange={e => setEditDraft(d => ({ ...d, description: e.target.value }))}
-                      placeholder="Optional" style={{ ...inp, width: '100%' }} />
-                  </td>
-                  <td style={{ padding: '5px 12px', borderBottom: '1px solid #eee', whiteSpace: 'nowrap' }}>
-                    <div style={{ display: 'flex', gap: 6 }}>
-                      <button onClick={() => saveEdit(m.id)} disabled={editSaving} style={btn(!editSaving)}>
-                        {editSaving ? '…' : 'Save'}
-                      </button>
-                      <button onClick={cancelEdit} style={{ ...inp, cursor: 'pointer', fontSize: 11 }}>Cancel</button>
-                    </div>
-                  </td>
-                </tr>
-              ) : (
-                /* ── Read row ── */
-                <tr key={m.id} style={{ background: i % 2 === 0 ? '#fff' : '#fafafa' }}>
-                  <td style={{ ...cell, color: '#89919a', width: 40 }}>{i + 1}</td>
-                  <td style={{ ...cell, fontFamily: 'var(--mono)', fontWeight: 700, color: B }}>{m.code}</td>
-                  <td style={{ ...cell, fontWeight: 600 }}>{m.name}</td>
-                  <td style={{ ...cell, fontFamily: 'var(--mono)', color: '#6a6d70' }}>{m.base_unit}</td>
-                  <td style={{ ...cell, fontSize: 11, color: '#6a6d70' }}>{m.category || '—'}</td>
-                  <td style={{ ...cell, fontSize: 11, color: '#89919a', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {m.description || '—'}
-                  </td>
-                  <td style={{ ...cell, whiteSpace: 'nowrap' }}>
-                    <div style={{ display: 'flex', gap: 6 }}>
-                      <button onClick={() => startEdit(m)}
-                        style={{ ...inp, cursor: 'pointer', fontSize: 11 }}>
-                        Edit
-                      </button>
-                      <button
-                        disabled={archiving === m.id}
-                        onClick={() => archive(m)}
-                        style={{ ...inp, cursor: archiving === m.id ? 'not-allowed' : 'pointer', color: '#b55b00', borderColor: '#e8a87c', fontSize: 11 }}>
-                        {archiving === m.id ? '…' : 'Archive'}
-                      </button>
-                      <button
-                        disabled={archiving === m.id}
-                        onClick={() => hardDelete(m)}
-                        style={{ ...inp, cursor: archiving === m.id ? 'not-allowed' : 'pointer', color: ERR, fontSize: 11 }}>
-                        Delete
-                      </button>
-                    </div>
+                  <td style={{ ...cell, fontFamily: 'var(--mono)', fontSize: 13, fontWeight: 700,
+                               color: r.closing_stock <= 0 ? ERR : B }}>
+                    {fmt(r.closing_stock)}
                   </td>
                 </tr>
               ))}
@@ -284,54 +136,19 @@ function MaterialMaster({ materials, onChanged }) {
   )
 }
 
-/* ══════════════════════════════════════════════════════════════════════════════
-   STOCK OVERVIEW
-══════════════════════════════════════════════════════════════════════════════ */
-function StockOverview({ rows, loading }) {
-  return (
-    <div style={{ background: '#fff', border: '1px solid #d9dadb', overflowX: 'auto' }}>
-      {loading ? (
-        <div style={{ padding: 48, textAlign: 'center' }}><Spinner /></div>
-      ) : rows.length === 0 ? (
-        <div style={{ padding: 32, textAlign: 'center', color: '#89919a', fontSize: 13 }}>
-          No stock data. Post a Goods Receipt to add opening stock.
-        </div>
-      ) : (
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead>
-            <tr>{['Material','Unit','Current Stock','Avg / Day (7d)','Days Left','Reorder Level','Status','Action'].map(h => <th key={h} style={hCell}>{h}</th>)}</tr>
-          </thead>
-          <tbody>
-            {rows.map((r, i) => (
-              <tr key={r.material_id} style={{ background: i % 2 === 0 ? '#fff' : '#fafafa' }}>
-                <td style={{ ...cell, fontWeight: 600 }}>{r.material_name}</td>
-                <td style={{ ...cell, fontFamily: 'var(--mono)', color: '#89919a' }}>{r.unit}</td>
-                <td style={{ ...cell, fontFamily: 'var(--mono)', fontSize: 13, fontWeight: 700, color: B }}>{fmt(r.stock)}</td>
-                <td style={{ ...cell, fontFamily: 'var(--mono)' }}>{fmt(r.avg_consumption_7d)}</td>
-                <td style={{ ...cell, fontFamily: 'var(--mono)' }}>{r.days_left ? `~${r.days_left}d` : '—'}</td>
-                <td style={{ ...cell, fontFamily: 'var(--mono)' }}>{fmt(r.reorder_level)}</td>
-                <td style={{ ...cell, fontSize: 11, fontWeight: 700, color: statusColor(r.status), whiteSpace: 'nowrap' }}>{r.status}</td>
-                <td style={{ ...cell, fontSize: 11, fontWeight: 600, color: r.action === 'ORDER NOW' ? ERR : '#6a6d70' }}>{r.action}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-    </div>
-  )
-}
 
 /* ══════════════════════════════════════════════════════════════════════════════
-   MATERIAL RECEIPT (Direct GR — vendor required, optional file attachment)
+   MATERIAL RECEIPT (Direct GR — BP required, optional lot + rate + attachment)
 ══════════════════════════════════════════════════════════════════════════════ */
 function MaterialReceipt({ materials, businessPartners, onPosted }) {
   const today = new Date().toISOString().slice(0, 10)
+  const blankLine = { material_id: '', quantity: '', rate: '', lot_id: '' }
   const [bpId,         setBpId]         = useState('')
   const [documentDate, setDocumentDate] = useState(today)
   const [receiptDate,  setReceiptDate]  = useState(today)
   const [reference,    setReference]    = useState('')
   const [notes,        setNotes]        = useState('')
-  const [lines,        setLines]        = useState([{ material_id: '', quantity: '' }])
+  const [lines,        setLines]        = useState([{ ...blankLine }])
   const [file,         setFile]         = useState(null)
   const [posting,      setPosting]      = useState(false)
   const [message,      setMessage]      = useState('')
@@ -339,7 +156,7 @@ function MaterialReceipt({ materials, businessPartners, onPosted }) {
   const fileRef = useRef()
 
   const matMap = Object.fromEntries(materials.map(m => [String(m.id), m]))
-  const addRow    = () => setLines(p => [...p, { material_id: '', quantity: '' }])
+  const addRow    = () => setLines(p => [...p, { ...blankLine }])
   const removeRow = i  => setLines(p => p.length === 1 ? p : p.filter((_, j) => j !== i))
   const updateRow = (i, patch) => setLines(p => p.map((r, j) => j === i ? { ...r, ...patch } : r))
 
@@ -357,10 +174,12 @@ function MaterialReceipt({ materials, businessPartners, onPosted }) {
         lines: lines.map(r => ({
           material_id:       Number(r.material_id),
           quantity_received: Number(r.quantity),
+          rate:              r.rate ? Number(r.rate) : undefined,
+          lot_id:            r.lot_id || undefined,
         })),
       }, file)
       setMessage(`Posted ${doc.gr_number} — ${doc.lines.length} line(s) ✓`)
-      setLines([{ material_id: '', quantity: '' }])
+      setLines([{ ...blankLine }])
       setReference(''); setNotes(''); setFile(null)
       if (fileRef.current) fileRef.current.value = ''
       onPosted && onPosted()
@@ -371,7 +190,7 @@ function MaterialReceipt({ materials, businessPartners, onPosted }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-      {/* Header */}
+      {/* Header fields */}
       <div style={{ background: '#fff', border: '1px solid #d9dadb', borderBottom: 'none', padding: '14px 16px' }}>
         <div style={{ display: 'grid', gridTemplateColumns: '220px 160px 160px 1fr 1fr', gap: 12, marginBottom: 12 }}>
           <div>
@@ -411,40 +230,65 @@ function MaterialReceipt({ materials, businessPartners, onPosted }) {
           <input ref={fileRef} type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.heic"
             onChange={e => setFile(e.target.files?.[0] || null)}
             style={{ fontSize: 11 }} />
-          {file && (
-            <span style={{ fontSize: 11, color: OK, fontWeight: 600 }}>📎 {file.name}</span>
-          )}
+          {file && <span style={{ fontSize: 11, color: OK, fontWeight: 600 }}>📎 {file.name}</span>}
         </div>
       </div>
 
-      {/* Lines */}
+      {/* Line items */}
       <div style={{ background: '#fff', border: '1px solid #d9dadb', overflowX: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
-            <tr>{['Line','Material','Quantity','Unit','Movement',''].map(h => <th key={h} style={hCell}>{h}</th>)}</tr>
+            <tr>{['Line','Material','Category','Lot ID','Quantity','Unit','Rate (₹/Unit)','Amount (₹)','Mvt',''].map(h =>
+              <th key={h} style={hCell}>{h}</th>
+            )}</tr>
           </thead>
           <tbody>
             {lines.map((line, idx) => {
-              const mat = matMap[line.material_id]
+              const mat    = matMap[line.material_id]
+              const amount = (line.quantity && line.rate)
+                ? Number(line.quantity) * Number(line.rate)
+                : null
               return (
                 <tr key={idx}>
                   <td style={{ ...cell, width: 50, fontFamily: 'var(--mono)', color: '#89919a' }}>{idx + 1}</td>
-                  <td style={{ padding: '5px 12px', borderBottom: '1px solid #eee', minWidth: 240 }}>
-                    <select value={line.material_id} onChange={e => updateRow(idx, { material_id: e.target.value })} style={{ ...inp, width: '100%' }}>
+                  <td style={{ padding: '5px 12px', borderBottom: '1px solid #eee', minWidth: 200 }}>
+                    <select value={line.material_id} onChange={e => updateRow(idx, { material_id: e.target.value, lot_id: '' })} style={{ ...inp, width: '100%' }}>
                       <option value="">✓ Select material</option>
-                      {materials.map(m => <option key={m.id} value={m.id}>{m.name} ({m.base_unit})</option>)}
+                      {materials.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
                     </select>
                   </td>
-                  <td style={{ padding: '5px 12px', borderBottom: '1px solid #eee', width: 140 }}>
+                  <td style={{ ...cell, fontSize: 11, color: '#6a6d70', minWidth: 120 }}>
+                    {mat?.category || '—'}
+                  </td>
+                  <td style={{ padding: '5px 12px', borderBottom: '1px solid #eee', minWidth: 120 }}>
+                    <input
+                      value={line.lot_id}
+                      onChange={e => updateRow(idx, { lot_id: e.target.value })}
+                      placeholder="e.g. Lot-A"
+                      style={{ ...inp, width: '100%', fontFamily: 'var(--mono)', fontSize: 11 }}
+                    />
+                  </td>
+                  <td style={{ padding: '5px 12px', borderBottom: '1px solid #eee', width: 120 }}>
                     <input type="number" min="0.01" step="0.01" value={line.quantity}
                       onChange={e => updateRow(idx, { quantity: e.target.value })}
                       style={{ ...inp, width: '100%', fontFamily: 'var(--mono)' }} />
                   </td>
-                  <td style={{ ...cell, fontFamily: 'var(--mono)', color: '#6a6d70', width: 80 }}>{mat?.base_unit || '—'}</td>
-                  <td style={{ ...cell, color: OK, fontWeight: 700, width: 80 }}>GR</td>
+                  <td style={{ ...cell, fontFamily: 'var(--mono)', color: '#6a6d70', width: 70 }}>{mat?.base_unit || '—'}</td>
+                  <td style={{ padding: '5px 12px', borderBottom: '1px solid #eee', width: 130 }}>
+                    <input type="number" min="0" step="0.01" value={line.rate}
+                      onChange={e => updateRow(idx, { rate: e.target.value })}
+                      placeholder="0.00"
+                      style={{ ...inp, width: '100%', fontFamily: 'var(--mono)' }} />
+                  </td>
+                  <td style={{ ...cell, fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 600,
+                               color: amount ? '#32363a' : '#c0c0c0', width: 120, textAlign: 'right' }}>
+                    {amount ? fmtMoney(amount) : '—'}
+                  </td>
+                  <td style={{ ...cell, color: OK, fontWeight: 700, width: 50 }}>GR</td>
                   <td style={{ padding: '5px 12px', borderBottom: '1px solid #eee', width: 80 }}>
                     <button onClick={() => removeRow(idx)} disabled={lines.length === 1}
-                      style={{ ...inp, cursor: lines.length === 1 ? 'not-allowed' : 'pointer', color: lines.length === 1 ? '#89919a' : ERR, fontSize: 11 }}>Remove</button>
+                      style={{ ...inp, cursor: lines.length === 1 ? 'not-allowed' : 'pointer',
+                               color: lines.length === 1 ? '#89919a' : ERR, fontSize: 11 }}>Remove</button>
                   </td>
                 </tr>
               )
@@ -469,30 +313,49 @@ function MaterialReceipt({ materials, businessPartners, onPosted }) {
   )
 }
 
+
 /* ══════════════════════════════════════════════════════════════════════════════
-   MATERIAL ISSUE (daily — no shift)
+   MATERIAL ISSUE  (lot-aware stock check)
 ══════════════════════════════════════════════════════════════════════════════ */
-function MaterialIssue({ materials, stockRows, onPosted }) {
+function MaterialIssue({ materials, stockLots, onPosted }) {
   const today = new Date().toISOString().slice(0, 10)
+  const blankLine = { material_id: '', quantity: '', lot_id: '' }
   const [issueDate,  setIssueDate]  = useState(today)
   const [reference,  setReference]  = useState('Daily Production')
-  const [lines,      setLines]      = useState([{ material_id: '', quantity: '' }])
+  const [lines,      setLines]      = useState([{ ...blankLine }])
   const [posting,    setPosting]    = useState(false)
   const [message,    setMessage]    = useState('')
   const [error,      setError]      = useState('')
 
-  const matMap   = Object.fromEntries(materials.map(m => [String(m.id), m]))
-  const stockMap = Object.fromEntries(stockRows.map(r => [r.material_id, r.stock]))
+  const matMap = Object.fromEntries(materials.map(m => [String(m.id), m]))
 
-  const addRow    = () => setLines(p => [...p, { material_id: '', quantity: '' }])
+  // Build per-lot stock lookup: key = `${material_id}::${lot_id}`
+  const lotStockMap = Object.fromEntries(
+    stockLots.map(r => [`${r.material_id}::${r.lot_id}`, r.closing_stock])
+  )
+  // Total stock per material (sum all lots)
+  const totalStockMap = {}
+  stockLots.forEach(r => {
+    totalStockMap[r.material_id] = (totalStockMap[r.material_id] || 0) + r.closing_stock
+  })
+  // Lots available per material
+  const lotsForMaterial = (matId) =>
+    stockLots.filter(r => r.material_id === Number(matId) && r.closing_stock > 0)
+
+  const addRow    = () => setLines(p => [...p, { ...blankLine }])
   const removeRow = i  => setLines(p => p.length === 1 ? p : p.filter((_, j) => j !== i))
   const updateRow = (i, patch) => setLines(p => p.map((r, j) => j === i ? { ...r, ...patch } : r))
 
   const lineErrors = lines.map(r => {
     if (!r.material_id || !r.quantity) return null
-    const onHand = stockMap[Number(r.material_id)] ?? 0
+    const lot    = r.lot_id || ''
+    const key    = `${r.material_id}::${lot}`
+    const onHand = lotStockMap[key] ?? 0
     const qty    = Number(r.quantity)
-    if (qty > onHand) return `Only ${onHand} ${matMap[r.material_id]?.base_unit || ''} available`
+    if (qty > onHand + 1e-9) {
+      const mat = matMap[r.material_id]
+      return `Only ${onHand} ${mat?.base_unit || ''} available${lot ? ` in Lot ${lot}` : ''}`
+    }
     return null
   })
   const canPost = lines.every((r, i) => r.material_id && Number(r.quantity) > 0 && !lineErrors[i])
@@ -503,10 +366,14 @@ function MaterialIssue({ materials, stockRows, onPosted }) {
       const doc = await createMaterialIssue({
         issue_date: issueDate,
         reference,
-        lines: lines.map(r => ({ material_id: Number(r.material_id), quantity: Number(r.quantity) })),
+        lines: lines.map(r => ({
+          material_id: Number(r.material_id),
+          quantity:    Number(r.quantity),
+          lot_id:      r.lot_id || undefined,
+        })),
       })
       setMessage(`Posted ${doc.document_number} ✓`)
-      setLines([{ material_id: '', quantity: '' }])
+      setLines([{ ...blankLine }])
       onPosted && onPosted()
     } catch (e) { setError(errMsg(e)) } finally { setPosting(false) }
   }
@@ -529,38 +396,63 @@ function MaterialIssue({ materials, stockRows, onPosted }) {
       <div style={{ background: '#fff', border: '1px solid #d9dadb', overflowX: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
-            <tr>{['Line','Material','Available Stock','Quantity to Issue','Unit','Movement',''].map(h => <th key={h} style={hCell}>{h}</th>)}</tr>
+            <tr>{['Line','Material','Lot','Available Stock','Qty to Issue','Unit','Mvt',''].map(h =>
+              <th key={h} style={hCell}>{h}</th>
+            )}</tr>
           </thead>
           <tbody>
             {lines.map((line, idx) => {
-              const mat    = matMap[line.material_id]
-              const onHand = line.material_id ? (stockMap[Number(line.material_id)] ?? 0) : null
-              const lineErr = lineErrors[idx]
+              const mat      = matMap[line.material_id]
+              const availLots = line.material_id ? lotsForMaterial(line.material_id) : []
+              const lot       = line.lot_id || ''
+              const key       = `${line.material_id}::${lot}`
+              const onHand    = line.material_id ? (lotStockMap[key] ?? 0) : null
+              const lineErr   = lineErrors[idx]
               return (
                 <tr key={idx} style={{ background: lineErr ? '#fff5f5' : undefined }}>
                   <td style={{ ...cell, width: 50, fontFamily: 'var(--mono)', color: '#89919a' }}>{idx + 1}</td>
-                  <td style={{ padding: '5px 12px', borderBottom: '1px solid #eee', minWidth: 240 }}>
-                    <select value={line.material_id} onChange={e => updateRow(idx, { material_id: e.target.value, quantity: '' })} style={{ ...inp, width: '100%' }}>
+                  <td style={{ padding: '5px 12px', borderBottom: '1px solid #eee', minWidth: 200 }}>
+                    <select value={line.material_id}
+                      onChange={e => updateRow(idx, { material_id: e.target.value, lot_id: '', quantity: '' })}
+                      style={{ ...inp, width: '100%' }}>
                       <option value="">Select material</option>
                       {materials.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
                     </select>
                   </td>
-                  <td style={{ ...cell, fontFamily: 'var(--mono)', fontWeight: 700,
-                               color: onHand === 0 ? ERR : onHand > 0 ? OK : '#89919a', width: 130 }}>
-                    {onHand !== null ? `${onHand} ${mat?.base_unit || ''}` : '—'}
+                  <td style={{ padding: '5px 12px', borderBottom: '1px solid #eee', minWidth: 130 }}>
+                    {availLots.length > 1 ? (
+                      <select value={line.lot_id}
+                        onChange={e => updateRow(idx, { lot_id: e.target.value, quantity: '' })}
+                        style={{ ...inp, width: '100%', fontFamily: 'var(--mono)', fontSize: 11 }}>
+                        <option value="">No Lot</option>
+                        {availLots.filter(l => l.lot_id).map(l => (
+                          <option key={l.lot_id} value={l.lot_id}>{l.lot_id} ({l.closing_stock} {l.unit})</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <span style={{ fontSize: 11, color: availLots[0]?.lot_id ? '#32363a' : '#c0c0c0',
+                                     fontFamily: 'var(--mono)', padding: '0 4px' }}>
+                        {availLots[0]?.lot_id || 'No Lot'}
+                      </span>
+                    )}
                   </td>
-                  <td style={{ padding: '5px 12px', borderBottom: '1px solid #eee', width: 150 }}>
+                  <td style={{ ...cell, fontFamily: 'var(--mono)', fontWeight: 700, width: 140,
+                               color: onHand === 0 ? ERR : onHand > 0 ? OK : '#89919a' }}>
+                    {onHand !== null ? `${fmt(onHand)} ${mat?.base_unit || ''}` : '—'}
+                  </td>
+                  <td style={{ padding: '5px 12px', borderBottom: '1px solid #eee', width: 140 }}>
                     <input type="number" min="0.01" step="0.01" value={line.quantity}
                       onChange={e => updateRow(idx, { quantity: e.target.value })}
                       style={{ ...inp, width: '100%', fontFamily: 'var(--mono)',
                                borderColor: lineErr ? ERR : BD }} />
                     {lineErr && <div style={{ fontSize: 10, color: ERR, marginTop: 2 }}>{lineErr}</div>}
                   </td>
-                  <td style={{ ...cell, fontFamily: 'var(--mono)', color: '#6a6d70', width: 80 }}>{mat?.base_unit || '—'}</td>
-                  <td style={{ ...cell, color: ERR, fontWeight: 700, width: 80 }}>GI</td>
+                  <td style={{ ...cell, fontFamily: 'var(--mono)', color: '#6a6d70', width: 70 }}>{mat?.base_unit || '—'}</td>
+                  <td style={{ ...cell, color: ERR, fontWeight: 700, width: 50 }}>GI</td>
                   <td style={{ padding: '5px 12px', borderBottom: '1px solid #eee', width: 80 }}>
                     <button onClick={() => removeRow(idx)} disabled={lines.length === 1}
-                      style={{ ...inp, cursor: lines.length === 1 ? 'not-allowed' : 'pointer', color: lines.length === 1 ? '#89919a' : ERR, fontSize: 11 }}>Remove</button>
+                      style={{ ...inp, cursor: lines.length === 1 ? 'not-allowed' : 'pointer',
+                               color: lines.length === 1 ? '#89919a' : ERR, fontSize: 11 }}>Remove</button>
                   </td>
                 </tr>
               )
@@ -584,6 +476,7 @@ function MaterialIssue({ materials, stockRows, onPosted }) {
   )
 }
 
+
 /* ══════════════════════════════════════════════════════════════════════════════
    MATERIAL MOVEMENTS LEDGER
 ══════════════════════════════════════════════════════════════════════════════ */
@@ -596,7 +489,9 @@ function MaterialMovements({ movements, loading }) {
         ) : (
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
-              <tr>{['Doc #','Material','Date','Type','Qty','Unit','Source','Notes'].map(h => <th key={h} style={hCell}>{h}</th>)}</tr>
+              <tr>{['Doc #','Material','Date','Type','Lot','Qty','Unit','Source','Notes'].map(h =>
+                <th key={h} style={hCell}>{h}</th>
+              )}</tr>
             </thead>
             <tbody>
               {movements.map((m, i) => (
@@ -607,6 +502,9 @@ function MaterialMovements({ movements, loading }) {
                   <td style={{ ...cell, fontSize: 11, fontWeight: 700, textTransform: 'uppercase',
                                color: m.quantity_delta < 0 ? ERR : OK }}>
                     {m.movement_type}
+                  </td>
+                  <td style={{ ...cell, fontFamily: 'var(--mono)', fontSize: 11, color: m.lot_id ? '#32363a' : '#c0c0c0' }}>
+                    {m.lot_id || '—'}
                   </td>
                   <td style={{ ...cell, fontFamily: 'var(--mono)', fontSize: 13, fontWeight: 700,
                                color: m.quantity_delta < 0 ? ERR : OK }}>
@@ -625,8 +523,9 @@ function MaterialMovements({ movements, loading }) {
   )
 }
 
+
 /* ══════════════════════════════════════════════════════════════════════════════
-   PLANNING (MRP params + market price)
+   PLANNING (MRP params + market price) — uses aggregate overview rows
 ══════════════════════════════════════════════════════════════════════════════ */
 function Planning({ rows, onSaved }) {
   const [drafts, setDrafts] = useState({})
@@ -664,7 +563,9 @@ function Planning({ rows, onSaved }) {
       <div style={{ background: '#fff', border: '1px solid #d9dadb', overflowX: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
-            <tr>{['Material','Lead Time (days)','Safety Stock','Reorder Qty','Reorder Level (calc)',''].map(h => <th key={h} style={hCell}>{h}</th>)}</tr>
+            <tr>{['Material','Stock (Total)','Lead Time (days)','Safety Stock','Reorder Qty','Reorder Level',''].map(h =>
+              <th key={h} style={hCell}>{h}</th>
+            )}</tr>
           </thead>
           <tbody>
             {rows.map(r => {
@@ -672,6 +573,7 @@ function Planning({ rows, onSaved }) {
               return (
                 <tr key={r.material_id}>
                   <td style={{ ...cell, fontWeight: 600 }}>{r.material_name}</td>
+                  <td style={{ ...cell, fontFamily: 'var(--mono)', fontWeight: 700, color: B }}>{fmt(r.stock, r.unit)}</td>
                   {['lead_time_days','safety_stock_qty','reorder_qty'].map(k => (
                     <td key={k} style={{ padding: '5px 12px', borderBottom: '1px solid #eee' }}>
                       <input type="number" value={d[k] ?? ''} onChange={e => setDrafts(prev => ({ ...prev, [r.material_id]: { ...d, [k]: e.target.value } }))}
@@ -768,7 +670,8 @@ function AdminReset({ onReset }) {
    ROOT COMPONENT
 ══════════════════════════════════════════════════════════════════════════════ */
 export default function InventoryPlanning({ mode = 'stock' }) {
-  const [rows,             setRows]             = useState([])
+  const [rows,             setRows]             = useState([])   // MRP overview (material-level)
+  const [stockLots,        setStockLots]        = useState([])   // per-lot stock
   const [materials,        setMaterials]        = useState([])
   const [businessPartners, setBusinessPartners] = useState([])
   const [movements,        setMovements]        = useState([])
@@ -779,21 +682,24 @@ export default function InventoryPlanning({ mode = 'stock' }) {
     setLoading(true)
     setLoadErrors([])
     try {
-      const [ovRes, matRes, bpRes, movRes] = await Promise.allSettled([
+      const [ovRes, matRes, bpRes, movRes, slotsRes] = await Promise.allSettled([
         getInventoryOverview(),
         getMaterials(),
         getBusinessPartners('MM_VENDOR'),
         getInventoryMovements({ limit: 300 }),
+        getStockLots(),
       ])
       const errs = []
-      if (ovRes.status  === 'fulfilled') setRows(ovRes.value)
-      else errs.push(`Stock overview: ${errMsg(ovRes.reason)}`)
-      if (matRes.status === 'fulfilled') setMaterials(matRes.value)
+      if (ovRes.status    === 'fulfilled') setRows(ovRes.value)
+      else errs.push(`MRP overview: ${errMsg(ovRes.reason)}`)
+      if (matRes.status   === 'fulfilled') setMaterials(matRes.value)
       else errs.push(`Materials: ${errMsg(matRes.reason)}`)
-      if (bpRes.status  === 'fulfilled') setBusinessPartners(bpRes.value)
+      if (bpRes.status    === 'fulfilled') setBusinessPartners(bpRes.value)
       else errs.push(`Business Partners: ${errMsg(bpRes.reason)}`)
-      if (movRes.status === 'fulfilled') setMovements(movRes.value)
+      if (movRes.status   === 'fulfilled') setMovements(movRes.value)
       else errs.push(`Movements: ${errMsg(movRes.reason)}`)
+      if (slotsRes.status === 'fulfilled') setStockLots(slotsRes.value)
+      else errs.push(`Stock lots: ${errMsg(slotsRes.reason)}`)
       if (errs.length) setLoadErrors(errs)
     } catch (e) {
       setLoadErrors([`Unexpected error: ${errMsg(e)}`])
@@ -804,17 +710,8 @@ export default function InventoryPlanning({ mode = 'stock' }) {
 
   useEffect(() => { load() }, [load])
 
-  /* Optimistic material updates so list reflects changes instantly */
-  const onMaterialChanged = (item, op) => {
-    if (op === 'add')    setMaterials(p => p.some(m => m.id === item.id) ? p : [...p, item])
-    if (op === 'remove') setMaterials(p => p.filter(m => m.id !== item.id))
-    if (op === 'update') setMaterials(p => p.map(m => m.id === item.id ? item : m))
-    load()
-  }
-
   const TITLES = {
-    materials:     ['Material Master',    'Raw materials and consumables registry'],
-    stock:         ['Stock Overview',     'Current stock, days left, and reorder status'],
+    stock:         ['Stock Overview',     'Month-to-date opening / receipts / issues / closing — per lot'],
     receipt:       ['Material Receipt',   'Post goods receipt from vendor — updates stock ledger'],
     issue:         ['Material Issue',     'Post daily goods issue — reduces stock ledger'],
     movements:     ['Material Movements', 'Append-only inventory ledger (GR/GI audit trail)'],
@@ -834,7 +731,6 @@ export default function InventoryPlanning({ mode = 'stock' }) {
         )}
       </PageBar>
 
-      {/* Surface any API errors as a non-blocking banner */}
       {loadErrors.length > 0 && (
         <div style={{ background: '#fff5f5', border: '1px solid #ffcccc', borderBottom: 'none', padding: '8px 16px' }}>
           {loadErrors.map((e, i) => (
@@ -843,14 +739,12 @@ export default function InventoryPlanning({ mode = 'stock' }) {
         </div>
       )}
 
-      {/* All modes render immediately — no loading gate blocking forms */}
-      {mode === 'materials'  && <MaterialMaster   materials={materials}  onChanged={onMaterialChanged} />}
-      {mode === 'stock'      && <StockOverview    rows={rows}            loading={loading} />}
-      {mode === 'receipt'    && <MaterialReceipt  materials={materials}  businessPartners={businessPartners} onPosted={load} />}
-      {mode === 'issue'      && <MaterialIssue    materials={materials}  stockRows={rows}  onPosted={load} />}
-      {mode === 'movements'  && <MaterialMovements movements={movements} loading={loading} />}
-      {mode === 'planning'   && <Planning         rows={rows}            onSaved={load} />}
-      {mode === 'admin-reset' && <AdminReset      onReset={load} />}
+      {mode === 'stock'       && <StockOverview    stockLots={stockLots}      loading={loading} />}
+      {mode === 'receipt'     && <MaterialReceipt  materials={materials}       businessPartners={businessPartners} onPosted={load} />}
+      {mode === 'issue'       && <MaterialIssue    materials={materials}       stockLots={stockLots} onPosted={load} />}
+      {mode === 'movements'   && <MaterialMovements movements={movements}      loading={loading} />}
+      {mode === 'planning'    && <Planning          rows={rows}                onSaved={load} />}
+      {mode === 'admin-reset' && <AdminReset        onReset={load} />}
     </div>
   )
 }

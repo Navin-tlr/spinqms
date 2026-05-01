@@ -26,17 +26,10 @@ const WARN_AMBER = '#df6e0c'
 const BLOCKED_BG = '#fff4f4'
 
 /* ── Material taxonomy ──────────────────────────────────────────────────────── */
-export const MAT_TYPES = ['RAW_MATERIAL', 'MAINTENANCE', 'CONSUMABLE']
-export const MAT_TYPE_LABELS = {
-  RAW_MATERIAL: 'Raw Material',
-  MAINTENANCE:  'Maintenance',
-  CONSUMABLE:   'Consumable',
-}
-export const MAT_CATEGORIES = {
-  RAW_MATERIAL: ['Cotton', 'Viscose', 'Lyocell', 'Polyester', 'Other'],
-  MAINTENANCE:  ['Spare Parts (Mechanical)', 'Electrical Parts', 'Other'],
-  CONSUMABLE:   ['Packing', 'Lubricants', 'General', 'Other'],
-}
+export const MAT_CATEGORIES = [
+  'Raw Material', 'Dyes & Chemicals', 'Packing Material',
+  'Spare Parts', 'Consumables', 'Other',
+]
 export const MAT_UNITS = ['Bales', 'Candy', 'Kg', 'Nos', 'Litres', 'Rolls', 'Bags', 'Sets']
 
 /* ── BP roles ───────────────────────────────────────────────────────────────── */
@@ -814,7 +807,7 @@ function BusinessPartners({ bps, onChanged }) {
    MATERIAL MASTER
 ══════════════════════════════════════════════════════════════════════════════ */
 function Materials({ materials, onChanged }) {
-  const blank = { code: '', name: '', base_unit: 'Bales', material_type: '', category: '', description: '' }
+  const blank = { code: '', name: '', base_unit: 'Kg', category: '', notes: '' }
   const [form,      setForm]    = useState(blank)
   const [saving,    setSaving]  = useState(false)
   const [editing,   setEditing] = useState(null)
@@ -824,17 +817,8 @@ function Materials({ materials, onChanged }) {
   const [msg, setMsg] = useState('')
   const [err, setErr] = useState('')
 
-  const setF = k => e => {
-    setForm(f => {
-      const next = { ...f, [k]: e.target.value }
-      // Reset category when type changes
-      if (k === 'material_type') next.category = ''
-      return next
-    })
-  }
-
-  const cats = MAT_CATEGORIES[form.material_type] || []
-  const canSave = form.code.trim() && form.name.trim() && form.base_unit && form.material_type
+  const setF = k => e => setForm(f => ({ ...f, [k]: e.target.value }))
+  const canSave = form.code.trim() && form.name.trim() && form.base_unit
 
   /* ── Create ── */
   const save = async () => {
@@ -851,8 +835,10 @@ function Materials({ materials, onChanged }) {
   /* ── Edit ── */
   const startEdit = m => {
     setEditing(m.id)
-    setEditDraft({ code: m.code, name: m.name, base_unit: m.base_unit,
-                   material_type: m.material_type || '', category: m.category || '', description: m.description || '' })
+    setEditDraft({
+      code: m.code, name: m.name, base_unit: m.base_unit,
+      category: m.category || '', notes: m.notes || m.description || '',
+    })
     setErr('')
   }
   const cancelEdit = () => { setEditing(null); setEditDraft({}) }
@@ -875,14 +861,12 @@ function Materials({ materials, onChanged }) {
     finally { setArchiving(null) }
   }
 
-  const editCats = MAT_CATEGORIES[editDraft.material_type] || []
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
       {/* ── Add form ── */}
       <div style={{ background: '#fff', border: `1px solid ${BORDER}`, borderBottom: 'none', padding: '14px 16px' }}>
         <SectionLabel>Add Material</SectionLabel>
-        <div style={{ display: 'grid', gridTemplateColumns: '150px 1fr 140px 160px 160px', gap: 10, marginBottom: 10 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '150px 1fr 170px 90px', gap: 10, marginBottom: 10 }}>
           <div>
             <div style={{ fontSize: 11, color: TXT_MUTED, marginBottom: 3 }}>Code *</div>
             <input value={form.code} onChange={setF('code')} style={{ ...inp, width: '100%', fontFamily: 'var(--mono)', textTransform: 'uppercase' }} placeholder="e.g. RM-COTTON-01" />
@@ -892,17 +876,10 @@ function Materials({ materials, onChanged }) {
             <input value={form.name} onChange={setF('name')} style={{ ...inp, width: '100%' }} placeholder="e.g. Raw Cotton — Shankar 6" />
           </div>
           <div>
-            <div style={{ fontSize: 11, color: TXT_MUTED, marginBottom: 3 }}>Type *</div>
-            <select value={form.material_type} onChange={setF('material_type')} style={{ ...inp, width: '100%' }}>
-              <option value="">— Select —</option>
-              {MAT_TYPES.map(t => <option key={t} value={t}>{MAT_TYPE_LABELS[t]}</option>)}
-            </select>
-          </div>
-          <div>
             <div style={{ fontSize: 11, color: TXT_MUTED, marginBottom: 3 }}>Category</div>
-            <select value={form.category} onChange={setF('category')} style={{ ...inp, width: '100%' }} disabled={!form.material_type}>
+            <select value={form.category} onChange={setF('category')} style={{ ...inp, width: '100%' }}>
               <option value="">— Select —</option>
-              {cats.map(c => <option key={c}>{c}</option>)}
+              {MAT_CATEGORIES.map(c => <option key={c}>{c}</option>)}
             </select>
           </div>
           <div>
@@ -914,8 +891,8 @@ function Materials({ materials, onChanged }) {
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 10, alignItems: 'end' }}>
           <div>
-            <div style={{ fontSize: 11, color: TXT_MUTED, marginBottom: 3 }}>Description</div>
-            <input value={form.description} onChange={setF('description')} style={{ ...inp, width: '100%' }} placeholder="Optional" />
+            <div style={{ fontSize: 11, color: TXT_MUTED, marginBottom: 3 }}>Notes</div>
+            <input value={form.notes} onChange={setF('notes')} style={{ ...inp, width: '100%' }} placeholder="Optional" />
           </div>
           <button disabled={!canSave || saving} onClick={save} style={primaryBtn(canSave && !saving)}>
             {saving ? 'Saving…' : 'Add Material'}
@@ -931,7 +908,7 @@ function Materials({ materials, onChanged }) {
         ) : (
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
-              <tr>{['Code','Name','Type','Category','Unit','Description',''].map(h => <th key={h} style={th}>{h}</th>)}</tr>
+              <tr>{['Code','Name','Category','Unit','Notes',''].map(h => <th key={h} style={th}>{h}</th>)}</tr>
             </thead>
             <tbody>
               {materials.map((m, i) => editing === m.id ? (
@@ -939,15 +916,9 @@ function Materials({ materials, onChanged }) {
                   <td style={inputTd}><input value={editDraft.code} onChange={e => setEditDraft(d => ({ ...d, code: e.target.value }))} style={{ ...inp, width: 120, fontFamily: 'var(--mono)', textTransform: 'uppercase' }} /></td>
                   <td style={inputTd}><input value={editDraft.name} onChange={e => setEditDraft(d => ({ ...d, name: e.target.value }))} style={{ ...inp, width: '100%' }} /></td>
                   <td style={inputTd}>
-                    <select value={editDraft.material_type} onChange={e => setEditDraft(d => ({ ...d, material_type: e.target.value, category: '' }))} style={{ ...inp, width: 130 }}>
-                      <option value="">—</option>
-                      {MAT_TYPES.map(t => <option key={t} value={t}>{MAT_TYPE_LABELS[t]}</option>)}
-                    </select>
-                  </td>
-                  <td style={inputTd}>
                     <select value={editDraft.category} onChange={e => setEditDraft(d => ({ ...d, category: e.target.value }))} style={{ ...inp, width: 150 }}>
                       <option value="">—</option>
-                      {editCats.map(c => <option key={c}>{c}</option>)}
+                      {MAT_CATEGORIES.map(c => <option key={c}>{c}</option>)}
                     </select>
                   </td>
                   <td style={inputTd}>
@@ -955,7 +926,7 @@ function Materials({ materials, onChanged }) {
                       {MAT_UNITS.map(u => <option key={u}>{u}</option>)}
                     </select>
                   </td>
-                  <td style={inputTd}><input value={editDraft.description} onChange={e => setEditDraft(d => ({ ...d, description: e.target.value }))} style={{ ...inp, width: '100%' }} /></td>
+                  <td style={inputTd}><input value={editDraft.notes} onChange={e => setEditDraft(d => ({ ...d, notes: e.target.value }))} style={{ ...inp, width: '100%' }} /></td>
                   <td style={{ ...inputTd, display: 'flex', gap: 6, alignItems: 'center', minWidth: 130 }}>
                     <button onClick={() => saveEdit(m.id)} disabled={editSave} style={primaryBtn(!editSave)}>{editSave ? '…' : 'Save'}</button>
                     <button onClick={cancelEdit} style={ghostBtn()}>Cancel</button>
@@ -965,16 +936,11 @@ function Materials({ materials, onChanged }) {
                 <tr key={m.id} style={{ background: i % 2 === 0 ? '#fff' : '#fafafa' }}>
                   <td style={{ ...td, fontFamily: 'var(--mono)', fontWeight: 700, color: SAP_BLUE }}>{m.code}</td>
                   <td style={{ ...td, fontWeight: 600 }}>{m.name}</td>
-                  <td style={{ ...td }}>
-                    {m.material_type ? (
-                      <span style={{ fontSize: 10, fontWeight: 600, padding: '1px 6px',
-                        border: '1px solid #c8cacb', background: '#f5f5f5', color: TXT_MUTED,
-                      }}>{MAT_TYPE_LABELS[m.material_type] || m.material_type}</span>
-                    ) : <span style={{ color: TXT_FAINT }}>—</span>}
-                  </td>
                   <td style={{ ...td, fontSize: 11, color: TXT_MUTED }}>{m.category || '—'}</td>
                   <td style={{ ...td, fontFamily: 'var(--mono)', fontSize: 11, color: TXT_MUTED }}>{m.base_unit}</td>
-                  <td style={{ ...td, fontSize: 11, color: TXT_FAINT, maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.description || '—'}</td>
+                  <td style={{ ...td, fontSize: 11, color: TXT_FAINT, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {m.notes || m.description || '—'}
+                  </td>
                   <td style={{ ...td, whiteSpace: 'nowrap' }}>
                     <div style={{ display: 'flex', gap: 5 }}>
                       <button onClick={() => startEdit(m)} style={{ ...ghostBtn(), fontSize: 11 }}>Edit</button>

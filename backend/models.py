@@ -36,7 +36,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy import (
     Column, Date, Integer, String, Float, Text, DateTime, Boolean,
-    ForeignKey, Index, UniqueConstraint,
+    ForeignKey, Index, UniqueConstraint, PrimaryKeyConstraint,
 )
 from sqlalchemy.orm import relationship
 
@@ -633,7 +633,7 @@ class Material(Base):
     updated_at  = Column(DateTime, nullable=True)
 
     planning_params  = relationship("MaterialPlanningParam", back_populates="material", uselist=False)
-    stock            = relationship("InventoryStock",         back_populates="material", uselist=False)
+    stock_lots       = relationship("InventoryStock",         back_populates="material")
     bp_materials     = relationship("BPMaterial",             back_populates="material",
                                     cascade="all, delete-orphan")
 
@@ -676,6 +676,7 @@ class InventoryMovement(Base):
     goods_receipt_line_id = Column(Integer, ForeignKey("goods_receipt_lines.id"), nullable=True)
     quantity_delta      = Column(Float, nullable=False)
     unit                = Column(String(20), nullable=False)
+    lot_id              = Column(String(80), nullable=True)
     movement_date       = Column(Date, nullable=False, index=True)
     notes               = Column(Text, nullable=True)
     created_by          = Column(String(80), nullable=True)
@@ -692,17 +693,22 @@ class InventoryMovement(Base):
 
 
 class InventoryStock(Base):
-    """Cached current stock, maintained only when inventory movements are posted."""
+    """Cached current stock per (material, lot). lot_id='' means no lot."""
     __tablename__ = "inventory_stock"
 
-    material_id     = Column(Integer, ForeignKey("materials.id"), primary_key=True)
+    material_id      = Column(Integer, ForeignKey("materials.id"), nullable=False, index=True)
+    lot_id           = Column(String(80), nullable=False, default='')
     quantity_on_hand = Column(Float, nullable=False, default=0.0)
-    unit            = Column(String(20), nullable=False)
+    unit             = Column(String(20), nullable=False)
     last_movement_id = Column(Integer, ForeignKey("inventory_movements.id"), nullable=True)
-    updated_at      = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    updated_at       = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
 
-    material = relationship("Material", back_populates="stock")
+    material      = relationship("Material", back_populates="stock_lots")
     last_movement = relationship("InventoryMovement")
+
+    __table_args__ = (
+        PrimaryKeyConstraint("material_id", "lot_id"),
+    )
 
 
 class MaterialPlanningParam(Base):
@@ -743,9 +749,10 @@ class MaterialIssueLine(Base):
     id          = Column(Integer, primary_key=True)
     document_id = Column(Integer, ForeignKey("material_issue_documents.id"), nullable=False, index=True)
     material_id = Column(Integer, ForeignKey("materials.id"), nullable=False, index=True)
-    quantity    = Column(Float, nullable=False)
-    unit        = Column(String(20), nullable=False)
+    quantity      = Column(Float, nullable=False)
+    unit          = Column(String(20), nullable=False)
     movement_type = Column(String(10), nullable=False, default="GI")
+    lot_id        = Column(String(80), nullable=True)
 
     document = relationship("MaterialIssueDocument", back_populates="lines")
     material = relationship("Material")
@@ -851,6 +858,8 @@ class GoodsReceiptLine(Base):
     quantity_received      = Column(Float, nullable=False)
     unit                   = Column(String(20), nullable=False)
     rate                   = Column(Float, nullable=True)   # optional on direct GRs
+
+    lot_id                 = Column(String(80), nullable=True)
 
     goods_receipt       = relationship("GoodsReceipt", back_populates="lines")
     purchase_order_line = relationship("PurchaseOrderLine")

@@ -88,7 +88,6 @@ const OPERATIONS_NAV = [
   {
     label: 'Inventory / MRP',
     items: [
-      { id: 'inventory-materials',    label: 'Material Master',      abbr: 'MM', icon: 'M2 3h12v2H2V3zm0 4h12v2H2V7zm0 4h8v2H2v-2z' },
       { id: 'inventory-stock',        label: 'Stock Overview',       abbr: 'SO', icon: 'M2 2h5.5v5.5H2V2zM8.5 2H14v5.5H8.5V2zM2 8.5h5.5V14H2V8.5zM8.5 8.5H14V14H8.5V8.5z' },
       { id: 'inventory-receipt',      label: 'Material Receipt',     abbr: 'GR', icon: 'M3 3h10v3H3V3zm0 5h10v5H3V8zm7.5-1.5v5m-2.5-2.5h5' },
       { id: 'inventory-issue',        label: 'Material Issue',       abbr: 'GI', icon: 'M3 3h10v3H3V3zm0 5h10v5H3V8zm2-3.5h6M5 10.5h3' },
