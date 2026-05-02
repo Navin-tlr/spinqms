@@ -877,16 +877,13 @@ function Materials({ materials, onChanged }) {
           </div>
           <div>
             <div style={{ fontSize: 11, color: TXT_MUTED, marginBottom: 3 }}>Category</div>
-            <select value={form.category} onChange={setF('category')} style={{ ...inp, width: '100%' }}>
-              <option value="">— Select —</option>
-              {MAT_CATEGORIES.map(c => <option key={c}>{c}</option>)}
-            </select>
+            <input value={form.category} onChange={setF('category')} list="mat-categories-list"
+              style={{ ...inp, width: '100%' }} placeholder="e.g. Raw Material" />
           </div>
           <div>
             <div style={{ fontSize: 11, color: TXT_MUTED, marginBottom: 3 }}>Unit *</div>
-            <select value={form.base_unit} onChange={setF('base_unit')} style={{ ...inp, width: '100%' }}>
-              {MAT_UNITS.map(u => <option key={u}>{u}</option>)}
-            </select>
+            <input value={form.base_unit} onChange={setF('base_unit')} list="mat-units-list"
+              style={{ ...inp, width: '100%' }} placeholder="e.g. Kg" />
           </div>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 10, alignItems: 'end' }}>
@@ -916,15 +913,12 @@ function Materials({ materials, onChanged }) {
                   <td style={inputTd}><input value={editDraft.code} onChange={e => setEditDraft(d => ({ ...d, code: e.target.value }))} style={{ ...inp, width: 120, fontFamily: 'var(--mono)', textTransform: 'uppercase' }} /></td>
                   <td style={inputTd}><input value={editDraft.name} onChange={e => setEditDraft(d => ({ ...d, name: e.target.value }))} style={{ ...inp, width: '100%' }} /></td>
                   <td style={inputTd}>
-                    <select value={editDraft.category} onChange={e => setEditDraft(d => ({ ...d, category: e.target.value }))} style={{ ...inp, width: 150 }}>
-                      <option value="">—</option>
-                      {MAT_CATEGORIES.map(c => <option key={c}>{c}</option>)}
-                    </select>
+                    <input value={editDraft.category} onChange={e => setEditDraft(d => ({ ...d, category: e.target.value }))}
+                      list="mat-categories-list" style={{ ...inp, width: 150 }} placeholder="Category" />
                   </td>
                   <td style={inputTd}>
-                    <select value={editDraft.base_unit} onChange={e => setEditDraft(d => ({ ...d, base_unit: e.target.value }))} style={{ ...inp, width: 90 }}>
-                      {MAT_UNITS.map(u => <option key={u}>{u}</option>)}
-                    </select>
+                    <input value={editDraft.base_unit} onChange={e => setEditDraft(d => ({ ...d, base_unit: e.target.value }))}
+                      list="mat-units-list" style={{ ...inp, width: 90 }} placeholder="Unit" />
                   </td>
                   <td style={inputTd}><input value={editDraft.notes} onChange={e => setEditDraft(d => ({ ...d, notes: e.target.value }))} style={{ ...inp, width: '100%' }} /></td>
                   <td style={{ ...inputTd, display: 'flex', gap: 6, alignItems: 'center', minWidth: 130 }}>
@@ -955,6 +949,14 @@ function Materials({ materials, onChanged }) {
           </table>
         )}
       </div>
+
+      {/* Shared datalists for category + unit free-text inputs */}
+      <datalist id="mat-categories-list">
+        {MAT_CATEGORIES.map(c => <option key={c} value={c} />)}
+      </datalist>
+      <datalist id="mat-units-list">
+        {MAT_UNITS.map(u => <option key={u} value={u} />)}
+      </datalist>
     </div>
   )
 }

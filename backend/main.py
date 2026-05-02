@@ -2300,8 +2300,20 @@ def _daily_consumption(db: Session, material_id: int, days: int = 7) -> Dict[dat
 
 
 def _avg_consumption(db: Session, material_id: int, days: int = 7) -> float:
+    """Return average DAILY consumption on days that had actual consumption.
+
+    We divide by the number of days with non-zero issues, NOT by the window
+    length.  Dividing by the window length would dilute consumption by zero-
+    consumption days, making runway appear ~7× too long when a material is
+    only issued on one day out of seven.
+    Example: 18 bales issued on 1 day out of 7 → avg = 18/1 = 18 bales/day,
+    not 18/7 = 2.57.  Runway = 200/18 ≈ 11 days (correct).
+    """
     trend = _daily_consumption(db, material_id, days)
-    return round(sum(trend.values()) / days, 3) if days else 0.0
+    if not trend:
+        return 0.0
+    active_days = len(trend)            # days that actually had GI movements
+    return round(sum(trend.values()) / active_days, 3)
 
 
 def _price_trend(db: Session, material_id: int) -> str:
