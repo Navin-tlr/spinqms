@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
 import {
   convertRecommendationToPO,
+  createDirectPO,
   getBusinessPartners,
+  getMaterials,
   getPurchaseOrders,
   getPurchaseRecommendations,
   receivePurchaseOrder,
@@ -50,6 +52,17 @@ const input = {
   outline: 'none',
 }
 const readOnly = { ...input, border: `1px solid ${BD}`, background: BG_HD, color: TX2 }
+const sapSel = (extra = {}) => ({
+  ...input,
+  appearance: 'none',
+  WebkitAppearance: 'none',
+  backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5' viewBox='0 0 8 5'%3E%3Cpath d='M0 0l4 5 4-5z' fill='%23666666'/%3E%3C/svg%3E")`,
+  backgroundRepeat: 'no-repeat',
+  backgroundPosition: 'right 7px center',
+  paddingRight: 22,
+  cursor: 'pointer',
+  ...extra,
+})
 
 function fmt(n) {
   if (n === null || n === undefined) return '—'
@@ -281,21 +294,31 @@ export default function PurchaseFlow({ mode = 'requisitions' }) {
   const [recommendations, setRecommendations] = useState([])
   const [orders,          setOrders]          = useState([])
   const [mmVendors,       setMmVendors]       = useState([])
+  const [materials,       setMaterials]       = useState([])
   const [loading,         setLoading]         = useState(true)
   const [convert,         setConvert]         = useState(null)  // recommendation being converted
   const [grPO,            setGrPO]            = useState(null)  // PO whose GR screen is open
+  const [newPO,           setNewPO]           = useState(false)
+  const [directPO,        setDirectPO]        = useState({
+    bp_id: '', order_date: new Date().toISOString().slice(0, 10), notes: '',
+    lines: [{ _id: Math.random(), material_id: '', quantity: '', unit: '', rate: '' }],
+  })
+  const [directPOSaving,  setDirectPOSaving]  = useState(false)
+  const [directPOError,   setDirectPOError]   = useState('')
 
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const [recs, pos, vendors] = await Promise.all([
+      const [recs, pos, vendors, mats] = await Promise.all([
         getPurchaseRecommendations('open'),
         getPurchaseOrders(),
         getBusinessPartners('MM_VENDOR'),
+        getMaterials(),
       ])
       setRecommendations(recs)
       setOrders(pos)
       setMmVendors(vendors)
+      setMaterials(mats)
     } finally {
       setLoading(false)
     }
@@ -321,6 +344,47 @@ export default function PurchaseFlow({ mode = 'requisitions' }) {
     setGrPO(null)
     await load()
   }
+
+  /* ── Direct PO helpers ── */
+  const addDirectLine = () => setDirectPO(p => ({
+    ...p,
+    lines: [...p.lines, { _id: Math.random(), material_id: '', quantity: '', unit: '', rate: '' }],
+  }))
+  const removeDirectLine = (id) => setDirectPO(p => ({
+    ...p,
+    lines: p.lines.length === 1 ? p.lines : p.lines.filter(l => l._id !== id),
+  }))
+  const updateDirectLine = (id, patch) => setDirectPO(p => ({
+    ...p,
+    lines: p.lines.map(l => l._id === id ? { ...l, ...patch } : l),
+  }))
+  const submitDirectPO = async () => {
+    setDirectPOSaving(true); setDirectPOError('')
+    try {
+      await createDirectPO({
+        business_partner_id: Number(directPO.bp_id),
+        order_date: directPO.order_date || undefined,
+        notes: directPO.notes || undefined,
+        lines: directPO.lines.map(l => ({
+          material_id: Number(l.material_id),
+          quantity_ordered: Number(l.quantity),
+          unit: l.unit,
+          rate: l.rate ? Number(l.rate) : undefined,
+        })),
+      })
+      setNewPO(false)
+      setDirectPO({
+        bp_id: '', order_date: new Date().toISOString().slice(0, 10), notes: '',
+        lines: [{ _id: Math.random(), material_id: '', quantity: '', unit: '', rate: '' }],
+      })
+      await load()
+    } catch (e) {
+      setDirectPOError(e?.response?.data?.detail || e?.message || 'An error occurred')
+    } finally {
+      setDirectPOSaving(false)
+    }
+  }
+  const canCreateDirectPO = directPO.bp_id && directPO.lines.every(l => l.material_id && Number(l.quantity) > 0)
 
   /* ── Full-page GR screen overrides the list view ── */
   if (grPO) {
@@ -353,8 +417,167 @@ export default function PurchaseFlow({ mode = 'requisitions' }) {
               : 'MRP-generated internal recommendations'}
           </span>
         </div>
-        <button onClick={load} style={{ ...input, cursor: 'pointer' }}>Refresh</button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {mode === 'orders' && (
+            <button
+              onClick={() => { setNewPO(p => !p); setDirectPOError('') }}
+              style={{
+                ...input,
+                background: newPO ? '#e8e8e8' : NAVY,
+                color: newPO ? TX : '#fff',
+                borderColor: newPO ? BD : NAVY,
+                cursor: 'pointer',
+                fontWeight: 600,
+              }}
+            >
+              {newPO ? 'Cancel' : '+ New Purchase Order'}
+            </button>
+          )}
+          <button onClick={load} style={{ ...input, cursor: 'pointer' }}>Refresh</button>
+        </div>
       </div>
+
+      {/* ── New Direct PO inline form ── */}
+      {mode === 'orders' && newPO && (
+        <div style={{ background: '#fff', border: `1px solid ${BD}` }}>
+          <div style={{ padding: '10px 16px', borderBottom: `1px solid ${BD}`, fontSize: 13, fontWeight: 600 }}>
+            New Purchase Order
+          </div>
+          <div style={{ padding: 16 }}>
+            {/* Header fields */}
+            <div style={{ display: 'flex', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
+              <div style={{ minWidth: 220 }}>
+                <div style={{ fontSize: 11, color: TX2, marginBottom: 4 }}>Business Partner (MM Vendor) *</div>
+                {mmVendors.length === 0 ? (
+                  <div style={{ fontSize: 11, color: '#bb0000' }}>No active MM_VENDOR partners — add one in Master Data → Business Partners</div>
+                ) : (
+                  <select
+                    value={directPO.bp_id}
+                    onChange={e => setDirectPO(p => ({ ...p, bp_id: e.target.value }))}
+                    style={sapSel({ width: '100%' })}
+                  >
+                    <option value="">— Select vendor —</option>
+                    {mmVendors.filter(bp => bp.status === 'Active').map(bp => (
+                      <option key={bp.id} value={bp.id}>{bp.bp_code} · {bp.name}</option>
+                    ))}
+                  </select>
+                )}
+              </div>
+              <div>
+                <div style={{ fontSize: 11, color: TX2, marginBottom: 4 }}>Order Date</div>
+                <input
+                  type="date"
+                  value={directPO.order_date}
+                  onChange={e => setDirectPO(p => ({ ...p, order_date: e.target.value }))}
+                  style={{ ...input, width: 160 }}
+                />
+              </div>
+              <div style={{ flex: 1, minWidth: 200 }}>
+                <div style={{ fontSize: 11, color: TX2, marginBottom: 4 }}>Notes (optional)</div>
+                <input
+                  value={directPO.notes}
+                  onChange={e => setDirectPO(p => ({ ...p, notes: e.target.value }))}
+                  placeholder="Optional notes"
+                  style={{ ...input, width: '100%' }}
+                />
+              </div>
+            </div>
+
+            {/* Line items */}
+            <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 10 }}>
+              <thead>
+                <tr>
+                  {['#', 'Material *', 'Qty *', 'Unit *', 'Rate (₹)', ''].map(h => (
+                    <th key={h} style={thSt}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {directPO.lines.map((line, idx) => {
+                  const mat = materials.find(m => String(m.id) === String(line.material_id))
+                  return (
+                    <tr key={line._id}>
+                      <td style={{ ...cell, width: 40, color: TX2 }}>{idx + 1}</td>
+                      <td style={{ ...cell, minWidth: 200 }}>
+                        <select
+                          value={line.material_id}
+                          onChange={e => {
+                            const m = materials.find(m => String(m.id) === e.target.value)
+                            updateDirectLine(line._id, { material_id: e.target.value, unit: m?.base_unit || '' })
+                          }}
+                          style={sapSel({ width: '100%' })}
+                        >
+                          <option value="">Select material</option>
+                          {materials.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                        </select>
+                      </td>
+                      <td style={{ ...cell, width: 120 }}>
+                        <input
+                          type="number" min="0.01" step="0.01"
+                          value={line.quantity}
+                          onChange={e => updateDirectLine(line._id, { quantity: e.target.value })}
+                          style={{ ...input, width: '100%', fontFamily: 'var(--mono)' }}
+                        />
+                      </td>
+                      <td style={{ ...cell, width: 100 }}>
+                        <input
+                          value={line.unit}
+                          onChange={e => updateDirectLine(line._id, { unit: e.target.value })}
+                          placeholder={mat?.base_unit || 'Unit'}
+                          style={{ ...input, width: '100%' }}
+                        />
+                      </td>
+                      <td style={{ ...cell, width: 130 }}>
+                        <input
+                          type="number" min="0" step="0.01"
+                          value={line.rate}
+                          onChange={e => updateDirectLine(line._id, { rate: e.target.value })}
+                          placeholder="0.00"
+                          style={{ ...input, width: '100%', fontFamily: 'var(--mono)' }}
+                        />
+                      </td>
+                      <td style={{ ...cell, width: 80 }}>
+                        <button
+                          onClick={() => removeDirectLine(line._id)}
+                          disabled={directPO.lines.length === 1}
+                          style={{
+                            ...input, cursor: directPO.lines.length === 1 ? 'not-allowed' : 'pointer',
+                            color: directPO.lines.length === 1 ? TX3 : '#bb0000', fontSize: 11,
+                          }}
+                        >
+                          Remove
+                        </button>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <button onClick={addDirectLine} style={{ ...input, cursor: 'pointer' }}>+ Add Line</button>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                {directPOError && <span style={{ fontSize: 12, color: '#bb0000', maxWidth: 400 }}>{directPOError}</span>}
+                <button onClick={() => { setNewPO(false); setDirectPOError('') }} style={{ ...input, cursor: 'pointer' }}>Cancel</button>
+                <button
+                  disabled={!canCreateDirectPO || directPOSaving}
+                  onClick={submitDirectPO}
+                  style={{
+                    ...input,
+                    background: canCreateDirectPO && !directPOSaving ? NAVY : BG_HD,
+                    color: canCreateDirectPO && !directPOSaving ? '#fff' : TX3,
+                    borderColor: canCreateDirectPO && !directPOSaving ? NAVY : BD,
+                    cursor: canCreateDirectPO && !directPOSaving ? 'pointer' : 'not-allowed',
+                    fontWeight: 600,
+                  }}
+                >
+                  {directPOSaving ? 'Creating…' : 'Create PO'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {loading ? (
         <div style={{
@@ -523,7 +746,7 @@ export default function PurchaseFlow({ mode = 'requisitions' }) {
                   <select
                     value={convert.bp_id}
                     onChange={e => setConvert({ ...convert, bp_id: e.target.value })}
-                    style={{ ...input, width: '100%' }}
+                    style={sapSel({ width: '100%' })}
                   >
                     <option value="">— Select vendor —</option>
                     {mmVendors

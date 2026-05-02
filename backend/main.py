@@ -22,6 +22,7 @@ import os
 from datetime import date, datetime, timezone
 from typing import Dict, List, Optional
 
+from pydantic import BaseModel
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -3482,6 +3483,66 @@ def list_purchase_orders(db: Session = Depends(get_db)):
                      joinedload(PurchaseOrder.lines).joinedload(PurchaseOrderLine.material))
             .order_by(PurchaseOrder.created_at.desc()).all())
     return [_po_payload(po) for po in rows]
+
+
+class DirectPOLineCreate(BaseModel):
+    material_id: int
+    quantity_ordered: float
+    unit: str
+    rate: Optional[float] = None
+
+class DirectPOCreate(BaseModel):
+    business_partner_id: int
+    order_date: Optional[date] = None
+    notes: Optional[str] = None
+    lines: List[DirectPOLineCreate]
+
+@app.post("/api/purchase/orders/direct", response_model=PurchaseOrderOut, status_code=201)
+def create_direct_purchase_order(body: DirectPOCreate, db: Session = Depends(get_db)):
+    """Create a PO directly without a purchase recommendation."""
+    bp = db.query(BusinessPartner).filter_by(id=body.business_partner_id).first()
+    if not bp:
+        raise HTTPException(404, f"Business partner {body.business_partner_id} not found")
+    if bp.status == "Blocked":
+        raise HTTPException(400, f"Business partner '{bp.name}' is blocked")
+    has_mm_role = db.query(BPRole).filter_by(
+        business_partner_id=bp.id, role="MM_VENDOR").first()
+    if not has_mm_role:
+        raise HTTPException(
+            400,
+            f"'{bp.name}' does not have the MM_VENDOR role. "
+            "Assign it in Master Data → Business Partners first.",
+        )
+    if not body.lines:
+        raise HTTPException(400, "At least one line item is required")
+    po = PurchaseOrder(
+        po_number=f"PO-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}",
+        business_partner_id=bp.id,
+        supplier=bp.name,
+        status="open",
+        order_date=body.order_date or date.today(),
+        created_at=datetime.now(timezone.utc),
+    )
+    db.add(po); db.flush()
+    for item in body.lines:
+        mat = db.query(Material).filter_by(id=item.material_id, is_active=True).first()
+        if not mat:
+            raise HTTPException(404, f"Material {item.material_id} not found")
+        db.add(PurchaseOrderLine(
+            purchase_order_id=po.id,
+            recommendation_id=None,
+            material_id=item.material_id,
+            quantity_ordered=item.quantity_ordered,
+            unit=item.unit or mat.base_unit,
+            rate=item.rate,
+            quantity_received=0.0,
+        ))
+    db.commit()
+    po = (db.query(PurchaseOrder)
+          .options(joinedload(PurchaseOrder.business_partner),
+                   joinedload(PurchaseOrder.lines).joinedload(PurchaseOrderLine.material))
+          .filter_by(id=po.id).first())
+    return _po_payload(po)
 
 
 @app.post("/api/purchase/orders/{po_id}/receive", response_model=GoodsReceiptOut, status_code=201)

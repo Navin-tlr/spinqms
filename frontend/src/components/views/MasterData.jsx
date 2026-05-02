@@ -868,26 +868,32 @@ function Materials({ materials, onChanged }) {
       {/* ── Add form ── */}
       <div style={{ background: '#fff', border: `1px solid ${BORDER}`, borderBottom: 'none', padding: '14px 16px' }}>
         <SectionLabel>Add Material</SectionLabel>
-        <div style={{ display: 'grid', gridTemplateColumns: '150px 1fr 180px 110px', gap: 10, marginBottom: 10 }}>
-          <div>
+        {/* Row 1: Code + Name */}
+        <div style={{ display: 'flex', gap: 10, marginBottom: 10 }}>
+          <div style={{ width: 160, flexShrink: 0 }}>
             <div style={{ fontSize: 11, color: TXT_MUTED, marginBottom: 3 }}>Code *</div>
             <input value={form.code} onChange={setF('code')} style={{ ...inp, width: '100%', fontFamily: 'var(--mono)', textTransform: 'uppercase' }} placeholder="e.g. RM-COTTON-01" />
           </div>
-          <div>
+          <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 11, color: TXT_MUTED, marginBottom: 3 }}>Name *</div>
             <input value={form.name} onChange={setF('name')} style={{ ...inp, width: '100%' }} placeholder="e.g. Raw Cotton — Shankar 6" />
           </div>
-          <VHField label="Category" value={form.category}
-            onChange={setF('category')} options={MAT_CATEGORIES} placeholder="Select category" />
-          <VHField label="Unit" required value={form.base_unit}
-            onChange={setF('base_unit')} options={MAT_UNITS} placeholder="Select unit" />
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 10, alignItems: 'end' }}>
-          <div>
+        {/* Row 2: Category + Unit + Notes + Add button */}
+        <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end', marginBottom: 10 }}>
+          <div style={{ width: 190, flexShrink: 0 }}>
+            <VHField label="Category" value={form.category}
+              onChange={setF('category')} options={MAT_CATEGORIES} placeholder="Select category" />
+          </div>
+          <div style={{ width: 130, flexShrink: 0 }}>
+            <VHField label="Unit" required value={form.base_unit}
+              onChange={setF('base_unit')} options={MAT_UNITS} placeholder="Select unit" />
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 11, color: TXT_MUTED, marginBottom: 3 }}>Notes</div>
             <input value={form.notes} onChange={setF('notes')} style={{ ...inp, width: '100%' }} placeholder="Optional" />
           </div>
-          <button disabled={!canSave || saving} onClick={save} style={primaryBtn(canSave && !saving)}>
+          <button disabled={!canSave || saving} onClick={save} style={{ ...primaryBtn(canSave && !saving), flexShrink: 0 }}>
             {saving ? 'Saving…' : 'Add Material'}
           </button>
         </div>

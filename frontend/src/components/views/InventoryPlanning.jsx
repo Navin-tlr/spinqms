@@ -55,6 +55,17 @@ const inp = {
   boxSizing: 'border-box',
   outline: 'none',
 }
+const sapSel = (extra = {}) => ({
+  ...inp,
+  appearance: 'none',
+  WebkitAppearance: 'none',
+  backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5' viewBox='0 0 8 5'%3E%3Cpath d='M0 0l4 5 4-5z' fill='%23666666'/%3E%3C/svg%3E")`,
+  backgroundRepeat: 'no-repeat',
+  backgroundPosition: 'right 7px center',
+  paddingRight: 22,
+  cursor: 'pointer',
+  ...extra,
+})
 const btn = (active = true, danger = false) => ({
   ...inp,
   cursor: active ? 'pointer' : 'not-allowed',
@@ -227,7 +238,7 @@ function MaterialReceipt({ materials, businessPartners, onPosted }) {
         <div style={{ display: 'grid', gridTemplateColumns: '220px 160px 160px 1fr 1fr', gap: 12, marginBottom: 12 }}>
           <div>
             <div style={{ fontSize: 11, color: '#6a6d70', marginBottom: 3 }}>Business Partner (Vendor) *</div>
-            <select value={bpId} onChange={e => setBpId(e.target.value)} style={{ ...inp, width: '100%' }}>
+            <select value={bpId} onChange={e => setBpId(e.target.value)} style={sapSel({ width: '100%' })}>
               <option value="">— Select BP —</option>
               {activeBPs.map(bp => <option key={bp.id} value={bp.id}>{bp.bp_code} · {bp.name}</option>)}
             </select>
@@ -284,7 +295,7 @@ function MaterialReceipt({ materials, businessPartners, onPosted }) {
                 <tr key={line._id}>
                   <td style={{ ...cell, width: 50, fontFamily: 'var(--mono)', color: '#89919a' }}>{idx + 1}</td>
                   <td style={{ padding: '5px 12px', borderBottom: '1px solid #eee', minWidth: 200 }}>
-                    <select value={line.material_id} onChange={e => updateRow(idx, { material_id: e.target.value, lot_id: '' })} style={{ ...inp, width: '100%' }}>
+                    <select value={line.material_id} onChange={e => updateRow(idx, { material_id: e.target.value, lot_id: '' })} style={sapSel({ width: '100%' })}>
                       <option value="">✓ Select material</option>
                       {materials.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
                     </select>
@@ -453,7 +464,7 @@ function MaterialIssue({ materials, stockLots, onPosted }) {
                         const autoLot = avail.length === 1 ? (avail[0].lot_id || '') : ''
                         updateRow(idx, { material_id: matId, lot_id: autoLot, quantity: '' })
                       }}
-                      style={{ ...inp, width: '100%' }}>
+                      style={sapSel({ width: '100%' })}>
                       <option value="">Select material</option>
                       {materials.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
                     </select>
@@ -461,7 +472,7 @@ function MaterialIssue({ materials, stockLots, onPosted }) {
                   <td style={{ padding: '5px 12px', borderBottom: '1px solid #eee', minWidth: 130 }}>
                     <select value={line.lot_id}
                       onChange={e => updateRow(idx, { lot_id: e.target.value, quantity: '' })}
-                      style={{ ...inp, width: '100%', fontFamily: 'var(--mono)', fontSize: 11 }}>
+                      style={sapSel({ width: '100%', fontFamily: 'var(--mono)', fontSize: 11 })}>
                       <option value="">No Lot</option>
                       {availLots.filter(l => l.lot_id).map(l => (
                         <option key={l.lot_id} value={l.lot_id}>{l.lot_id} ({l.closing_stock} {l.unit})</option>
