@@ -140,9 +140,11 @@ function VHField({ label, value, onChange, options, placeholder, required, mono,
   const [open, setOpen] = useState(false)
   return (
     <div style={{ position: 'relative' }}>
-      <div style={{ fontSize: 11, color: TXT_MUTED, marginBottom: 3 }}>
-        {label}{required && <span style={{ color: ERR_RED }}> *</span>}
-      </div>
+      {label !== '' && (
+        <div style={{ fontSize: 11, color: TXT_MUTED, marginBottom: 3 }}>
+          {label}{required && <span style={{ color: ERR_RED }}> *</span>}
+        </div>
+      )}
       <div style={{ display: 'flex', gap: 0 }}>
         <input
           value={value}
@@ -866,7 +868,7 @@ function Materials({ materials, onChanged }) {
       {/* ── Add form ── */}
       <div style={{ background: '#fff', border: `1px solid ${BORDER}`, borderBottom: 'none', padding: '14px 16px' }}>
         <SectionLabel>Add Material</SectionLabel>
-        <div style={{ display: 'grid', gridTemplateColumns: '150px 1fr 170px 90px', gap: 10, marginBottom: 10 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '150px 1fr 180px 110px', gap: 10, marginBottom: 10 }}>
           <div>
             <div style={{ fontSize: 11, color: TXT_MUTED, marginBottom: 3 }}>Code *</div>
             <input value={form.code} onChange={setF('code')} style={{ ...inp, width: '100%', fontFamily: 'var(--mono)', textTransform: 'uppercase' }} placeholder="e.g. RM-COTTON-01" />
@@ -875,16 +877,10 @@ function Materials({ materials, onChanged }) {
             <div style={{ fontSize: 11, color: TXT_MUTED, marginBottom: 3 }}>Name *</div>
             <input value={form.name} onChange={setF('name')} style={{ ...inp, width: '100%' }} placeholder="e.g. Raw Cotton — Shankar 6" />
           </div>
-          <div>
-            <div style={{ fontSize: 11, color: TXT_MUTED, marginBottom: 3 }}>Category</div>
-            <input value={form.category} onChange={setF('category')} list="mat-categories-list"
-              style={{ ...inp, width: '100%' }} placeholder="e.g. Raw Material" />
-          </div>
-          <div>
-            <div style={{ fontSize: 11, color: TXT_MUTED, marginBottom: 3 }}>Unit *</div>
-            <input value={form.base_unit} onChange={setF('base_unit')} list="mat-units-list"
-              style={{ ...inp, width: '100%' }} placeholder="e.g. Kg" />
-          </div>
+          <VHField label="Category" value={form.category}
+            onChange={setF('category')} options={MAT_CATEGORIES} placeholder="Select category" />
+          <VHField label="Unit" required value={form.base_unit}
+            onChange={setF('base_unit')} options={MAT_UNITS} placeholder="Select unit" />
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 10, alignItems: 'end' }}>
           <div>
@@ -912,13 +908,15 @@ function Materials({ materials, onChanged }) {
                 <tr key={m.id} style={{ background: '#f0f4ff' }}>
                   <td style={inputTd}><input value={editDraft.code} onChange={e => setEditDraft(d => ({ ...d, code: e.target.value }))} style={{ ...inp, width: 120, fontFamily: 'var(--mono)', textTransform: 'uppercase' }} /></td>
                   <td style={inputTd}><input value={editDraft.name} onChange={e => setEditDraft(d => ({ ...d, name: e.target.value }))} style={{ ...inp, width: '100%' }} /></td>
-                  <td style={inputTd}>
-                    <input value={editDraft.category} onChange={e => setEditDraft(d => ({ ...d, category: e.target.value }))}
-                      list="mat-categories-list" style={{ ...inp, width: 150 }} placeholder="Category" />
+                  <td style={{ ...inputTd, position: 'relative' }}>
+                    <VHField label="" value={editDraft.category}
+                      onChange={e => setEditDraft(d => ({ ...d, category: e.target.value }))}
+                      options={MAT_CATEGORIES} placeholder="Category" />
                   </td>
-                  <td style={inputTd}>
-                    <input value={editDraft.base_unit} onChange={e => setEditDraft(d => ({ ...d, base_unit: e.target.value }))}
-                      list="mat-units-list" style={{ ...inp, width: 90 }} placeholder="Unit" />
+                  <td style={{ ...inputTd, position: 'relative' }}>
+                    <VHField label="" value={editDraft.base_unit}
+                      onChange={e => setEditDraft(d => ({ ...d, base_unit: e.target.value }))}
+                      options={MAT_UNITS} placeholder="Unit" />
                   </td>
                   <td style={inputTd}><input value={editDraft.notes} onChange={e => setEditDraft(d => ({ ...d, notes: e.target.value }))} style={{ ...inp, width: '100%' }} /></td>
                   <td style={{ ...inputTd, display: 'flex', gap: 6, alignItems: 'center', minWidth: 130 }}>
@@ -950,13 +948,6 @@ function Materials({ materials, onChanged }) {
         )}
       </div>
 
-      {/* Shared datalists for category + unit free-text inputs */}
-      <datalist id="mat-categories-list">
-        {MAT_CATEGORIES.map(c => <option key={c} value={c} />)}
-      </datalist>
-      <datalist id="mat-units-list">
-        {MAT_UNITS.map(u => <option key={u} value={u} />)}
-      </datalist>
     </div>
   )
 }
