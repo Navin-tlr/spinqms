@@ -43,9 +43,9 @@ function FilterInput({ label, children }) {
 }
 
 const inputStyle = {
-  padding: '5px 8px', fontSize: 12,
-  border: '1px solid #89919a', borderRadius: 2,
-  background: '#fff', color: '#32363a', fontFamily: 'var(--font)',
+  padding: '4px 8px', fontSize: 12,
+  border: '1px solid #bfbfbf', borderRadius: 0,
+  background: '#fff', color: '#1d1d1d', fontFamily: 'var(--font)',
   outline: 'none',
 }
 
@@ -108,12 +108,12 @@ export default function ProductionLog() {
   const totalKg = entries.reduce((s, e) => s + (e.primary_kg || 0), 0)
 
   const thStyle = (col) => ({
-    padding: '7px 12px',
+    padding: '5px 8px',
     textAlign: 'left',
-    fontSize: 11, fontWeight: 600, color: '#6a6d70',
-    textTransform: 'uppercase', letterSpacing: '.07em',
-    background: '#f5f5f5',
-    borderBottom: '1px solid #d9dadb',
+    fontSize: 11, fontWeight: 700, color: '#1d1d1d',
+    textTransform: 'uppercase', letterSpacing: '.05em',
+    background: '#e8e8e8',
+    border: '1px solid #cccccc',
     cursor: col ? 'pointer' : 'default',
     userSelect: 'none',
     whiteSpace: 'nowrap',
@@ -124,7 +124,7 @@ export default function ProductionLog() {
 
       {/* ── Page header bar ─────────────────────────────────────────── */}
       <div style={{
-        background: '#fff', border: '1px solid #d9dadb', borderBottom: 'none',
+        background: '#fff', border: '1px solid #e0e0e0', borderBottom: 'none',
         padding: '10px 16px',
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
       }}>
@@ -144,7 +144,7 @@ export default function ProductionLog() {
 
       {/* ── SAP filter bar (inline, flat) ───────────────────────────── */}
       <div style={{
-        background: '#fff', border: '1px solid #d9dadb', borderBottom: 'none',
+        background: '#fff', border: '1px solid #e0e0e0', borderBottom: 'none',
         padding: '12px 16px',
         display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-end',
       }}>
@@ -188,7 +188,7 @@ export default function ProductionLog() {
       </div>
 
       {/* ── SAP table ────────────────────────────────────────────────── */}
-      <div style={{ background: '#fff', border: '1px solid #d9dadb', overflowX: 'auto' }}>
+      <div style={{ background: '#fff', border: '1px solid #e0e0e0', overflowX: 'auto' }}>
         {loading ? (
           <div style={{ padding: 48, textAlign: 'center' }}><Spinner /></div>
         ) : sorted.length === 0 ? (
@@ -226,50 +226,50 @@ export default function ProductionLog() {
             <tbody>
               {sorted.map((e, i) => {
                 const meta = DEPT_META[e.dept_id] || {}
-                const odd  = i % 2 === 0
+                const C = { padding: '5px 8px', fontSize: 12, color: '#1d1d1d', borderBottom: '1px solid #eaeaea', borderRight: '1px solid #eaeaea' }
                 return (
-                  <tr key={e.id} style={{ background: odd ? '#fff' : '#fafafa' }}>
-                    <td style={{ padding: '7px 12px', fontSize: 12, color: '#32363a', borderBottom: '1px solid #eeeeee', whiteSpace: 'nowrap' }}>
+                  <tr key={e.id}
+                    style={{ background: i % 2 === 0 ? '#fff' : '#fafafa' }}
+                    onMouseEnter={ev => ev.currentTarget.style.background = '#f0f4ff'}
+                    onMouseLeave={ev => ev.currentTarget.style.background = i % 2 === 0 ? '#fff' : '#fafafa'}
+                  >
+                    <td style={{ ...C, whiteSpace: 'nowrap', fontFamily: 'var(--mono)', color: '#5a5a5a' }}>
                       {fmtDate(e.entry_date)}
                     </td>
-                    <td style={{ padding: '7px 12px', fontSize: 12, color: '#32363a', fontWeight: 500, borderBottom: '1px solid #eeeeee' }}>
-                      {meta.name}
-                    </td>
-                    <td style={{ padding: '7px 12px', fontSize: 12, color: '#32363a', borderBottom: '1px solid #eeeeee' }}>
-                      Shift {e.shift}
-                    </td>
-                    <td style={{ padding: '7px 12px', fontSize: 12, color: '#6a6d70', fontFamily: 'var(--mono)', borderBottom: '1px solid #eeeeee' }}>
+                    <td style={{ ...C, fontWeight: 600 }}>{meta.name}</td>
+                    <td style={{ ...C, color: '#5a5a5a' }}>Shift {e.shift}</td>
+                    <td style={{ ...C, fontFamily: 'var(--mono)', color: '#8c8c8c' }}>
                       {e.machine_number ? `#${e.machine_number}` : '—'}
                     </td>
-                    <td style={{ padding: '7px 12px', fontSize: 11, color: '#89919a', textTransform: 'uppercase', letterSpacing: '.05em', borderBottom: '1px solid #eeeeee' }}>
+                    <td style={{ ...C, fontSize: 11, color: '#8c8c8c', textTransform: 'uppercase', letterSpacing: '.04em' }}>
                       {e.calc_method === 'efficiency' ? 'Efficiency' : 'Hank Meter'}
                     </td>
-                    <td style={{ padding: '7px 12px', fontSize: 11, color: '#6a6d70', fontFamily: 'var(--mono)', borderBottom: '1px solid #eeeeee' }}>
+                    <td style={{ ...C, fontSize: 11, color: '#5a5a5a', fontFamily: 'var(--mono)' }}>
                       {e.calc_method === 'efficiency'
                         ? `${e.std_rate_kg_per_hr} × ${e.efficiency_pct}% × ${e.running_hours}h`
                         : `H=${e.hank_reading} · S=${e.spindle_count} · Ne=${e.ne_count}`
                       }
                     </td>
-                    <td style={{ padding: '7px 12px', borderBottom: '1px solid #eeeeee' }}>
-                      <span style={{ fontFamily: 'var(--mono)', fontSize: 13, fontWeight: 600, color: SAP_BLUE }}>
+                    <td style={{ ...C, textAlign: 'right' }}>
+                      <span style={{ fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 700, color: SAP_BLUE }}>
                         {fmtKg(e.primary_kg)}
                       </span>
                     </td>
-                    <td style={{ padding: '7px 12px', fontFamily: 'var(--mono)', fontSize: 12, color: '#6a6d70', borderBottom: '1px solid #eeeeee' }}>
+                    <td style={{ ...C, fontFamily: 'var(--mono)', fontSize: 12, color: '#5a5a5a', textAlign: 'right' }}>
                       {e.theoretical_kg ? fmtKg(e.theoretical_kg) : '—'}
                     </td>
-                    <td style={{ padding: '7px 12px', borderBottom: '1px solid #eeeeee' }}>
+                    <td style={{ ...C, borderRight: 'none' }}>
                       <button
                         onClick={() => handleDelete(e.id)}
                         disabled={deleting === e.id}
                         style={{
-                          padding: '3px 8px', fontSize: 11,
-                          border: '1px solid #d9dadb', borderRadius: 2,
+                          padding: '2px 8px', fontSize: 11,
+                          border: '1px solid #e0e0e0', borderRadius: 0,
                           background: '#fff', color: '#6a6d70',
                           cursor: 'pointer', fontFamily: 'var(--font)',
                         }}
                         onMouseEnter={ev => { ev.currentTarget.style.borderColor = '#bb0000'; ev.currentTarget.style.color = '#bb0000' }}
-                        onMouseLeave={ev => { ev.currentTarget.style.borderColor = '#d9dadb'; ev.currentTarget.style.color = '#6a6d70' }}
+                        onMouseLeave={ev => { ev.currentTarget.style.borderColor = '#e0e0e0'; ev.currentTarget.style.color = '#6a6d70' }}
                       >
                         {deleting === e.id ? '…' : 'Delete'}
                       </button>

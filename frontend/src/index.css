@@ -90,19 +90,19 @@
 
   --purple: #6d2ac4; --purple-bg: #f3ecfb; --purple-bd: #c4a4e6;
 
-  /* ── Geometry — SAP rigid grid (no soft rounding) ── */
-  --r:    2px;
-  --r-lg: 2px;
-  --r-xl: 4px;
+  /* ── Geometry — 0px everywhere (SAP precision surfaces) ── */
+  --r:    0px;
+  --r-lg: 0px;
+  --r-xl: 0px;
 
   --sidebar:           220px;
   --sidebar-collapsed: 48px;
-  --hdr:               44px;
+  --hdr:               40px;
 
-  /* ── Elevation — SAP subtle shadows ─────────────── */
-  --shadow:    0 1px 4px rgba(0, 0, 0, .08);
-  --shadow-md: 0 2px 12px rgba(0, 0, 0, .10), 0 1px 3px rgba(0, 0, 0, .06);
-  --shadow-lg: 0 6px 24px rgba(0, 0, 0, .12), 0 2px 6px rgba(0, 0, 0, .06);
+  /* ── Elevation — none (SAP flat control UI) ─────────── */
+  --shadow:    none;
+  --shadow-md: none;
+  --shadow-lg: none;
 }
 
 /* ── Dark mode ──────────────────────────────────────── */
@@ -149,8 +149,8 @@
 html, body {
   height: 100%;
   font-family: var(--font);
-  font-size: 14px;
-  line-height: 1.55;
+  font-size: 13px;
+  line-height: 1.5;
   color: var(--tx);
   background: var(--bg-2);
   -webkit-font-smoothing: antialiased;
@@ -158,6 +158,28 @@ html, body {
   text-rendering: optimizeLegibility;
 }
 body { overflow: hidden; }
+
+/* ── SAP Control surfaces — system-wide ─────────────── */
+/* All form controls: flat, sharp, no native OS gradients */
+input, select, textarea, button {
+  border-radius: 0;
+  font-family: var(--font);
+  font-size: 12px;
+}
+
+/* SAP-style select: removes native macOS/Windows chrome,
+   injects a minimal SVG chevron as background image */
+select {
+  -webkit-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5' viewBox='0 0 8 5'%3E%3Cpath d='M0 0l4 5 4-5z' fill='%23666666'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  padding-right: 24px;
+  cursor: pointer;
+}
+
+/* SAP focus ring — thin blue outline, no spread glow */
 
 /* ── Tabular numerics — applied wherever --mono is used ─────────────────── */
 [style*="var(--mono)"], .mono { font-variant-numeric: tabular-nums; }
@@ -167,15 +189,15 @@ input[type="number"]::-webkit-outer-spin-button,
 input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 input[type="number"] { -moz-appearance: textfield; }
 
-/* ── Focus ring ─────────────────────────────────────── */
+/* ── Focus ring — SAP thin outline, no glow ─────────── */
 input:focus, select:focus, textarea:focus {
   outline: none;
-  border-color: var(--claude) !important;
-  box-shadow: 0 0 0 3px rgba(0, 100, 217, .15), 0 0 0 1px var(--claude) !important;
+  border-color: #0070f2 !important;
+  box-shadow: none !important;
 }
 button:focus-visible {
-  outline: 2px solid var(--claude);
-  outline-offset: 2px;
+  outline: 1px solid #0070f2;
+  outline-offset: 1px;
 }
 
 /* ── Scrollbars — minimal ───────────────────────────── */
