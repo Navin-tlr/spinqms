@@ -50,48 +50,52 @@ export default function Settings({ depts, onSettingsChanged }) {
             <thead>
               <tr>
                 {['Department','Target hank','Tolerance ±','USL (auto)','LSL (auto)','Sample length','Expected weight'].map(h => (
-                  <th key={h} style={{ padding:'8px 12px', textAlign:'left', fontSize:10, fontWeight:600, color:'var(--tx-3)', letterSpacing:'.05em', textTransform:'uppercase', borderBottom:'1px solid var(--bd-md)', whiteSpace:'nowrap' }}>{h}</th>
+                  <th key={h} style={{ padding: '5px 8px', textAlign: 'left', fontSize: 11, fontWeight: 700, color: '#1d1d1d', letterSpacing: '.05em', textTransform: 'uppercase', background: '#e8e8e8', border: '1px solid #cccccc', whiteSpace: 'nowrap' }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {depts.map(d => {
+              {depts.map((d, i) => {
                 const p = d.target >= 10 ? 1 : 4
                 const expW = (d.def_len * 0.54 / d.target).toFixed(2)
                 return (
-                  <tr key={d.id}>
-                    <td style={{ padding:'9px 12px', borderBottom:'1px solid var(--bd)', fontWeight:500 }}>
+                  <tr key={d.id}
+                    style={{ background: i % 2 === 0 ? '#fff' : '#fafafa' }}
+                    onMouseEnter={e => { e.currentTarget.style.background = '#f0f4ff' }}
+                    onMouseLeave={e => { e.currentTarget.style.background = i % 2 === 0 ? '#fff' : '#fafafa' }}
+                  >
+                    <td style={{ padding: '5px 8px', fontSize: 12, color: '#1d1d1d', borderBottom: '1px solid #eaeaea', borderRight: '1px solid #eaeaea', fontWeight: 500 }}>
                       {d.name}<br/>
-                      <span style={{ fontSize:10, color:'var(--tx-3)', fontWeight:400 }}>{d.unit}</span>
+                      <span style={{ fontSize: 10, color: '#5a5a5a', fontWeight: 400 }}>{d.unit}</span>
                     </td>
-                    <td style={{ padding:'9px 12px', borderBottom:'1px solid var(--bd)' }}>
+                    <td style={{ padding: '5px 8px', fontSize: 12, color: '#1d1d1d', borderBottom: '1px solid #eaeaea', borderRight: '1px solid #eaeaea' }}>
                       <SettingInput
                         value={d.target} step={d.target >= 10 ? 0.1 : 0.0001}
                         onBlur={v => handleChange(d.id, 'target', v)}
                       />
                     </td>
-                    <td style={{ padding:'9px 12px', borderBottom:'1px solid var(--bd)' }}>
+                    <td style={{ padding: '5px 8px', fontSize: 12, color: '#1d1d1d', borderBottom: '1px solid #eaeaea', borderRight: '1px solid #eaeaea' }}>
                       <SettingInput
                         value={d.tol} step={d.target >= 10 ? 0.1 : 0.0001}
                         onBlur={v => handleChange(d.id, 'tolerance', v)}
                       />
                     </td>
-                    <td style={{ padding:'9px 12px', borderBottom:'1px solid var(--bd)', fontFamily:'var(--mono)', fontSize:12, color:'var(--tx-2)' }}>
+                    <td style={{ padding: '5px 8px', borderBottom: '1px solid #eaeaea', borderRight: '1px solid #eaeaea', fontFamily: 'var(--mono)', fontSize: 12, color: '#1d1d1d', textAlign: 'right' }}>
                       {(d.target + d.tol).toFixed(p)}
                     </td>
-                    <td style={{ padding:'9px 12px', borderBottom:'1px solid var(--bd)', fontFamily:'var(--mono)', fontSize:12, color:'var(--tx-2)' }}>
+                    <td style={{ padding: '5px 8px', borderBottom: '1px solid #eaeaea', borderRight: '1px solid #eaeaea', fontFamily: 'var(--mono)', fontSize: 12, color: '#1d1d1d', textAlign: 'right' }}>
                       {(d.target - d.tol).toFixed(p)}
                     </td>
-                    <td style={{ padding:'9px 12px', borderBottom:'1px solid var(--bd)' }}>
-                      <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                    <td style={{ padding: '5px 8px', fontSize: 12, color: '#1d1d1d', borderBottom: '1px solid #eaeaea', borderRight: '1px solid #eaeaea' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                         <SettingInput
                           value={d.def_len} step={0.5} width={70}
                           onBlur={v => handleChange(d.id, 'def_len', v)}
                         />
-                        <span style={{ fontSize:11, color:'var(--tx-3)' }}>yds</span>
+                        <span style={{ fontSize: 11, color: '#5a5a5a' }}>yds</span>
                       </div>
                     </td>
-                    <td style={{ padding:'9px 12px', borderBottom:'1px solid var(--bd)', fontFamily:'var(--mono)', fontSize:12, color:'var(--tx-2)' }}>
+                    <td style={{ padding: '5px 8px', borderBottom: '1px solid #eaeaea', fontFamily: 'var(--mono)', fontSize: 12, color: '#1d1d1d', textAlign: 'right' }}>
                       ~{expW} g
                     </td>
                   </tr>
@@ -129,9 +133,9 @@ function SettingInput({ value, step, onBlur, width = 100 }) {
       onChange={e => setLocal(e.target.value)}
       onBlur={e => onBlur(e.target.value)}
       style={{
-        width, padding:'5px 8px', border:'1px solid var(--bd-md)', borderRadius:'var(--r)',
-        fontSize:13, fontFamily:'var(--mono)', background:'var(--bg)', color:'var(--tx)',
-        textAlign:'right', transition:'border-color .12s',
+        width, padding: '4px 7px', border: '1px solid #bfbfbf', borderRadius: 0,
+        fontSize: 12, fontFamily: 'var(--mono)', background: '#fff', color: '#1d1d1d',
+        textAlign: 'right', transition: 'border-color .12s', outline: 'none',
       }}
     />
   )

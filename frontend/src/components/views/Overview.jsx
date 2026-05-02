@@ -21,12 +21,13 @@ function rangeParams(id) {
 function TH({ children, right }) {
   return (
     <th style={{
-      padding: right ? '0 0 10px 12px' : '0 0 10px',
+      padding: '5px 8px',
       textAlign: right ? 'right' : 'left',
-      fontSize: 10, fontWeight: 600,
-      color: 'var(--tx-4)',
-      letterSpacing: '.08em', textTransform: 'uppercase',
-      borderBottom: '1px solid var(--bd-md)',
+      fontSize: 11, fontWeight: 700,
+      color: '#1d1d1d',
+      letterSpacing: '.05em', textTransform: 'uppercase',
+      background: '#e8e8e8',
+      border: '1px solid #cccccc',
       whiteSpace: 'nowrap',
     }}>{children}</th>
   )
@@ -57,15 +58,15 @@ export default function Overview({ overview: propOverview, currentDept, setCurre
   const p    = dept?.target >= 10 ? 2 : 4
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14, background: '#f2f6fa', padding: 16 }}>
 
       {/* ── Time range selector ── */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap',
-        padding: '9px 14px',
-        background: 'var(--bg)',
-        border: '1px solid var(--bd-md)',
-        borderRadius: 'var(--r-lg)',
+        padding: '10px 16px',
+        background: '#fff',
+        border: '1px solid #e0e0e0',
+        justifyContent: 'space-between',
       }}>
         <span style={{
           fontSize: 10, fontWeight: 600, letterSpacing: '.08em',
@@ -76,12 +77,12 @@ export default function Overview({ overview: propOverview, currentDept, setCurre
         </span>
         {RANGES.map(r => (
           <button key={r.id} onClick={() => handleRange(r.id)} style={{
-            padding: '4px 12px', fontSize: 11, fontWeight: range === r.id ? 500 : 400,
-            border: '1px solid', borderRadius: 2, cursor: 'pointer',
+            padding: '4px 14px', fontSize: 12, fontWeight: range === r.id ? 600 : 400,
+            border: '1px solid', borderRadius: 0, cursor: 'pointer',
             fontFamily: 'var(--font)', lineHeight: 1.6,
-            background:  range === r.id ? 'var(--claude)' : '#fff',
-            color:       range === r.id ? '#fff' : 'var(--tx-2)',
-            borderColor: range === r.id ? 'var(--claude)' : 'var(--bd-md)',
+            background:  range === r.id ? '#012169' : '#fff',
+            color:       range === r.id ? '#fff' : '#1d1d1d',
+            borderColor: range === r.id ? '#012169' : '#bfbfbf',
           }}>
             {r.label}
           </button>
@@ -193,22 +194,22 @@ export default function Overview({ overview: propOverview, currentDept, setCurre
               const qDot      = d.quality === 'ok' ? 'var(--ok)' : d.quality === 'warn' ? 'var(--warn)' : d.quality === 'bad' ? 'var(--bad)' : 'var(--tx-4)'
               const qCol      = d.quality === 'ok' ? 'var(--ok)' : d.quality === 'warn' ? 'var(--warn)' : d.quality === 'bad' ? 'var(--bad)' : null
 
+              const rowBgBase = i % 2 === 0 ? '#fff' : '#fafafa'
               const rowStyle = {
                 cursor: 'pointer',
-                background: isActive ? 'var(--bg-active)' : 'transparent',
+                background: isActive ? '#f0f4ff' : rowBgBase,
                 transition: 'background .1s',
-                borderRadius: 'var(--r)',
               }
-              const hoverOn  = e => { if (!isActive) e.currentTarget.style.background = 'var(--bg-hover)' }
-              const hoverOff = e => { if (!isActive) e.currentTarget.style.background = 'transparent' }
+              const hoverOn  = e => { if (!isActive) e.currentTarget.style.background = '#f0f4ff' }
+              const hoverOff = e => { if (!isActive) e.currentTarget.style.background = rowBgBase }
 
               if (d.n === 0) return (
                 <tr key={d.dept_id} onClick={() => setCurrentDept(d.dept_id)}
                   style={rowStyle} onMouseEnter={hoverOn} onMouseLeave={hoverOff}>
-                  <td style={{ padding: '8px 0 8px 12px', borderBottom: rowBd, borderLeft: isActive ? '3px solid var(--claude)' : '3px solid transparent' }}>
-                    <span style={{ fontSize: 12, color: 'var(--tx-3)', fontWeight: isActive ? 500 : 400 }}>{d.name}</span>
+                  <td style={{ padding: '5px 8px', borderBottom: '1px solid #eaeaea', borderRight: '1px solid #eaeaea', borderLeft: isActive ? '3px solid #012169' : '3px solid transparent', fontSize: 12, color: '#1d1d1d', fontWeight: isActive ? 500 : 400 }}>
+                    {d.name}
                   </td>
-                  <td colSpan={6} style={{ padding: '8px 0 8px 12px', borderBottom: rowBd, color: 'var(--tx-4)', fontSize: 11, fontStyle: 'italic' }}>
+                  <td colSpan={6} style={{ padding: '5px 8px', borderBottom: '1px solid #eaeaea', color: '#8c8c8c', fontSize: 12, fontStyle: 'italic' }}>
                     No data recorded
                   </td>
                 </tr>
@@ -219,19 +220,19 @@ export default function Overview({ overview: propOverview, currentDept, setCurre
                 <tr key={d.dept_id} onClick={() => setCurrentDept(d.dept_id)}
                   style={rowStyle} onMouseEnter={hoverOn} onMouseLeave={hoverOff}>
                   {/* Department name — left border indicates active */}
-                  <td style={{ padding: '8px 0 8px 12px', borderBottom: rowBd, borderLeft: isActive ? '3px solid var(--claude)' : '3px solid transparent' }}>
-                    <span style={{ fontSize: 12, fontWeight: isActive ? 500 : 400, color: isActive ? 'var(--claude)' : 'var(--tx)' }}>{d.name}</span>
+                  <td style={{ padding: '5px 8px', borderBottom: '1px solid #eaeaea', borderRight: '1px solid #eaeaea', borderLeft: isActive ? '3px solid #012169' : '3px solid transparent', fontSize: 12, fontWeight: isActive ? 500 : 400, color: isActive ? '#012169' : '#1d1d1d' }}>
+                    {d.name}
                   </td>
                   {/* Numeric columns — monospace, right-aligned, regular weight */}
-                  <td style={{ padding: '8px 12px', borderBottom: rowBd, fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--tx-3)', textAlign: 'right' }}>{d.n}</td>
-                  <td style={{ padding: '8px 12px', borderBottom: rowBd, fontFamily: 'var(--mono)', fontSize: 12, textAlign: 'right' }}>{d.mean?.toFixed(pp)}</td>
-                  <td style={{ padding: '8px 12px', borderBottom: rowBd, fontFamily: 'var(--mono)', fontSize: 12, color: qCol ?? 'var(--tx)', fontWeight: 500, textAlign: 'right' }}>
+                  <td style={{ padding: '5px 8px', borderBottom: '1px solid #eaeaea', borderRight: '1px solid #eaeaea', fontFamily: 'var(--mono)', fontSize: 12, color: '#5a5a5a', textAlign: 'right' }}>{d.n}</td>
+                  <td style={{ padding: '5px 8px', borderBottom: '1px solid #eaeaea', borderRight: '1px solid #eaeaea', fontFamily: 'var(--mono)', fontSize: 12, textAlign: 'right' }}>{d.mean?.toFixed(pp)}</td>
+                  <td style={{ padding: '5px 8px', borderBottom: '1px solid #eaeaea', borderRight: '1px solid #eaeaea', fontFamily: 'var(--mono)', fontSize: 12, color: qCol ?? '#1d1d1d', fontWeight: 500, textAlign: 'right' }}>
                     {d.cv != null ? `${d.cv.toFixed(2)}%` : '—'}
                   </td>
-                  <td style={{ padding: '8px 12px', borderBottom: rowBd, fontFamily: 'var(--mono)', fontSize: 12, textAlign: 'right' }}>{d.cpk?.toFixed(2) ?? '—'}</td>
-                  <td style={{ padding: '8px 12px', borderBottom: rowBd, fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--tx-3)', textAlign: 'right' }}>{d.cp?.toFixed(2) ?? '—'}</td>
+                  <td style={{ padding: '5px 8px', borderBottom: '1px solid #eaeaea', borderRight: '1px solid #eaeaea', fontFamily: 'var(--mono)', fontSize: 12, textAlign: 'right' }}>{d.cpk?.toFixed(2) ?? '—'}</td>
+                  <td style={{ padding: '5px 8px', borderBottom: '1px solid #eaeaea', borderRight: '1px solid #eaeaea', fontFamily: 'var(--mono)', fontSize: 12, color: '#5a5a5a', textAlign: 'right' }}>{d.cp?.toFixed(2) ?? '—'}</td>
                   {/* Status badge */}
-                  <td style={{ padding: '8px 14px', borderBottom: rowBd }}>
+                  <td style={{ padding: '5px 8px', borderBottom: '1px solid #eaeaea' }}>
                     {d.quality && <Badge variant={d.quality}>{qualityLabel[d.quality]}</Badge>}
                   </td>
                 </tr>

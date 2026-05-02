@@ -176,9 +176,9 @@ export default function DataEntry({ depts, currentDept, setCurrentDept, onSaved 
                 max={new Date(Date.now() - 60000).toISOString().slice(0, 16)}
                 onChange={e => setHistoricalTs(e.target.value)}
                 style={{
-                  padding: '7px 10px', border: '1px solid var(--bd-md)', borderRadius: 'var(--r)',
-                  fontSize: 13, fontFamily: 'var(--mono)', background: 'var(--bg)', color: 'var(--tx)',
-                  minWidth: 210,
+                  padding: '4px 7px', border: '1px solid #bfbfbf', borderRadius: 0,
+                  fontSize: 12, fontFamily: 'var(--mono)', background: '#fff', color: '#1d1d1d',
+                  minWidth: 210, outline: 'none',
                 }}
               />
               {historicalTs && (
@@ -204,9 +204,9 @@ export default function DataEntry({ depts, currentDept, setCurrentDept, onSaved 
               <input type="number" min="1" max="240" step="0.5" value={sampleLen}
                 onChange={e => setSampleLen(parseFloat(e.target.value) || dept.def_len)}
                 style={{
-                  width: 66, padding: '7px 8px', border: '1px solid var(--bd-md)',
-                  borderRadius: 'var(--r)', fontSize: 17, fontWeight: 600, fontFamily: 'var(--mono)',
-                  background: 'var(--bg-3)', color: 'var(--tx)', textAlign: 'center',
+                  width: 66, padding: '4px 7px', border: '1px solid #bfbfbf',
+                  borderRadius: 0, fontSize: 17, fontWeight: 600, fontFamily: 'var(--mono)',
+                  background: 'var(--bg-3)', color: 'var(--tx)', textAlign: 'center', outline: 'none',
                 }} />
               <span style={{ fontSize: 12, color: 'var(--tx-3)' }}>yards</span>
             </div>
@@ -228,9 +228,9 @@ export default function DataEntry({ depts, currentDept, setCurrentDept, onSaved 
                   onChange={e => setFrameNum(e.target.value)}
                   placeholder={`1–${machineConf.max}`}
                   style={{
-                    width: 66, padding: '7px 8px', border: '1px solid var(--bd-md)',
-                    borderRadius: 'var(--r)', fontSize: 17, fontWeight: 600, fontFamily: 'var(--mono)',
-                    background: 'var(--bg-3)', color: 'var(--tx)', textAlign: 'center',
+                    width: 66, padding: '4px 7px', border: '1px solid #bfbfbf',
+                    borderRadius: 0, fontSize: 17, fontWeight: 600, fontFamily: 'var(--mono)',
+                    background: 'var(--bg-3)', color: 'var(--tx)', textAlign: 'center', outline: 'none',
                   }} />
               </SettingField>
             </>
@@ -348,7 +348,7 @@ export default function DataEntry({ depts, currentDept, setCurrentDept, onSaved 
                       style={{
                         padding: '9px 4px',
                         border: `1px solid ${bdColor}`,
-                        borderRadius: 'var(--r)',
+                        borderRadius: 0,
                         fontSize: 13, fontFamily: 'var(--mono)', fontWeight: 500,
                         background: bgColor, color: 'var(--tx)',
                         textAlign: 'center', width: '100%',
@@ -572,7 +572,7 @@ function ResultCallout({ result, sampleLen, mode, deptName, machineConf, wasHist
             <thead>
               <tr>
                 {[machineConf?.label ?? 'Machine', 'Shift', result.unit === 'Ne' ? 'Ne (x̄)' : 'Hank (x̄)', 'σ', 'CV%', 'Cpk', 'UCL', 'LCL', 'Status'].map(h => (
-                  <th key={h} style={{ padding: '5px 8px', textAlign: 'left', fontSize: 9.5, fontWeight: 600, color: 'var(--tx-4)', letterSpacing: '.06em', textTransform: 'uppercase', borderBottom: '1px solid var(--bd)' }}>{h}</th>
+                  <th key={h} style={{ padding: '5px 8px', textAlign: 'left', fontSize: 11, fontWeight: 700, color: '#1d1d1d', letterSpacing: '.05em', textTransform: 'uppercase', background: '#e8e8e8', border: '1px solid #cccccc', whiteSpace: 'nowrap' }}>{h}</th>
                 ))}
               </tr>
             </thead>
@@ -684,4 +684,4 @@ function SegCtrl({ opts, value, onChange }) {
   )
 }
 
-const TC = { padding: '6px 8px', borderBottom: '1px solid var(--bd)', fontSize: 12 }
+const TC = { padding: '5px 8px', fontSize: 12, color: '#1d1d1d', borderBottom: '1px solid #eaeaea', borderRight: '1px solid #eaeaea' }

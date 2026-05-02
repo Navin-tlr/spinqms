@@ -2402,24 +2402,25 @@ function InfoTip({ formula, explain }) {
 /* ── Shared table style atoms ───────────────────────────────────────────────── */
 const IR_TH = ({ children, right, left }) => (
   <th style={{
-    padding: '7px 10px',
+    padding: '5px 8px',
     textAlign: right ? 'right' : 'left',
-    fontSize: 11, fontWeight: 600,
-    color: 'var(--tx-3)',
-    borderBottom: '2px solid var(--bd-md)',
+    fontSize: 11, fontWeight: 700,
+    color: '#1d1d1d',
+    letterSpacing: '.05em', textTransform: 'uppercase',
+    background: '#e8e8e8',
+    border: '1px solid #cccccc',
     whiteSpace: 'nowrap',
-    background: 'transparent',
-    position: 'relative',
   }}>{children}</th>
 )
 const IR_TD = ({ children, right, color, mono, dim }) => (
   <td style={{
-    padding: '6px 10px',
+    padding: '5px 8px',
     textAlign: right ? 'right' : 'left',
     fontSize: 12,
-    color: color ?? (dim ? 'var(--tx-3)' : 'var(--tx)'),
+    color: color ?? (dim ? '#8c8c8c' : '#1d1d1d'),
     fontFamily: mono ? 'var(--mono)' : 'inherit',
-    borderBottom: '1px solid var(--bd)',
+    borderBottom: '1px solid #eaeaea',
+    borderRight: '1px solid #eaeaea',
   }}>{children ?? '—'}</td>
 )
 
@@ -3199,8 +3200,8 @@ function MatrixView({ hierarchy }) {
   // Matrix A: for each can, show its bobbins mean_hank
   // Matrix B: for each bobbin that has cops, show cop mean_hanks
 
-  const thStyle = { padding: '4px 8px', fontSize: 10, fontWeight: 700, color: 'var(--tx-4)', textAlign: 'center', background: 'var(--bg-2)', border: '1px solid var(--bd)', whiteSpace: 'nowrap' }
-  const tdStyle = { padding: '4px 8px', fontSize: 11, textAlign: 'center', fontFamily: 'var(--mono)', border: '1px solid var(--bd)', whiteSpace: 'nowrap' }
+  const thStyle = { padding: '5px 8px', fontSize: 11, fontWeight: 700, color: '#1d1d1d', textAlign: 'center', letterSpacing: '.05em', textTransform: 'uppercase', background: '#e8e8e8', border: '1px solid #cccccc', whiteSpace: 'nowrap' }
+  const tdStyle = { padding: '5px 8px', fontSize: 12, textAlign: 'center', fontFamily: 'var(--mono)', color: '#1d1d1d', borderBottom: '1px solid #eaeaea', borderRight: '1px solid #eaeaea', whiteSpace: 'nowrap' }
 
   const hankColor = (val, mean) => {
     if (val == null || mean == null) return 'var(--tx-4)'
@@ -3332,8 +3333,8 @@ function VariationView({ variation }) {
   const sectionStyle = { display: 'flex', flexDirection: 'column', gap: 12 }
   const hdrStyle = { fontSize: 12, fontWeight: 700, color: 'var(--tx-2)', paddingBottom: 6, borderBottom: '1px solid var(--bd)' }
   const subStyle = { fontSize: 10, color: 'var(--tx-4)', fontWeight: 400 }
-  const thStyle = { padding: '5px 10px', fontSize: 10, fontWeight: 700, color: 'var(--tx-4)', textAlign: 'left', background: 'var(--bg-2)', borderBottom: '1px solid var(--bd)' }
-  const tdStyle = { padding: '4px 10px', fontSize: 11, fontFamily: 'var(--mono)', borderBottom: '1px solid var(--bd)' }
+  const thStyle = { padding: '5px 8px', fontSize: 11, fontWeight: 700, color: '#1d1d1d', textAlign: 'left', letterSpacing: '.05em', textTransform: 'uppercase', background: '#e8e8e8', border: '1px solid #cccccc' }
+  const tdStyle = { padding: '5px 8px', fontSize: 12, fontFamily: 'var(--mono)', color: '#1d1d1d', borderBottom: '1px solid #eaeaea', borderRight: '1px solid #eaeaea' }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
@@ -4404,7 +4405,7 @@ function SegCtrl({ opts, value, onChange }) {
   return (
     <div style={{
       display: 'inline-flex', border: '1px solid var(--bd-md)',
-      borderRadius: 'var(--r)', overflow: 'hidden',
+      borderRadius: 0, overflow: 'hidden',
     }}>
       {opts.map(([v, label]) => (
         <button key={v} onClick={() => onChange(v)}
@@ -4426,7 +4427,7 @@ function SmBtn({ children, onClick, primary, danger, disabled }) {
       style={{
         padding: '6px 14px', fontSize: 12, fontWeight: 500,
         border: `1px solid ${primary ? 'var(--claude)' : danger ? 'var(--bad-bd)' : 'var(--bd-md)'}`,
-        borderRadius: 'var(--r)', cursor: disabled ? 'default' : 'pointer',
+        borderRadius: 0, cursor: disabled ? 'default' : 'pointer',
         fontFamily: 'var(--font)', lineHeight: 1, whiteSpace: 'nowrap',
         background: primary ? 'var(--claude)' : danger ? 'var(--bad-bg)' : 'var(--bg)',
         color: primary ? '#fff' : danger ? 'var(--bad)' : 'var(--tx-2)',
@@ -4439,11 +4440,10 @@ function SmBtn({ children, onClick, primary, danger, disabled }) {
 }
 
 const inputStyle = {
-  padding: '6px 10px', fontSize: 12, fontFamily: 'var(--mono)',
-  border: '1px solid var(--bd)', borderRadius: 'var(--r)',
-  background: 'var(--bg)', color: 'var(--tx)',
+  padding: '4px 7px', fontSize: 12, fontFamily: 'var(--font)',
+  border: '1px solid #bfbfbf', borderRadius: 0,
+  background: '#fff', color: '#1d1d1d',
   outline: 'none', width: '100%', boxSizing: 'border-box',
-  transition: 'border-color .1s',
 }
 
 function FlaskIcon({ size = 16, color = 'var(--claude)' }) {

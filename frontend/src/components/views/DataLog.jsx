@@ -88,9 +88,9 @@ function EditModal({ row, onClose, onSaved }) {
                   type="number" step="0.0001" value={v}
                   onChange={e => { const n = [...vals]; n[i] = e.target.value; setVals(n) }}
                   style={{
-                    padding: '9px 6px', textAlign: 'center', fontSize: 13, fontFamily: 'var(--mono)',
-                    border: '1.5px solid var(--bd-md)', borderRadius: 'var(--r)',
-                    background: 'var(--bg)', color: 'var(--tx)', width: '100%',
+                    padding: '4px 7px', textAlign: 'center', fontSize: 12, fontFamily: 'var(--mono)',
+                    border: '1px solid #bfbfbf', borderRadius: 0,
+                    background: '#fff', color: '#1d1d1d', width: '100%', outline: 'none',
                   }}
                 />
               </div>
@@ -105,14 +105,14 @@ function EditModal({ row, onClose, onSaved }) {
         {/* Actions */}
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
           <button onClick={onClose} style={{
-            padding: '7px 18px', fontSize: 12, fontFamily: 'var(--font)', fontWeight: 500,
-            border: '1px solid var(--bd-md)', borderRadius: 'var(--r)', background: 'transparent',
-            color: 'var(--tx-2)', cursor: 'pointer',
+            padding: '4px 14px', fontSize: 12, fontFamily: 'var(--font)', fontWeight: 400,
+            border: '1px solid #bfbfbf', borderRadius: 0, background: '#fff',
+            color: '#1d1d1d', cursor: 'pointer',
           }}>Cancel</button>
           <button onClick={handleSave} disabled={saving} style={{
-            padding: '7px 18px', fontSize: 12, fontFamily: 'var(--font)', fontWeight: 600,
-            border: 'none', borderRadius: 'var(--r)',
-            background: saving ? 'var(--bg-3)' : 'var(--claude)', color: '#fff', cursor: saving ? 'default' : 'pointer',
+            padding: '4px 14px', fontSize: 12, fontFamily: 'var(--font)', fontWeight: 600,
+            border: '1px solid #012169', borderRadius: 0,
+            background: saving ? '#e8e8e8' : '#012169', color: saving ? '#8c8c8c' : '#fff', cursor: saving ? 'default' : 'pointer',
           }}>
             {saving ? 'Saving…' : 'Save changes'}
           </button>
@@ -189,14 +189,14 @@ export default function DataLog({ depts, refreshKey, currentDept, machineFilter 
 
   const SortTh = ({ col, children }) => (
     <th onClick={() => handleSort(col)}
-      style={{ padding:'8px 12px', textAlign:'left', fontSize:10, fontWeight:600, color:'var(--tx-3)', letterSpacing:'.05em', textTransform:'uppercase', borderBottom:'1px solid var(--bd-md)', whiteSpace:'nowrap', cursor:'pointer', userSelect:'none' }}>
+      style={{ padding: '5px 8px', textAlign: 'left', fontSize: 11, fontWeight: 700, color: '#1d1d1d', letterSpacing: '.05em', textTransform: 'uppercase', background: '#e8e8e8', border: '1px solid #cccccc', whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none' }}>
       {children} {sortCol === col ? (sortDir === 'asc' ? '↑' : '↓') : <span style={{opacity:.35}}>↕</span>}
     </th>
   )
 
   const Th = ({ children, title }) => (
     <th title={title}
-      style={{ padding:'8px 12px', textAlign:'left', fontSize:10, fontWeight:600, color:'var(--tx-3)', letterSpacing:'.05em', textTransform:'uppercase', borderBottom:'1px solid var(--bd-md)', whiteSpace:'nowrap' }}>
+      style={{ padding: '5px 8px', textAlign: 'left', fontSize: 11, fontWeight: 700, color: '#1d1d1d', letterSpacing: '.05em', textTransform: 'uppercase', background: '#e8e8e8', border: '1px solid #cccccc', whiteSpace: 'nowrap' }}>
       {children}
     </th>
   )
@@ -227,12 +227,12 @@ export default function DataLog({ depts, refreshKey, currentDept, machineFilter 
 
           <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
             <select value={deptFilter} onChange={e => setDeptFilter(e.target.value)}
-              style={{ padding:'5px 10px', fontSize:12, background:'var(--bg)', color:'var(--tx)', border:'1px solid var(--bd-md)', borderRadius:'var(--r)', cursor:'pointer' }}>
+              style={{ padding: '4px 7px', fontSize: 12, background: '#fff', color: '#1d1d1d', border: '1px solid #bfbfbf', borderRadius: 0, cursor: 'pointer', fontFamily: 'var(--font)', outline: 'none' }}>
               <option value="ALL">All Departments</option>
               {depts.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
             </select>
             <select value={shiftFilter} onChange={e => setShiftFilter(e.target.value)}
-              style={{ padding:'5px 10px', fontSize:12, background:'var(--bg)', color:'var(--tx)', border:'1px solid var(--bd-md)', borderRadius:'var(--r)', cursor:'pointer' }}>
+              style={{ padding: '4px 7px', fontSize: 12, background: '#fff', color: '#1d1d1d', border: '1px solid #bfbfbf', borderRadius: 0, cursor: 'pointer', fontFamily: 'var(--font)', outline: 'none' }}>
               <option value="ALL">All Shifts</option>
               <option value="A">Shift A</option>
               <option value="B">Shift B</option>
@@ -241,18 +241,18 @@ export default function DataLog({ depts, refreshKey, currentDept, machineFilter 
 
             {/* Date range */}
             <div style={{ display:'flex', alignItems:'center', gap:5 }}>
-              <span style={{ fontSize:11, color:'var(--tx-3)', fontWeight:500, whiteSpace:'nowrap' }}>From</span>
+              <span style={{ fontSize:11, color:'#5a5a5a', fontWeight:500, whiteSpace:'nowrap' }}>From</span>
               <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
                 max={dateTo || undefined}
-                style={{ padding:'4px 8px', fontSize:12, background:'var(--bg)', color:'var(--tx)', border:'1px solid var(--bd-md)', borderRadius:'var(--r)', cursor:'pointer', fontFamily:'var(--font)' }} />
-              <span style={{ fontSize:11, color:'var(--tx-3)', fontWeight:500, whiteSpace:'nowrap' }}>to</span>
+                style={{ padding: '4px 7px', fontSize: 12, background: '#fff', color: '#1d1d1d', border: '1px solid #bfbfbf', borderRadius: 0, cursor: 'pointer', fontFamily: 'var(--font)', outline: 'none' }} />
+              <span style={{ fontSize:11, color:'#5a5a5a', fontWeight:500, whiteSpace:'nowrap' }}>to</span>
               <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
                 min={dateFrom || undefined}
-                style={{ padding:'4px 8px', fontSize:12, background:'var(--bg)', color:'var(--tx)', border:'1px solid var(--bd-md)', borderRadius:'var(--r)', cursor:'pointer', fontFamily:'var(--font)' }} />
+                style={{ padding: '4px 7px', fontSize: 12, background: '#fff', color: '#1d1d1d', border: '1px solid #bfbfbf', borderRadius: 0, cursor: 'pointer', fontFamily: 'var(--font)', outline: 'none' }} />
               {(dateFrom || dateTo) && (
                 <button onClick={() => { setDateFrom(''); setDateTo('') }}
                   title="Clear date filter"
-                  style={{ padding:'3px 8px', fontSize:11, border:'1px solid var(--bd-md)', borderRadius:'var(--r)', background:'transparent', color:'var(--tx-3)', cursor:'pointer', lineHeight:1 }}>
+                  style={{ padding: '4px 14px', fontSize: 12, border: '1px solid #bfbfbf', borderRadius: 0, background: '#fff', color: '#1d1d1d', cursor: 'pointer', lineHeight: 1, fontFamily: 'var(--font)' }}>
                   ✕
                 </button>
               )}
@@ -321,8 +321,13 @@ export default function DataLog({ depts, refreshKey, currentDept, machineFilter 
                   : 'var(--bad)'
                 const rowMachineConf = MACHINE_CONFIG[r.dept_id] ?? null
 
+                const rowBg = i % 2 === 0 ? '#fff' : '#fafafa'
                 return (
-                  <tr key={r.id}>
+                  <tr key={r.id}
+                    style={{ background: rowBg }}
+                    onMouseEnter={e => { e.currentTarget.style.background = '#f0f4ff' }}
+                    onMouseLeave={e => { e.currentTarget.style.background = rowBg }}
+                  >
                     <td style={TD}><span style={{ fontFamily:'var(--mono)', fontSize:12 }}>{dateStr} {timeStr}</span></td>
                     <td style={TD}>{r.dept_name}</td>
                     <td style={TD}><Badge variant="neutral">Shift {r.shift}</Badge></td>
@@ -352,13 +357,13 @@ export default function DataLog({ depts, refreshKey, currentDept, machineFilter 
                         disabled={editLoading === r.id}
                         title="Edit readings"
                         style={{
-                          padding:'4px 9px', fontSize:11, border:'1px solid var(--bd-md)', borderRadius:'var(--r)',
-                          background:'transparent', color:'var(--tx-2)', cursor: editLoading === r.id ? 'default' : 'pointer', lineHeight:1,
-                          transition:'all .12s', display:'inline-flex', alignItems:'center', gap:4,
-                          opacity: editLoading === r.id ? 0.5 : 1,
+                          padding: '4px 14px', fontSize: 12, border: '1px solid #bfbfbf', borderRadius: 0,
+                          background: '#fff', color: '#1d1d1d', cursor: editLoading === r.id ? 'default' : 'pointer', lineHeight: 1,
+                          transition: 'all .12s', display: 'inline-flex', alignItems: 'center', gap: 4,
+                          opacity: editLoading === r.id ? 0.5 : 1, fontFamily: 'var(--font)',
                         }}
-                        onMouseEnter={e => { if (editLoading !== r.id) { e.currentTarget.style.background='var(--bg-2)'; e.currentTarget.style.borderColor='var(--tx-3)'; e.currentTarget.style.color='var(--tx)' }}}
-                        onMouseLeave={e => { e.currentTarget.style.background='transparent'; e.currentTarget.style.borderColor='var(--bd-md)'; e.currentTarget.style.color='var(--tx-2)' }}
+                        onMouseEnter={e => { if (editLoading !== r.id) { e.currentTarget.style.background='#f0f4ff'; e.currentTarget.style.borderColor='#012169'; e.currentTarget.style.color='#012169' }}}
+                        onMouseLeave={e => { e.currentTarget.style.background='#fff'; e.currentTarget.style.borderColor='#bfbfbf'; e.currentTarget.style.color='#1d1d1d' }}
                       >
                         <PencilIcon size={11} /> {editLoading === r.id ? '…' : 'Edit'}
                       </button>
@@ -366,7 +371,7 @@ export default function DataLog({ depts, refreshKey, currentDept, machineFilter 
                     {/* Delete */}
                     <td style={{ ...TD, textAlign:'center' }}>
                       <button onClick={() => handleDelete(r.id)} title="Delete this entry"
-                        style={{ padding:'4px 9px', fontSize:11, border:'1px solid var(--bad)', borderRadius:'var(--r)', background:'transparent', color:'var(--bad)', cursor:'pointer', lineHeight:1, transition:'all .12s' }}
+                        style={{ padding: '4px 14px', fontSize: 12, border: '1px solid var(--bad)', borderRadius: 0, background: 'transparent', color: 'var(--bad)', cursor: 'pointer', lineHeight: 1, transition: 'all .12s', fontFamily: 'var(--font)' }}
                         onMouseEnter={e => { e.currentTarget.style.background='var(--bad)'; e.currentTarget.style.color='#fff' }}
                         onMouseLeave={e => { e.currentTarget.style.background='transparent'; e.currentTarget.style.color='var(--bad)' }}>
                         Delete
@@ -383,4 +388,4 @@ export default function DataLog({ depts, refreshKey, currentDept, machineFilter 
   )
 }
 
-const TD = { padding:'9px 12px', borderBottom:'1px solid var(--bd)' }
+const TD = { padding: '5px 8px', fontSize: 12, color: '#1d1d1d', borderBottom: '1px solid #eaeaea', borderRight: '1px solid #eaeaea' }

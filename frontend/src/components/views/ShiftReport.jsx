@@ -91,9 +91,9 @@ function Pill({ active, onClick, children, danger }) {
 
 /* ── Inline time input ───────────────────────────────────────────────────── */
 const timeInput = {
-  padding: '5px 8px', fontSize: 12, border: '1px solid var(--bd-md)',
-  borderRadius: 'var(--r)', background: 'var(--bg)', color: 'var(--tx)',
-  fontFamily: 'var(--mono)',
+  padding: '4px 7px', fontSize: 12, border: '1px solid #bfbfbf',
+  borderRadius: 0, background: '#fff', color: '#1d1d1d',
+  fontFamily: 'var(--mono)', outline: 'none',
 }
 
 export default function ShiftReport() {
@@ -178,9 +178,9 @@ export default function ShiftReport() {
                 </div>
               ))}
               <button onClick={saveDefs} style={{
-                alignSelf: 'flex-start', padding: '5px 14px', fontSize: 12, borderRadius: 20,
-                border: '1.5px solid var(--claude)', background: 'var(--claude)', color: '#fff',
-                cursor: 'pointer', fontFamily: 'var(--font)',
+                alignSelf: 'flex-start', padding: '4px 14px', fontSize: 12, borderRadius: 0,
+                border: '1px solid #012169', background: '#012169', color: '#fff',
+                cursor: 'pointer', fontFamily: 'var(--font)', fontWeight: 600,
               }}>Save times</button>
             </div>
           )}
@@ -227,16 +227,19 @@ export default function ShiftReport() {
               <thead>
                 <tr>
                   {['Department', 'n', 'Avg weight', 'Mean (x̄)', 'σ', 'CV%', 'Cpk', 'Cp', 'UCL (3σ)', 'LCL (3σ)', 'Status'].map(h => (
-                    <th key={h} style={{ padding: '8px 12px', textAlign: 'left', fontSize: 10, fontWeight: 600, color: 'var(--tx-3)', letterSpacing: '.05em', textTransform: 'uppercase', borderBottom: '1px solid var(--bd-md)', whiteSpace: 'nowrap' }}>{h}</th>
+                    <th key={h} style={{ padding: '5px 8px', textAlign: 'left', fontSize: 11, fontWeight: 700, color: '#1d1d1d', letterSpacing: '.05em', textTransform: 'uppercase', background: '#e8e8e8', border: '1px solid #cccccc', whiteSpace: 'nowrap' }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {data.map((d, i) => {
+                  const rowBg = i % 2 === 0 ? '#fff' : '#fafafa'
                   if (d.n === 0) return (
-                    <tr key={d.dept_id} style={{ background: i % 2 === 0 ? 'var(--bg)' : 'var(--bg-2)' }}>
-                      <td style={{ padding: '9px 12px', borderBottom: '1px solid var(--bd)' }}>{d.name}</td>
-                      <td colSpan={10} style={{ padding: '9px 12px', color: 'var(--tx-3)', fontSize: 12, borderBottom: '1px solid var(--bd)', fontStyle: 'italic' }}>No data</td>
+                    <tr key={d.dept_id} style={{ background: rowBg }}
+                      onMouseEnter={e => { e.currentTarget.style.background = '#f0f4ff' }}
+                      onMouseLeave={e => { e.currentTarget.style.background = rowBg }}>
+                      <td style={{ padding: '5px 8px', fontSize: 12, color: '#1d1d1d', borderBottom: '1px solid #eaeaea', borderRight: '1px solid #eaeaea' }}>{d.name}</td>
+                      <td colSpan={10} style={{ padding: '5px 8px', color: '#5a5a5a', fontSize: 12, borderBottom: '1px solid #eaeaea', fontStyle: 'italic' }}>No data</td>
                     </tr>
                   )
                   const p    = d.target >= 10 ? 2 : 4
@@ -244,18 +247,20 @@ export default function ShiftReport() {
                   const L    = d.target >= 10 ? 120 : 6
                   const avgW = d.mean ? ((L * 0.54) / d.mean).toFixed(2) : '—'
                   return (
-                    <tr key={d.dept_id} style={{ background: i % 2 === 0 ? 'var(--bg)' : 'var(--bg-2)', transition: 'background .1s' }}>
-                      <td style={{ padding: '9px 12px', borderBottom: '1px solid var(--bd)', fontWeight: 500 }}>{d.name}</td>
-                      <td style={{ padding: '9px 12px', fontFamily: 'var(--mono)', fontSize: 12, borderBottom: '1px solid var(--bd)', color: 'var(--tx-3)' }}>{d.n}</td>
-                      <td style={{ padding: '9px 12px', fontFamily: 'var(--mono)', fontSize: 12, borderBottom: '1px solid var(--bd)', color: 'var(--tx-3)' }}>{avgW} g</td>
-                      <td style={{ padding: '9px 12px', fontFamily: 'var(--mono)', fontSize: 12, borderBottom: '1px solid var(--bd)' }}>{d.mean?.toFixed(p + 2)}</td>
-                      <td style={{ padding: '9px 12px', fontFamily: 'var(--mono)', fontSize: 12, borderBottom: '1px solid var(--bd)', color: 'var(--tx-3)' }}>{d.sd?.toFixed(p + 3)}</td>
-                      <td style={{ padding: '9px 12px', fontWeight: 600, borderBottom: '1px solid var(--bd)', color: qCol }}>{d.cv?.toFixed(3)}%</td>
-                      <td style={{ padding: '9px 12px', fontFamily: 'var(--mono)', fontSize: 12, borderBottom: '1px solid var(--bd)', color: qCol }}>{d.cpk?.toFixed(3) ?? '—'}</td>
-                      <td style={{ padding: '9px 12px', fontFamily: 'var(--mono)', fontSize: 12, borderBottom: '1px solid var(--bd)', color: 'var(--tx-3)' }}>{d.cp?.toFixed(3) ?? '—'}</td>
-                      <td style={{ padding: '9px 12px', fontFamily: 'var(--mono)', fontSize: 12, borderBottom: '1px solid var(--bd)' }}>{d.ucl?.toFixed(p + 2)}</td>
-                      <td style={{ padding: '9px 12px', fontFamily: 'var(--mono)', fontSize: 12, borderBottom: '1px solid var(--bd)' }}>{d.lcl?.toFixed(p + 2)}</td>
-                      <td style={{ padding: '9px 12px', borderBottom: '1px solid var(--bd)' }}>
+                    <tr key={d.dept_id} style={{ background: rowBg, transition: 'background .1s' }}
+                      onMouseEnter={e => { e.currentTarget.style.background = '#f0f4ff' }}
+                      onMouseLeave={e => { e.currentTarget.style.background = rowBg }}>
+                      <td style={{ padding: '5px 8px', fontSize: 12, color: '#1d1d1d', borderBottom: '1px solid #eaeaea', borderRight: '1px solid #eaeaea', fontWeight: 500 }}>{d.name}</td>
+                      <td style={{ padding: '5px 8px', fontFamily: 'var(--mono)', fontSize: 12, color: '#1d1d1d', borderBottom: '1px solid #eaeaea', borderRight: '1px solid #eaeaea', textAlign: 'right' }}>{d.n}</td>
+                      <td style={{ padding: '5px 8px', fontFamily: 'var(--mono)', fontSize: 12, color: '#1d1d1d', borderBottom: '1px solid #eaeaea', borderRight: '1px solid #eaeaea', textAlign: 'right' }}>{avgW} g</td>
+                      <td style={{ padding: '5px 8px', fontFamily: 'var(--mono)', fontSize: 12, color: '#1d1d1d', borderBottom: '1px solid #eaeaea', borderRight: '1px solid #eaeaea', textAlign: 'right' }}>{d.mean?.toFixed(p + 2)}</td>
+                      <td style={{ padding: '5px 8px', fontFamily: 'var(--mono)', fontSize: 12, color: '#5a5a5a', borderBottom: '1px solid #eaeaea', borderRight: '1px solid #eaeaea', textAlign: 'right' }}>{d.sd?.toFixed(p + 3)}</td>
+                      <td style={{ padding: '5px 8px', fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 600, borderBottom: '1px solid #eaeaea', borderRight: '1px solid #eaeaea', color: qCol, textAlign: 'right' }}>{d.cv?.toFixed(3)}%</td>
+                      <td style={{ padding: '5px 8px', fontFamily: 'var(--mono)', fontSize: 12, borderBottom: '1px solid #eaeaea', borderRight: '1px solid #eaeaea', color: qCol, textAlign: 'right' }}>{d.cpk?.toFixed(3) ?? '—'}</td>
+                      <td style={{ padding: '5px 8px', fontFamily: 'var(--mono)', fontSize: 12, color: '#5a5a5a', borderBottom: '1px solid #eaeaea', borderRight: '1px solid #eaeaea', textAlign: 'right' }}>{d.cp?.toFixed(3) ?? '—'}</td>
+                      <td style={{ padding: '5px 8px', fontFamily: 'var(--mono)', fontSize: 12, color: '#1d1d1d', borderBottom: '1px solid #eaeaea', borderRight: '1px solid #eaeaea', textAlign: 'right' }}>{d.ucl?.toFixed(p + 2)}</td>
+                      <td style={{ padding: '5px 8px', fontFamily: 'var(--mono)', fontSize: 12, color: '#1d1d1d', borderBottom: '1px solid #eaeaea', borderRight: '1px solid #eaeaea', textAlign: 'right' }}>{d.lcl?.toFixed(p + 2)}</td>
+                      <td style={{ padding: '5px 8px', borderBottom: '1px solid #eaeaea' }}>
                         <Badge variant={d.quality}>{d.quality === 'ok' ? 'In control' : d.quality === 'warn' ? 'Warning' : 'Action'}</Badge>
                       </td>
                     </tr>

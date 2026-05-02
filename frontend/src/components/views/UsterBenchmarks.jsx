@@ -41,9 +41,9 @@ function Pill({ active, onClick, children }) {
 }
 
 const dateInput = {
-  padding: '5px 8px', fontSize: 12, border: '1px solid var(--bd-md)',
-  borderRadius: 'var(--r)', background: 'var(--bg)', color: 'var(--tx)',
-  fontFamily: 'var(--mono)',
+  padding: '4px 7px', fontSize: 12, border: '1px solid #bfbfbf',
+  borderRadius: 0, background: '#fff', color: '#1d1d1d',
+  fontFamily: 'var(--font)', outline: 'none',
 }
 
 export default function UsterBenchmarks() {
@@ -134,27 +134,34 @@ export default function UsterBenchmarks() {
                 <thead>
                   <tr>
                     {['Stage', '5% (Best)', '25% ★', '50% Median', '75%', '95%', 'Your CV%', 'Rank'].map(h => (
-                      <th key={h} style={{ padding: '8px 12px', textAlign: 'left', fontSize: 10, fontWeight: 600, color: 'var(--tx-3)', letterSpacing: '.05em', textTransform: 'uppercase', borderBottom: '1px solid var(--bd-md)', whiteSpace: 'nowrap' }}>{h}</th>
+                      <th key={h} style={{ padding: '5px 8px', textAlign: 'left', fontSize: 11, fontWeight: 700, color: '#1d1d1d', letterSpacing: '.05em', textTransform: 'uppercase', background: '#e8e8e8', border: '1px solid #cccccc', whiteSpace: 'nowrap' }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {usterData.map((row, i) => (
-                    <tr key={row.dept_id} style={{ background: i % 2 === 0 ? 'var(--bg)' : 'var(--bg-2)' }}>
-                      <td style={{ padding: '9px 12px', borderBottom: '1px solid var(--bd)', fontWeight: 500 }}>{row.name}</td>
-                      <td style={{ padding: '9px 12px', borderBottom: '1px solid var(--bd)', fontFamily: 'var(--mono)', fontSize: 12 }}>{row.uster.p5}%</td>
-                      <td style={{ padding: '9px 12px', borderBottom: '1px solid var(--bd)', fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 600, color: 'var(--claude)' }}>{row.uster.p25}%</td>
-                      <td style={{ padding: '9px 12px', borderBottom: '1px solid var(--bd)', fontFamily: 'var(--mono)', fontSize: 12 }}>{row.uster.p50}%</td>
-                      <td style={{ padding: '9px 12px', borderBottom: '1px solid var(--bd)', fontFamily: 'var(--mono)', fontSize: 12 }}>{row.uster.p75}%</td>
-                      <td style={{ padding: '9px 12px', borderBottom: '1px solid var(--bd)', fontFamily: 'var(--mono)', fontSize: 12 }}>{row.uster.p95}%</td>
-                      <td style={{ padding: '9px 12px', borderBottom: '1px solid var(--bd)', fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 700, color: row.quality === 'ok' ? 'var(--ok)' : row.quality === 'warn' ? 'var(--warn)' : row.cv != null ? 'var(--bad)' : 'var(--tx-3)' }}>
-                        {row.cv != null ? `${row.cv.toFixed(2)}%` : '—'}
-                      </td>
-                      <td style={{ padding: '9px 12px', borderBottom: '1px solid var(--bd)' }}>
-                        {row.rank ? <Badge variant={row.quality}>{row.rank}</Badge> : '—'}
-                      </td>
-                    </tr>
-                  ))}
+                  {usterData.map((row, i) => {
+                    const rowBg = i % 2 === 0 ? '#fff' : '#fafafa'
+                    return (
+                      <tr key={row.dept_id}
+                        style={{ background: rowBg }}
+                        onMouseEnter={e => { e.currentTarget.style.background = '#f0f4ff' }}
+                        onMouseLeave={e => { e.currentTarget.style.background = rowBg }}
+                      >
+                        <td style={{ padding: '5px 8px', fontSize: 12, color: '#1d1d1d', borderBottom: '1px solid #eaeaea', borderRight: '1px solid #eaeaea', fontWeight: 500 }}>{row.name}</td>
+                        <td style={{ padding: '5px 8px', fontSize: 12, color: '#1d1d1d', borderBottom: '1px solid #eaeaea', borderRight: '1px solid #eaeaea', fontFamily: 'var(--mono)', textAlign: 'right' }}>{row.uster.p5}%</td>
+                        <td style={{ padding: '5px 8px', fontSize: 12, borderBottom: '1px solid #eaeaea', borderRight: '1px solid #eaeaea', fontFamily: 'var(--mono)', fontWeight: 600, color: 'var(--claude)', textAlign: 'right' }}>{row.uster.p25}%</td>
+                        <td style={{ padding: '5px 8px', fontSize: 12, color: '#1d1d1d', borderBottom: '1px solid #eaeaea', borderRight: '1px solid #eaeaea', fontFamily: 'var(--mono)', textAlign: 'right' }}>{row.uster.p50}%</td>
+                        <td style={{ padding: '5px 8px', fontSize: 12, color: '#1d1d1d', borderBottom: '1px solid #eaeaea', borderRight: '1px solid #eaeaea', fontFamily: 'var(--mono)', textAlign: 'right' }}>{row.uster.p75}%</td>
+                        <td style={{ padding: '5px 8px', fontSize: 12, color: '#1d1d1d', borderBottom: '1px solid #eaeaea', borderRight: '1px solid #eaeaea', fontFamily: 'var(--mono)', textAlign: 'right' }}>{row.uster.p95}%</td>
+                        <td style={{ padding: '5px 8px', fontSize: 12, borderBottom: '1px solid #eaeaea', borderRight: '1px solid #eaeaea', fontFamily: 'var(--mono)', fontWeight: 700, textAlign: 'right', color: row.quality === 'ok' ? 'var(--ok)' : row.quality === 'warn' ? 'var(--warn)' : row.cv != null ? 'var(--bad)' : '#8c8c8c' }}>
+                          {row.cv != null ? `${row.cv.toFixed(2)}%` : '—'}
+                        </td>
+                        <td style={{ padding: '5px 8px', fontSize: 12, color: '#1d1d1d', borderBottom: '1px solid #eaeaea' }}>
+                          {row.rank ? <Badge variant={row.quality}>{row.rank}</Badge> : '—'}
+                        </td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             </TblWrap>
@@ -214,7 +221,7 @@ function Field({ label, value, onChange, width }) {
       <label style={{ fontSize: 12, color: 'var(--tx-2)' }}>{label}</label>
       <input
         type="number" value={value} onChange={e => onChange(e.target.value)}
-        style={{ width, padding: '7px 10px', border: '1px solid var(--bd-md)', borderRadius: 'var(--r)', fontSize: 13, fontFamily: 'var(--font)', background: 'var(--bg)', color: 'var(--tx)' }}
+        style={{ width, padding: '4px 7px', border: '1px solid #bfbfbf', borderRadius: 0, fontSize: 12, fontFamily: 'var(--font)', background: '#fff', color: '#1d1d1d', outline: 'none' }}
       />
     </div>
   )

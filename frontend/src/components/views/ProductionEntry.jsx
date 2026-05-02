@@ -15,7 +15,7 @@ import {
 } from '../../api.js'
 
 const SAP_BLUE   = '#012169'
-const SAP_BORDER = '#89919a'
+const SAP_BORDER = '#bfbfbf'
 const SAP_BG     = '#f2f2f2'
 
 /* ── Department configuration ─────────────────────────────────────────── */
@@ -31,7 +31,7 @@ const DEPTS = [
 function SapLabel({ children, required }) {
   return (
     <label style={{
-      fontSize: 12, fontWeight: 400, color: '#6a6d70',
+      fontSize: 12, fontWeight: 400, color: '#5a5a5a',
       display: 'block', marginBottom: 4,
     }}>
       {children}
@@ -53,16 +53,16 @@ function SapInput({ value, onChange, type = 'text', placeholder, min, max, step,
         width: '100%',
         padding: '7px 10px',
         fontSize: 13,
-        border: `1px solid ${disabled ? '#d9dadb' : SAP_BORDER}`,
-        borderRadius: 2,
+        border: `1px solid ${disabled ? '#e0e0e0' : SAP_BORDER}`,
+        borderRadius: 0,
         background: disabled ? '#f2f2f2' : '#fff',
-        color: disabled ? '#89919a' : '#32363a',
+        color: disabled ? '#8c8c8c' : '#1d1d1d',
         fontFamily: 'var(--mono)',
         outline: 'none',
         boxSizing: 'border-box',
       }}
       onFocus={e => { if (!disabled) { e.target.style.borderColor = SAP_BLUE; e.target.style.outline = `2px solid rgba(8,84,160,.2)`; e.target.style.outlineOffset = 0 }}}
-      onBlur={e => { e.target.style.borderColor = disabled ? '#d9dadb' : SAP_BORDER; e.target.style.outline = 'none' }}
+      onBlur={e => { e.target.style.borderColor = disabled ? '#e0e0e0' : SAP_BORDER; e.target.style.outline = 'none' }}
     />
   )
 }
@@ -72,7 +72,7 @@ function Field({ label, required, hint, children }) {
     <div>
       <SapLabel required={required}>{label}</SapLabel>
       {children}
-      {hint && <div style={{ fontSize: 11, color: '#89919a', marginTop: 3 }}>{hint}</div>}
+      {hint && <div style={{ fontSize: 11, color: '#8c8c8c', marginTop: 3 }}>{hint}</div>}
     </div>
   )
 }
@@ -82,9 +82,9 @@ function SectionTitle({ children }) {
   return (
     <div style={{
       fontSize: 11, fontWeight: 600, textTransform: 'uppercase',
-      letterSpacing: '.09em', color: '#6a6d70',
+      letterSpacing: '.09em', color: '#5a5a5a',
       paddingBottom: 8, marginBottom: 14,
-      borderBottom: '1px solid #d9dadb',
+      borderBottom: '1px solid #e0e0e0',
     }}>
       {children}
     </div>
@@ -98,22 +98,22 @@ function FormulaPanel({ dept, fields, result, theoretical }) {
   return (
     <div style={{
       background: '#fff',
-      border: '1px solid #d9dadb',
+      border: '1px solid #e0e0e0',
       borderLeft: `3px solid ${SAP_BLUE}`,
     }}>
       <div style={{
         padding: '10px 16px',
-        borderBottom: '1px solid #d9dadb',
-        background: '#f5f5f5',
+        borderBottom: '1px solid #e0e0e0',
+        background: '#e8e8e8',
         fontSize: 11, fontWeight: 600, textTransform: 'uppercase',
-        letterSpacing: '.09em', color: '#6a6d70',
+        letterSpacing: '.09em', color: '#5a5a5a',
       }}>
         Live Calculation
       </div>
 
       <div style={{ padding: '16px' }}>
         {/* Formula text */}
-        <div style={{ fontFamily: 'var(--mono)', fontSize: 11, color: '#89919a', marginBottom: 8, lineHeight: 1.6 }}>
+        <div style={{ fontFamily: 'var(--mono)', fontSize: 11, color: '#8c8c8c', marginBottom: 8, lineHeight: 1.6 }}>
           {dept.method === 'efficiency' ? (
             <>output = std_rate × (eff% / 100) × hours<br />
             = {fields.stdRate ?? '?'} × ({fields.effPct ?? '?'} / 100) × {fields.hours ?? '?'}</>
@@ -125,29 +125,29 @@ function FormulaPanel({ dept, fields, result, theoretical }) {
 
         {/* Theoretical line */}
         {dept.method === 'hank_meter' && theoretical !== null && !isNaN(theoretical) && (
-          <div style={{ fontFamily: 'var(--mono)', fontSize: 11, color: '#89919a', marginBottom: 8, lineHeight: 1.6 }}>
+          <div style={{ fontFamily: 'var(--mono)', fontSize: 11, color: '#8c8c8c', marginBottom: 8, lineHeight: 1.6 }}>
             theoretical = rpm / (tpi × 36) × mins × spindles / (Ne × 840) × 0.453592<br />
-            = <span style={{ color: '#32363a' }}>{theoretical.toLocaleString('en-IN', { maximumFractionDigits: 1 })} kg</span>
+            = <span style={{ color: '#1d1d1d' }}>{theoretical.toLocaleString('en-IN', { maximumFractionDigits: 1 })} kg</span>
           </div>
         )}
 
         {/* Result — SAP large number style */}
-        <div style={{ borderTop: '1px solid #d9dadb', paddingTop: 14, marginTop: 6 }}>
-          <div style={{ fontSize: 11, color: '#6a6d70', marginBottom: 4 }}>Primary Output</div>
+        <div style={{ borderTop: '1px solid #e0e0e0', paddingTop: 14, marginTop: 6 }}>
+          <div style={{ fontSize: 11, color: '#5a5a5a', marginBottom: 4 }}>Primary Output</div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
             <span style={{
               fontFamily: 'var(--mono)',
               fontSize: empty ? 24 : 38,
               fontWeight: 300,
-              color: empty ? '#d9dadb' : SAP_BLUE,
+              color: empty ? '#e0e0e0' : SAP_BLUE,
               lineHeight: 1,
             }}>
               {empty ? '—' : result.toLocaleString('en-IN', { maximumFractionDigits: 1 })}
             </span>
-            {!empty && <span style={{ fontSize: 14, color: '#6a6d70', fontWeight: 400 }}>kg</span>}
+            {!empty && <span style={{ fontSize: 14, color: '#5a5a5a', fontWeight: 400 }}>kg</span>}
           </div>
           {!empty && (
-            <div style={{ fontSize: 11, color: '#89919a', marginTop: 4 }}>
+            <div style={{ fontSize: 11, color: '#8c8c8c', marginTop: 4 }}>
               {dept.name} · Shift output
             </div>
           )}
@@ -186,12 +186,12 @@ function StdRateEditor({ deptId, machineNumber, rates, onRateUpdated }) {
             type="number" value={val} onChange={e => setVal(e.target.value)}
             style={{
               width: 80, padding: '6px 8px', fontSize: 12,
-              border: `1px solid ${SAP_BLUE}`, borderRadius: 2,
+              border: `1px solid ${SAP_BLUE}`, borderRadius: 0,
               fontFamily: 'var(--mono)', outline: 'none',
             }}
             autoFocus
           />
-          <span style={{ fontSize: 11, color: '#6a6d70' }}>kg/hr</span>
+          <span style={{ fontSize: 11, color: '#5a5a5a' }}>kg/hr</span>
           <SapPrimaryBtn onClick={save} disabled={saving || !val} small>
             {saving ? 'Saving' : 'Save'}
           </SapPrimaryBtn>
@@ -199,7 +199,7 @@ function StdRateEditor({ deptId, machineNumber, rates, onRateUpdated }) {
         </>
       ) : (
         <>
-          <span style={{ fontFamily: 'var(--mono)', fontSize: 14, color: '#32363a' }}>
+          <span style={{ fontFamily: 'var(--mono)', fontSize: 14, color: '#1d1d1d' }}>
             {rate?.std_rate_kg_per_hr ?? '—'} kg/hr
           </span>
           <SapGhostBtn onClick={() => { setVal(rate?.std_rate_kg_per_hr ?? ''); setEditing(true) }} small>
@@ -219,10 +219,10 @@ function SapPrimaryBtn({ children, onClick, disabled, small }) {
         padding: small ? '5px 12px' : '8px 20px',
         fontSize: small ? 11 : 13,
         fontWeight: 400,
-        border: `1px solid ${disabled ? '#d9dadb' : SAP_BLUE}`,
-        borderRadius: 2,
+        border: `1px solid ${disabled ? '#e0e0e0' : SAP_BLUE}`,
+        borderRadius: 0,
         background: disabled ? '#f2f2f2' : SAP_BLUE,
-        color: disabled ? '#89919a' : '#fff',
+        color: disabled ? '#8c8c8c' : '#fff',
         cursor: disabled ? 'not-allowed' : 'pointer',
         fontFamily: 'var(--font)',
       }}
@@ -238,14 +238,14 @@ function SapGhostBtn({ children, onClick, disabled, small }) {
         fontSize: small ? 11 : 13,
         fontWeight: 400,
         border: `1px solid ${SAP_BORDER}`,
-        borderRadius: 2,
+        borderRadius: 0,
         background: '#fff',
-        color: '#32363a',
+        color: '#1d1d1d',
         cursor: disabled ? 'not-allowed' : 'pointer',
         fontFamily: 'var(--font)',
       }}
       onMouseEnter={e => { e.currentTarget.style.background = '#e8f0fb'; e.currentTarget.style.borderColor = SAP_BLUE; e.currentTarget.style.color = SAP_BLUE }}
-      onMouseLeave={e => { e.currentTarget.style.background = '#fff'; e.currentTarget.style.borderColor = SAP_BORDER; e.currentTarget.style.color = '#32363a' }}
+      onMouseLeave={e => { e.currentTarget.style.background = '#fff'; e.currentTarget.style.borderColor = SAP_BORDER; e.currentTarget.style.color = '#1d1d1d' }}
     >{children}</button>
   )
 }
@@ -353,7 +353,7 @@ export default function ProductionEntry({ onSaved }) {
       {/* ── SAP action bar (Image 05 top bar) ───────────────────────── */}
       <div style={{
         background: '#fff',
-        border: '1px solid #d9dadb',
+        border: '1px solid #e0e0e0',
         borderBottom: 'none',
         padding: '8px 16px',
         display: 'flex', alignItems: 'center', gap: 20,
@@ -365,22 +365,22 @@ export default function ProductionEntry({ onSaved }) {
         >
           ← Back to Dashboard
         </button>
-        <div style={{ width: 1, height: 16, background: '#d9dadb' }} />
-        <span style={{ fontSize: 12, color: '#6a6d70' }}>Production Entry</span>
+        <div style={{ width: 1, height: 16, background: '#e0e0e0' }} />
+        <span style={{ fontSize: 12, color: '#5a5a5a' }}>Production Entry</span>
       </div>
 
       {/* ── Page title strip ────────────────────────────────────────── */}
       <div style={{
         background: '#fff',
-        border: '1px solid #d9dadb',
+        border: '1px solid #e0e0e0',
         borderBottom: 'none',
         padding: '14px 16px',
-        borderTop: '1px solid #d9dadb',
+        borderTop: '1px solid #e0e0e0',
       }}>
-        <div style={{ fontSize: 16, fontWeight: 400, color: '#32363a' }}>
+        <div style={{ fontSize: 16, fontWeight: 400, color: '#1d1d1d' }}>
           Production Entry
         </div>
-        <div style={{ fontSize: 12, color: '#6a6d70', marginTop: 2 }}>
+        <div style={{ fontSize: 12, color: '#5a5a5a', marginTop: 2 }}>
           Record shift output per department
         </div>
       </div>
@@ -388,7 +388,7 @@ export default function ProductionEntry({ onSaved }) {
       {/* ── SAP Fiori horizontal dept tabs (like Image 05 segment bar) ── */}
       <div style={{
         background: '#fff',
-        border: '1px solid #d9dadb',
+        border: '1px solid #e0e0e0',
         borderBottom: 'none',
         padding: '0 16px',
         display: 'flex', alignItems: 'flex-end', gap: 0,
@@ -405,15 +405,15 @@ export default function ProductionEntry({ onSaved }) {
                 border: 'none',
                 borderBottom: active ? `3px solid ${SAP_BLUE}` : '3px solid transparent',
                 background: 'transparent',
-                color: active ? SAP_BLUE : '#6a6d70',
+                color: active ? SAP_BLUE : '#5a5a5a',
                 cursor: 'pointer', fontFamily: 'var(--font)',
                 transition: 'color .1s, border-color .1s',
               }}
-              onMouseEnter={e => { if (!active) e.currentTarget.style.color = '#32363a' }}
-              onMouseLeave={e => { if (!active) e.currentTarget.style.color = '#6a6d70' }}
+              onMouseEnter={e => { if (!active) e.currentTarget.style.color = '#1d1d1d' }}
+              onMouseLeave={e => { if (!active) e.currentTarget.style.color = '#5a5a5a' }}
             >
               {d.name}
-              <div style={{ fontSize: 10, color: active ? SAP_BLUE + '99' : '#89919a', marginTop: 1 }}>
+              <div style={{ fontSize: 10, color: active ? SAP_BLUE + '99' : '#8c8c8c', marginTop: 1 }}>
                 {d.method === 'efficiency' ? 'Efficiency' : 'Hank Meter'}
               </div>
             </button>
@@ -427,7 +427,7 @@ export default function ProductionEntry({ onSaved }) {
         {/* ── Left: Data Entry Form ───────────────────────────────── */}
         <div style={{
           background: '#fff',
-          border: '1px solid #d9dadb',
+          border: '1px solid #e0e0e0',
         }}>
 
           {/* Form content */}
@@ -449,7 +449,7 @@ export default function ProductionEntry({ onSaved }) {
                         border: `1px solid ${shift === s ? SAP_BLUE : SAP_BORDER}`,
                         borderLeft: i > 0 ? 'none' : undefined,
                         background: shift === s ? SAP_BLUE : '#fff',
-                        color: shift === s ? '#fff' : '#32363a',
+                        color: shift === s ? '#fff' : '#1d1d1d',
                         cursor: 'pointer', fontFamily: 'var(--font)',
                         fontWeight: shift === s ? 600 : 400,
                       }}
@@ -464,9 +464,9 @@ export default function ProductionEntry({ onSaved }) {
 
               <Field label="Department">
                 <div style={{
-                  padding: '7px 10px', fontSize: 13, color: '#32363a',
-                  border: '1px solid #d9dadb', background: '#f2f2f2',
-                  borderRadius: 2,
+                  padding: '7px 10px', fontSize: 13, color: '#1d1d1d',
+                  border: '1px solid #e0e0e0', background: '#f2f2f2',
+                  borderRadius: 0,
                 }}>
                   {dept.name}
                 </div>
@@ -483,9 +483,9 @@ export default function ProductionEntry({ onSaved }) {
                     style={{
                       padding: '5px 12px', fontSize: 12,
                       border: `1px solid ${machineNum === null ? SAP_BLUE : SAP_BORDER}`,
-                      borderRadius: 2, cursor: 'pointer',
+                      borderRadius: 0, cursor: 'pointer',
                       background: machineNum === null ? '#e8f0fb' : '#fff',
-                      color: machineNum === null ? SAP_BLUE : '#32363a',
+                      color: machineNum === null ? SAP_BLUE : '#1d1d1d',
                       fontFamily: 'var(--font)',
                     }}
                   >All / Dept</button>
@@ -496,9 +496,9 @@ export default function ProductionEntry({ onSaved }) {
                       style={{
                         padding: '5px 10px', fontSize: 12, minWidth: 36,
                         border: `1px solid ${machineNum === n ? SAP_BLUE : SAP_BORDER}`,
-                        borderRadius: 2, cursor: 'pointer',
+                        borderRadius: 0, cursor: 'pointer',
                         background: machineNum === n ? '#e8f0fb' : '#fff',
-                        color: machineNum === n ? SAP_BLUE : '#32363a',
+                        color: machineNum === n ? SAP_BLUE : '#1d1d1d',
                         fontFamily: 'var(--mono)',
                       }}
                     >#{n}</button>
@@ -511,7 +511,7 @@ export default function ProductionEntry({ onSaved }) {
                       onChange={e => setMachineNum(e.target.value ? parseInt(e.target.value) : null)}
                       style={{
                         width: 80, padding: '6px 8px', fontSize: 12,
-                        border: `1px solid ${SAP_BORDER}`, borderRadius: 2,
+                        border: `1px solid ${SAP_BORDER}`, borderRadius: 0,
                         fontFamily: 'var(--mono)',
                       }}
                     />
@@ -521,7 +521,7 @@ export default function ProductionEntry({ onSaved }) {
             )}
 
             {/* Section 2: Method-specific inputs */}
-            <div style={{ borderTop: '1px solid #d9dadb', paddingTop: 20, marginTop: 4 }}>
+            <div style={{ borderTop: '1px solid #e0e0e0', paddingTop: 20, marginTop: 4 }}>
 
               {dept.method === 'efficiency' && (
                 <>
@@ -533,7 +533,7 @@ export default function ProductionEntry({ onSaved }) {
                       deptId={selDeptId} machineNumber={machineNum}
                       rates={stdRates} onRateUpdated={loadRates}
                     />
-                    <div style={{ fontSize: 11, color: '#89919a', marginTop: 3 }}>
+                    <div style={{ fontSize: 11, color: '#8c8c8c', marginTop: 3 }}>
                       Baseline kg/hr at 100% efficiency. Click Edit to update.
                     </div>
                   </div>
@@ -570,7 +570,7 @@ export default function ProductionEntry({ onSaved }) {
                     </Field>
                   </div>
 
-                  <div style={{ background: '#f5f5f5', border: '1px solid #d9dadb', padding: '14px 16px', marginBottom: 16 }}>
+                  <div style={{ background: '#e8e8e8', border: '1px solid #e0e0e0', padding: '14px 16px', marginBottom: 16 }}>
                     <SectionTitle>Secondary — Theoretical Validation (optional)</SectionTitle>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
                       <Field label="Spindle RPM" hint="Spindle speed">
@@ -586,15 +586,15 @@ export default function ProductionEntry({ onSaved }) {
             </div>
 
             {/* Notes */}
-            <div style={{ borderTop: '1px solid #d9dadb', paddingTop: 20, marginBottom: 16 }}>
+            <div style={{ borderTop: '1px solid #e0e0e0', paddingTop: 20, marginBottom: 16 }}>
               <Field label="Notes (optional)">
                 <textarea
                   value={notes} onChange={e => setNotes(e.target.value)} rows={2}
                   placeholder="Shift remarks, downtime reason, etc."
                   style={{
                     width: '100%', padding: '7px 10px', fontSize: 12,
-                    border: `1px solid ${SAP_BORDER}`, borderRadius: 2,
-                    background: '#fff', color: '#32363a',
+                    border: `1px solid ${SAP_BORDER}`, borderRadius: 0,
+                    background: '#fff', color: '#1d1d1d',
                     fontFamily: 'var(--font)', resize: 'vertical', outline: 'none',
                     boxSizing: 'border-box',
                   }}
@@ -649,10 +649,10 @@ export default function ProductionEntry({ onSaved }) {
 
           {/* Engineering reference note */}
           <div style={{
-            background: '#fff', border: '1px solid #d9dadb', borderTop: 'none',
-            padding: '14px 16px', fontSize: 11, color: '#6a6d70', lineHeight: 1.7,
+            background: '#fff', border: '1px solid #e0e0e0', borderTop: 'none',
+            padding: '14px 16px', fontSize: 11, color: '#5a5a5a', lineHeight: 1.7,
           }}>
-            <div style={{ fontWeight: 600, color: '#32363a', marginBottom: 6 }}>
+            <div style={{ fontWeight: 600, color: '#1d1d1d', marginBottom: 6 }}>
               {dept.method === 'efficiency' ? 'Efficiency Method' : 'Hank Meter Method'}
             </div>
             {dept.method === 'efficiency' ? (
@@ -667,7 +667,7 @@ export default function ProductionEntry({ onSaved }) {
                 <div>• Ne = yards per pound ÷ 840</div>
                 <div>• Output (lb) = hanks × spindles ÷ Ne</div>
                 <div>• Output (kg) = lb × 0.453592</div>
-                <div style={{ marginTop: 4, color: '#89919a' }}>• Theoretical inputs for validation only</div>
+                <div style={{ marginTop: 4, color: '#8c8c8c' }}>• Theoretical inputs for validation only</div>
               </>
             )}
           </div>
