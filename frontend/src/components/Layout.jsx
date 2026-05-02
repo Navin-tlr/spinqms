@@ -7,10 +7,31 @@ import { useState, useEffect, useCallback } from 'react'
    Branding:   "SVS" appears exactly once — top-left of shell bar
 ────────────────────────────────────────────────────────────────────────── */
 
-/* YarnLogo removed — brand mark hidden per user request */
+/* ── Matrix logo — interlocking torus/ring mark ─────────────────────────── */
+function MatrixLogo({ size = 22, color = '#fff', bg = '#1e2e4a' }) {
+  // Two perpendicular ellipses: H (rx=40,ry=17) and V (rx=17,ry=40)
+  // Intersection points at (±15.65, ±15.65) from center (50,50) → 34.35 / 65.65
+  // Weave: H left & right arcs on top of V; V top & bottom arcs on top of H
+  const sw = 8, gap = 15
+  return (
+    <svg width={size} height={size} viewBox="0 0 100 100" fill="none" strokeLinecap="butt">
+      {/* H ring — base */}
+      <ellipse cx="50" cy="50" rx="40" ry="17" stroke={color} strokeWidth={sw}/>
+      {/* V ring — knockout then draw */}
+      <ellipse cx="50" cy="50" rx="17" ry="40" stroke={bg} strokeWidth={gap}/>
+      <ellipse cx="50" cy="50" rx="17" ry="40" stroke={color} strokeWidth={sw}/>
+      {/* H left arc on top of V (passes through x=10, between D and B) */}
+      <path d="M34.35,34.35 A40,17 0 0 0 34.35,65.65" stroke={bg} strokeWidth={gap}/>
+      <path d="M34.35,34.35 A40,17 0 0 0 34.35,65.65" stroke={color} strokeWidth={sw}/>
+      {/* H right arc on top of V (passes through x=90, between C and A) */}
+      <path d="M65.65,34.35 A40,17 0 0 1 65.65,65.65" stroke={bg} strokeWidth={gap}/>
+      <path d="M65.65,34.35 A40,17 0 0 1 65.65,65.65" stroke={color} strokeWidth={sw}/>
+    </svg>
+  )
+}
 
 /* ── shell bar background — muted dark navy, structurally anchoring ─────── */
-const SHELL = '#1e2e4a'
+const SHELL = '#0d1e35'
 
 /* ── Navigation manifest ─────────────────────────────────────────────────── */
 const DEFAULT_NAV = [
@@ -454,22 +475,23 @@ export default function Layout({
             </button>
           )}
 
-          {/* Brand — text-only wordmark */}
+          {/* Brand — Matrix logo + wordmark */}
           <button
             onClick={goHome}
-            title="Application Launchpad"
+            title="Matrix — Application Launchpad"
             style={{
-              display: 'flex', alignItems: 'center',
-              height: 40, padding: '0 16px',
+              display: 'flex', alignItems: 'center', gap: 9,
+              height: 40, padding: '0 18px',
               background: 'transparent', border: 'none', cursor: 'pointer',
-              borderRight: '1px solid rgba(255,255,255,.12)',
+              borderRight: '1px solid rgba(255,255,255,.10)',
               marginRight: 4,
             }}
           >
+            <MatrixLogo size={22} color="#fff" bg={SHELL} />
             <span style={{
-              fontSize: 11, fontWeight: 700, color: '#fff',
-              letterSpacing: '.12em', textTransform: 'uppercase',
-            }}>SpinQMS</span>
+              fontSize: 13, fontWeight: 600, color: '#fff',
+              letterSpacing: '.06em',
+            }}>Matrix</span>
           </button>
 
           {/* Module context label */}

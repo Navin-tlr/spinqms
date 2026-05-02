@@ -11,7 +11,7 @@ import {
 import { Spinner } from '../Primitives.jsx'
 
 /* ── Design tokens (local, matching system palette) ───────────────────────── */
-const NAVY   = '#012169'
+const NAVY   = '#0a6ed1'
 const SAP_BLUE = '#0070f2'
 const BD     = '#cccccc'
 const TX     = '#1d1d1d'

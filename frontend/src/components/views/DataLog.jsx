@@ -111,8 +111,8 @@ function EditModal({ row, onClose, onSaved }) {
           }}>Cancel</button>
           <button onClick={handleSave} disabled={saving} style={{
             padding: '4px 14px', fontSize: 12, fontFamily: 'var(--font)', fontWeight: 600,
-            border: '1px solid #012169', borderRadius: 0,
-            background: saving ? '#e8e8e8' : '#012169', color: saving ? '#8c8c8c' : '#fff', cursor: saving ? 'default' : 'pointer',
+            border: '1px solid #0a6ed1', borderRadius: 0,
+            background: saving ? '#e8e8e8' : '#0a6ed1', color: saving ? '#8c8c8c' : '#fff', cursor: saving ? 'default' : 'pointer',
           }}>
             {saving ? 'Saving…' : 'Save changes'}
           </button>
@@ -308,7 +308,7 @@ export default function DataLog({ depts, refreshKey, currentDept, machineFilter 
             <tbody>
               {rows.length === 0 ? (
                 <tr><td colSpan={colCount}><Empty>No batches match the current filter</Empty></td></tr>
-              ) : rows.map(r => {
+              ) : rows.map((r, i) => {
                 const raw     = r.timestamp
                 const ts      = new Date(raw.endsWith('Z') || raw.includes('+') ? raw : raw + 'Z')
                 const dateStr = ts.toLocaleDateString(undefined, { month:'short', day:'numeric', year:'numeric' })
@@ -362,7 +362,7 @@ export default function DataLog({ depts, refreshKey, currentDept, machineFilter 
                           transition: 'all .12s', display: 'inline-flex', alignItems: 'center', gap: 4,
                           opacity: editLoading === r.id ? 0.5 : 1, fontFamily: 'var(--font)',
                         }}
-                        onMouseEnter={e => { if (editLoading !== r.id) { e.currentTarget.style.background='#f0f4ff'; e.currentTarget.style.borderColor='#012169'; e.currentTarget.style.color='#012169' }}}
+                        onMouseEnter={e => { if (editLoading !== r.id) { e.currentTarget.style.background='#f0f4ff'; e.currentTarget.style.borderColor='#0a6ed1'; e.currentTarget.style.color='#0a6ed1' }}}
                         onMouseLeave={e => { e.currentTarget.style.background='#fff'; e.currentTarget.style.borderColor='#bfbfbf'; e.currentTarget.style.color='#1d1d1d' }}
                       >
                         <PencilIcon size={11} /> {editLoading === r.id ? '…' : 'Edit'}

@@ -10,7 +10,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { getProductionEntries, deleteProductionEntry } from '../../api.js'
 import { Spinner } from '../Primitives.jsx'
 
-const SAP_BLUE = '#012169'
+const SAP_BLUE = '#0a6ed1'
 
 const DEPT_META = {
   carding:   { name: 'Carding'    },

@@ -179,7 +179,7 @@ export default function ShiftReport() {
               ))}
               <button onClick={saveDefs} style={{
                 alignSelf: 'flex-start', padding: '4px 14px', fontSize: 12, borderRadius: 0,
-                border: '1px solid #012169', background: '#012169', color: '#fff',
+                border: '1px solid #0a6ed1', background: '#0a6ed1', color: '#fff',
                 cursor: 'pointer', fontFamily: 'var(--font)', fontWeight: 600,
               }}>Save times</button>
             </div>

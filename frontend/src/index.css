@@ -58,39 +58,39 @@
   --font: '72', 'SAP 72', -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
   --mono: '72', 'SAP 72', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
 
-  /* ── Surfaces — flat ERP neutrals ──────────────── */
+  /* ── Surfaces ───────────────────────────────────── */
   --bg:         #ffffff;                  /* pure white — cards, forms, panels   */
-  --bg-2:       #f2f2f2;                  /* standard page background            */
+  --bg-2:       #f7f7f7;                  /* page background                     */
   --bg-3:       #e8e8e8;                  /* table header, secondary bg          */
   --sidebar-bg: #ffffff;                  /* sidebar white                       */
-  --bg-hover:   rgba(1, 33, 105, .05);   /* #012169 tint hover                  */
-  --bg-active:  rgba(1, 33, 105, .09);   /* #012169 tint active                 */
+  --bg-hover:   rgba(10, 110, 209, .05); /* primary tint hover                  */
+  --bg-active:  rgba(10, 110, 209, .09); /* primary tint active                 */
 
-  /* ── Borders — cool neutral ──────────────────────── */
-  --bd:    #e8eaed;
-  --bd-md: #d1d5db;
-  --bd-hv: #9ca3af;
+  /* ── Borders ─────────────────────────────────────── */
+  --bd:    #d1d5db;
+  --bd-md: #9aa5b4;
+  --bd-hv: #6e7d8c;
 
-  /* ── Text — SAP neutral grey scale ──────────────── */
-  --tx:   #32363a;
-  --tx-2: #6a6d70;
-  --tx-3: #a9abad;
-  --tx-4: #c8cacb;
+  /* ── Text ────────────────────────────────────────── */
+  --tx:   #1f2d3d;
+  --tx-2: #6e7d8c;
+  --tx-3: #9aa5b4;
+  --tx-4: #c0c8d0;
 
-  /* ── Status — SAP semantic ───────────────────────── */
-  --ok:   #188f36; --ok-bg:   #f0faf2; --ok-bd:   #abe2bc;
-  --warn: #e6600d; --warn-bg: #fff8f0; --warn-bd: #ffc47c;
-  --bad:  #bb0000; --bad-bg:  #fff0f0; --bad-bd:  #f9bfbf;
-  --info: #0064d9; --info-bg: #ebf4ff; --info-bd: #91c8f6;
+  /* ── Status ──────────────────────────────────────── */
+  --ok:   #107e3e; --ok-bg:   #eaf5ed; --ok-bd:   #8ecfa6;
+  --warn: #e9730c; --warn-bg: #fef6ee; --warn-bd: #f5c18a;
+  --bad:  #bb0000; --bad-bg:  #fef0f0; --bad-bd:  #f5abab;
+  --info: #0a6ed1; --info-bg: #e8f2fc; --info-bd: #7ab7f0;
 
-  /* ── Accent — SVS Navy #012169 ──────────────────── */
-  --claude:    #012169;
-  --claude-bg: #e6eaf3;
-  --claude-bd: #b8c4db;
+  /* ── Primary accent — Matrix blue ───────────────── */
+  --claude:    #0a6ed1;
+  --claude-bg: #e8f2fc;
+  --claude-bd: #7ab7f0;
 
   --purple: #6d2ac4; --purple-bg: #f3ecfb; --purple-bd: #c4a4e6;
 
-  /* ── Geometry — 0px everywhere (SAP precision surfaces) ── */
+  /* ── Geometry — 0px everywhere (precision surfaces) ── */
   --r:    0px;
   --r-lg: 0px;
   --r-xl: 0px;
@@ -99,7 +99,7 @@
   --sidebar-collapsed: 48px;
   --hdr:               40px;
 
-  /* ── Elevation — none (SAP flat control UI) ─────────── */
+  /* ── Elevation — none (flat control UI) ─────────── */
   --shadow:    none;
   --shadow-md: none;
   --shadow-lg: none;
@@ -108,38 +108,38 @@
 /* ── Dark mode ──────────────────────────────────────── */
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg:        #1a1d21;
-    --bg-2:      #22262b;
-    --bg-3:      #2a2f35;
-    --sidebar-bg:#1a1d21;
-    --bg-hover:  rgba(107, 143, 212, .10);
-    --bg-active: rgba(107, 143, 212, .18);
+    --bg:        #161b22;
+    --bg-2:      #1e2530;
+    --bg-3:      #252d38;
+    --sidebar-bg:#161b22;
+    --bg-hover:  rgba(94, 174, 255, .08);
+    --bg-active: rgba(94, 174, 255, .14);
 
-    --bd:    rgba(255, 255, 255, .08);
-    --bd-md: rgba(255, 255, 255, .13);
-    --bd-hv: rgba(255, 255, 255, .22);
+    --bd:    rgba(255, 255, 255, .09);
+    --bd-md: rgba(255, 255, 255, .15);
+    --bd-hv: rgba(255, 255, 255, .25);
 
-    --tx:   #e5e7ea;
-    --tx-2: #9ba1a8;
-    --tx-3: #636970;
-    --tx-4: #464c54;
+    --tx:   #e2e8f0;
+    --tx-2: #94a3b8;
+    --tx-3: #5a6a7e;
+    --tx-4: #374151;
 
-    --ok:   #3dd68c; --ok-bg:   #04200e; --ok-bd:   #0d5c2c;
-    --warn: #ff8f3c; --warn-bg: #1c0f00; --warn-bd: #7c3600;
-    --bad:  #ff6b6b; --bad-bg:  #1c0000; --bad-bd:  #8b0000;
-    --info: #5eaeff; --info-bg: #001830; --info-bd: #1a4a8c;
+    --ok:   #34d058; --ok-bg:   #03210f; --ok-bd:   #0d5c2c;
+    --warn: #f97316; --warn-bg: #1c0e00; --warn-bd: #7c3500;
+    --bad:  #f87171; --bad-bg:  #1c0000; --bad-bd:  #8b1a1a;
+    --info: #5eaeff; --info-bg: #001a38; --info-bd: #1a4a8c;
 
-    --claude:    #6b8fd4;
-    --claude-bg: #0a1433;
-    --claude-bd: #1e3066;
+    --claude:    #5eaeff;
+    --claude-bg: #001a38;
+    --claude-bd: #1a4a8c;
 
-    --purple:    #a98ff4;
+    --purple:    #a78bfa;
     --purple-bg: #160d2e;
     --purple-bd: #4a2a8c;
 
-    --shadow:    0 1px 4px rgba(0, 0, 0, .5);
-    --shadow-md: 0 4px 16px rgba(0, 0, 0, .55), 0 2px 4px rgba(0, 0, 0, .4);
-    --shadow-lg: 0 10px 30px rgba(0, 0, 0, .6), 0 4px 8px rgba(0, 0, 0, .45);
+    --shadow:    0 1px 4px rgba(0, 0, 0, .6);
+    --shadow-md: 0 4px 16px rgba(0, 0, 0, .6), 0 2px 4px rgba(0, 0, 0, .5);
+    --shadow-lg: 0 10px 30px rgba(0, 0, 0, .65), 0 4px 8px rgba(0, 0, 0, .5);
   }
 }
 

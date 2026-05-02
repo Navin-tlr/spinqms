@@ -8,33 +8,21 @@
 
 import { useState } from 'react'
 
-const SAP_BLUE  = '#012169'
-const SHELL_BG  = '#1e2e4a'   /* muted structural navy — shell bar only */
+const SAP_BLUE  = '#0a6ed1'
+const SHELL_BG  = '#0d1e35'   /* muted structural navy — shell bar only */
 
-/* ── SVS yarn-ball logo ───────────────────────────────────────────────── */
-function YarnLogo({ size = 22, light = true }) {
-  const r = size / 2
-  const fill   = light ? 'rgba(255,255,255,0.92)' : '#1e2e4a'
-  const stripe = light ? 'rgba(30,46,74,0.55)'    : 'rgba(255,255,255,0.55)'
-  const step   = size * 0.092
-  const lines  = []
-  for (let i = -4; i <= 7; i++) {
-    const x0 = i * step
-    lines.push(
-      <line key={i}
-        x1={x0} y1={size + 4} x2={x0 + size} y2={-4}
-        stroke={stripe} strokeWidth={size * 0.066} strokeLinecap="round" />
-    )
-  }
+/* ── Matrix logo — interlocking torus/ring mark ──────────────────────── */
+function MatrixLogo({ size = 22, color = '#fff', bg = SHELL_BG }) {
+  const sw = 8, gap = 15
   return (
-    <svg viewBox={`0 0 ${size} ${size}`} width={size} height={size} style={{ display: 'block', flexShrink: 0 }}>
-      <defs>
-        <clipPath id={`lp-yarn-${size}`}>
-          <circle cx={r} cy={r} r={r - 0.5} />
-        </clipPath>
-      </defs>
-      <circle cx={r} cy={r} r={r - 0.5} fill={fill} />
-      <g clipPath={`url(#lp-yarn-${size})`}>{lines}</g>
+    <svg width={size} height={size} viewBox="0 0 100 100" fill="none" strokeLinecap="butt" style={{ display: 'block', flexShrink: 0 }}>
+      <ellipse cx="50" cy="50" rx="40" ry="17" stroke={color} strokeWidth={sw}/>
+      <ellipse cx="50" cy="50" rx="17" ry="40" stroke={bg} strokeWidth={gap}/>
+      <ellipse cx="50" cy="50" rx="17" ry="40" stroke={color} strokeWidth={sw}/>
+      <path d="M34.35,34.35 A40,17 0 0 0 34.35,65.65" stroke={bg} strokeWidth={gap}/>
+      <path d="M34.35,34.35 A40,17 0 0 0 34.35,65.65" stroke={color} strokeWidth={sw}/>
+      <path d="M65.65,34.35 A40,17 0 0 1 65.65,65.65" stroke={bg} strokeWidth={gap}/>
+      <path d="M65.65,34.35 A40,17 0 0 1 65.65,65.65" stroke={color} strokeWidth={sw}/>
     </svg>
   )
 }
@@ -231,7 +219,7 @@ export default function LandingPage({ setCurrentModule, overview, alerts, depts 
   const totalKpi  = overview.reduce((s, o) => s + (o.batch_count || 0), 0)
 
   return (
-    <div style={{ height: '100%', background: '#f2f2f2', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+    <div style={{ height: '100%', background: 'var(--bg-2)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 
       {/* ── Shell bar ─────────────────────────────────────────────────── */}
       <div style={{
@@ -243,14 +231,14 @@ export default function LandingPage({ setCurrentModule, overview, alerts, depts 
         gap: 0,
         flexShrink: 0,
       }}>
-        {/* SVS yarn-ball logo + brand — appears exactly once */}
+        {/* Matrix logo + brand */}
         <div style={{
           display: 'flex', alignItems: 'center', gap: 9,
           paddingRight: 14, borderRight: '1px solid rgba(255,255,255,.10)',
           marginRight: 14,
         }}>
-          <YarnLogo size={22} light={true} />
-          <span style={{ fontSize: 12, fontWeight: 600, color: '#fff', letterSpacing: '.08em', textTransform: 'uppercase' }}>SVS</span>
+          <MatrixLogo size={22} color="#fff" bg={SHELL_BG} />
+          <span style={{ fontSize: 13, fontWeight: 600, color: '#fff', letterSpacing: '.06em' }}>Matrix</span>
         </div>
 
         {/* Context label */}
@@ -336,9 +324,9 @@ export default function LandingPage({ setCurrentModule, overview, alerts, depts 
               }}>
                 {[
                   { label: 'Departments in control', value: `${goodDepts} / ${depts.length}`, color: '#188f36' },
-                  { label: 'Total batches recorded',  value: totalKpi,                          color: '#012169' },
+                  { label: 'Total batches recorded',  value: totalKpi,                          color: '#0a6ed1' },
                   { label: 'Active alerts',            value: alerts.filter(a => a.severity !== 'ok').length, color: hasBad ? '#bb0000' : hasWarn ? '#e6600d' : '#188f36' },
-                  { label: 'Departments tracked',      value: depts.length,                      color: '#012169' },
+                  { label: 'Departments tracked',      value: depts.length,                      color: '#0a6ed1' },
                 ].map((kpi, i, arr) => (
                   <div key={kpi.label} style={{
                     flex: 1,

@@ -4,17 +4,39 @@ import { getOverview } from '../../api.js'
 
 /* ── Time range config ──────────────────────────────────────────────────── */
 const RANGES = [
-  { id: 'shift',  label: 'Past Shift',  hours: 8    },
-  { id: '24h',    label: 'Past 24 h',   hours: 24   },
-  { id: 'week',   label: 'Past Week',   hours: 168  },
-  { id: 'month',  label: 'Past Month',  hours: 720  },
-  { id: 'all',    label: 'All Time',    hours: null  },
+  { id: 'today',  label: 'Today'        },
+  { id: '7d',     label: '7 Days'       },
+  { id: '30d',    label: '30 Days'      },
+  { id: '90d',    label: '3 Months'     },
+  { id: 'all',    label: 'All Time'     },
 ]
 
+function todayMidnight() {
+  const d = new Date(); d.setHours(0, 0, 0, 0); return d
+}
+
 function rangeParams(id) {
-  const r = RANGES.find(x => x.id === id)
-  if (!r || r.hours == null) return {}
-  return { date_from: new Date(Date.now() - r.hours * 3600 * 1000).toISOString() }
+  if (id === 'today') return { date_from: todayMidnight().toISOString() }
+  if (id === '7d')    return { date_from: new Date(Date.now() - 7  * 86400000).toISOString() }
+  if (id === '30d')   return { date_from: new Date(Date.now() - 30 * 86400000).toISOString() }
+  if (id === '90d')   return { date_from: new Date(Date.now() - 90 * 86400000).toISOString() }
+  return {} // all time
+}
+
+const FMT_D = { day: 'numeric', month: 'short', year: 'numeric' }
+function rangeLabel(id) {
+  const now = new Date()
+  if (id === 'today') {
+    const m = now.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
+    const t = now.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
+    return `${m} · 00:00 – ${t}`
+  }
+  const days = id === '7d' ? 7 : id === '30d' ? 30 : id === '90d' ? 90 : null
+  if (days) {
+    const from = new Date(Date.now() - days * 86400000)
+    return `${from.toLocaleDateString(undefined, FMT_D)} – Today`
+  }
+  return 'All historical records'
 }
 
 /* ── Table header cell ──────────────────────────────────────────────────── */
@@ -62,34 +84,38 @@ export default function Overview({ overview: propOverview, currentDept, setCurre
 
       {/* ── Time range selector ── */}
       <div style={{
-        display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap',
-        padding: '10px 16px',
         background: '#fff',
-        border: '1px solid #e0e0e0',
-        justifyContent: 'space-between',
+        border: '1px solid var(--bd)',
+        padding: '10px 16px',
       }}>
-        <span style={{
-          fontSize: 10, fontWeight: 600, letterSpacing: '.08em',
-          textTransform: 'uppercase', color: 'var(--tx-4)',
-          marginRight: 6, flexShrink: 0,
-        }}>
-          Time range
-        </span>
-        {RANGES.map(r => (
-          <button key={r.id} onClick={() => handleRange(r.id)} style={{
-            padding: '4px 14px', fontSize: 12, fontWeight: range === r.id ? 600 : 400,
-            border: '1px solid', borderRadius: 0, cursor: 'pointer',
-            fontFamily: 'var(--font)', lineHeight: 1.6,
-            background:  range === r.id ? '#012169' : '#fff',
-            color:       range === r.id ? '#fff' : '#1d1d1d',
-            borderColor: range === r.id ? '#012169' : '#bfbfbf',
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+          <span style={{
+            fontSize: 10, fontWeight: 600, letterSpacing: '.08em',
+            textTransform: 'uppercase', color: 'var(--tx-4)',
+            marginRight: 4, flexShrink: 0,
           }}>
-            {r.label}
-          </button>
-        ))}
-        {loading && (
-          <span style={{ fontSize: 11, color: 'var(--tx-4)', marginLeft: 4, fontStyle: 'italic' }}>Updating…</span>
-        )}
+            Period
+          </span>
+          {RANGES.map(r => (
+            <button key={r.id} onClick={() => handleRange(r.id)} style={{
+              padding: '4px 14px', fontSize: 12, fontWeight: range === r.id ? 600 : 400,
+              border: '1px solid', borderRadius: 0, cursor: 'pointer',
+              fontFamily: 'var(--font)', lineHeight: 1.6,
+              background:  range === r.id ? 'var(--claude)' : '#fff',
+              color:       range === r.id ? '#fff' : 'var(--tx)',
+              borderColor: range === r.id ? 'var(--claude)' : 'var(--bd)',
+              transition: 'all .1s',
+            }}>
+              {r.label}
+            </button>
+          ))}
+          {loading && (
+            <span style={{ fontSize: 11, color: 'var(--tx-4)', marginLeft: 4, fontStyle: 'italic' }}>Updating…</span>
+          )}
+        </div>
+        <div style={{ marginTop: 6, fontSize: 11, color: 'var(--tx-3)', fontVariantNumeric: 'tabular-nums' }}>
+          {rangeLabel(range)}
+        </div>
       </div>
 
       {/* ── Process flow bar ── */}
@@ -206,7 +232,7 @@ export default function Overview({ overview: propOverview, currentDept, setCurre
               if (d.n === 0) return (
                 <tr key={d.dept_id} onClick={() => setCurrentDept(d.dept_id)}
                   style={rowStyle} onMouseEnter={hoverOn} onMouseLeave={hoverOff}>
-                  <td style={{ padding: '5px 8px', borderBottom: '1px solid #eaeaea', borderRight: '1px solid #eaeaea', borderLeft: isActive ? '3px solid #012169' : '3px solid transparent', fontSize: 12, color: '#1d1d1d', fontWeight: isActive ? 500 : 400 }}>
+                  <td style={{ padding: '5px 8px', borderBottom: '1px solid #eaeaea', borderRight: '1px solid #eaeaea', borderLeft: isActive ? '3px solid var(--claude)' : '3px solid transparent', fontSize: 12, color: '#1d1d1d', fontWeight: isActive ? 500 : 400 }}>
                     {d.name}
                   </td>
                   <td colSpan={6} style={{ padding: '5px 8px', borderBottom: '1px solid #eaeaea', color: '#8c8c8c', fontSize: 12, fontStyle: 'italic' }}>
@@ -220,7 +246,7 @@ export default function Overview({ overview: propOverview, currentDept, setCurre
                 <tr key={d.dept_id} onClick={() => setCurrentDept(d.dept_id)}
                   style={rowStyle} onMouseEnter={hoverOn} onMouseLeave={hoverOff}>
                   {/* Department name — left border indicates active */}
-                  <td style={{ padding: '5px 8px', borderBottom: '1px solid #eaeaea', borderRight: '1px solid #eaeaea', borderLeft: isActive ? '3px solid #012169' : '3px solid transparent', fontSize: 12, fontWeight: isActive ? 500 : 400, color: isActive ? '#012169' : '#1d1d1d' }}>
+                  <td style={{ padding: '5px 8px', borderBottom: '1px solid #eaeaea', borderRight: '1px solid #eaeaea', borderLeft: isActive ? '3px solid var(--claude)' : '3px solid transparent', fontSize: 12, fontWeight: isActive ? 500 : 400, color: isActive ? 'var(--claude)' : '#1d1d1d' }}>
                     {d.name}
                   </td>
                   {/* Numeric columns — monospace, right-aligned, regular weight */}

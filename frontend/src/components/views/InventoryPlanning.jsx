@@ -18,7 +18,7 @@ import {
 import { Spinner } from '../Primitives.jsx'
 
 /* ── Design tokens (SAP Fiori high-density) ────────────────────────────────── */
-const B      = '#012169'
+const B      = '#0a6ed1'
 const SAP_BLUE = '#0070f2'
 const BD     = '#cccccc'
 const ERR    = '#bb0000'
