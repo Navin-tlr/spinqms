@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import {
   convertRecommendationToPO,
+  getBusinessPartners,
   getPurchaseOrders,
   getPurchaseRecommendations,
   receivePurchaseOrder,
@@ -9,22 +10,46 @@ import { Spinner } from '../Primitives.jsx'
 
 /* ── Design tokens (local, matching system palette) ───────────────────────── */
 const NAVY   = '#012169'
-const BD     = '#d9dadb'
-const TX     = '#32363a'
-const TX2    = '#6a6d70'
-const TX3    = '#89919a'
-const BG_HD  = '#f5f5f5'
+const SAP_BLUE = '#0070f2'
+const BD     = '#cccccc'
+const TX     = '#1d1d1d'
+const TX2    = '#5a5a5a'
+const TX3    = '#8c8c8c'
+const BG_HD  = '#e8e8e8'
+const BG_ROW_ALT = '#f5f5f5'
+const BG_PAGE = '#f2f6fa'
 
-const cell  = { padding: '8px 12px', borderBottom: '1px solid #eeeeee', fontSize: 12 }
-const thSt  = { padding: '7px 12px', textAlign: 'left', fontSize: 11, fontWeight: 600,
-                color: TX2, textTransform: 'uppercase', letterSpacing: '.07em',
-                background: BG_HD, borderBottom: `1px solid ${BD}`, whiteSpace: 'nowrap' }
-const input = {
-  padding: '5px 8px', fontSize: 12,
-  border: `1px solid ${TX3}`, borderRadius: 2,
-  background: '#fff', color: TX, fontFamily: 'var(--font)',
+const cell  = {
+  padding: '5px 8px',
+  borderBottom: '1px solid #e0e0e0',
+  borderRight: '1px solid #e0e0e0',
+  fontSize: 12,
+  color: TX,
 }
-const readOnly = { ...input, border: `1px solid ${BD}`, background: BG_HD, color: TX }
+const thSt  = {
+  padding: '5px 8px',
+  textAlign: 'left',
+  fontSize: 11,
+  fontWeight: 700,
+  color: TX,
+  textTransform: 'uppercase',
+  letterSpacing: '.05em',
+  background: BG_HD,
+  border: `1px solid ${BD}`,
+  whiteSpace: 'nowrap',
+}
+const input = {
+  padding: '4px 7px',
+  fontSize: 12,
+  border: '1px solid #bfbfbf',
+  borderRadius: 2,
+  background: '#fff',
+  color: TX,
+  fontFamily: 'var(--font)',
+  boxSizing: 'border-box',
+  outline: 'none',
+}
+const readOnly = { ...input, border: `1px solid ${BD}`, background: BG_HD, color: TX2 }
 
 function fmt(n) {
   if (n === null || n === undefined) return '—'
@@ -132,7 +157,7 @@ function GoodsReceiptScreen({ po, onPost, onCancel }) {
           </div>
           <div>
             <div style={{ fontSize: 11, color: TX2, marginBottom: 4 }}>Supplier</div>
-            <div style={{ ...readOnly, padding: '5px 8px' }}>{po.supplier || '—'}</div>
+            <div style={{ ...readOnly, padding: '5px 8px' }}>{po.business_partner_name || po.supplier || '—'}</div>
           </div>
           <div>
             <div style={{ fontSize: 11, color: TX2, marginBottom: 4 }}>Reference PO</div>
@@ -255,6 +280,7 @@ function GoodsReceiptScreen({ po, onPost, onCancel }) {
 export default function PurchaseFlow({ mode = 'requisitions' }) {
   const [recommendations, setRecommendations] = useState([])
   const [orders,          setOrders]          = useState([])
+  const [mmVendors,       setMmVendors]       = useState([])
   const [loading,         setLoading]         = useState(true)
   const [convert,         setConvert]         = useState(null)  // recommendation being converted
   const [grPO,            setGrPO]            = useState(null)  // PO whose GR screen is open
@@ -262,12 +288,14 @@ export default function PurchaseFlow({ mode = 'requisitions' }) {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const [recs, pos] = await Promise.all([
+      const [recs, pos, vendors] = await Promise.all([
         getPurchaseRecommendations('open'),
         getPurchaseOrders(),
+        getBusinessPartners('MM_VENDOR'),
       ])
       setRecommendations(recs)
       setOrders(pos)
+      setMmVendors(vendors)
     } finally {
       setLoading(false)
     }
@@ -278,9 +306,10 @@ export default function PurchaseFlow({ mode = 'requisitions' }) {
   /* ── Create PO from recommendation ── */
   const createPO = async () => {
     await convertRecommendationToPO(convert.id, {
-      quantity: Number(convert.quantity),
-      rate:     Number(convert.rate),
-      supplier: convert.supplier || null,
+      quantity:            Number(convert.quantity),
+      rate:                Number(convert.rate),
+      business_partner_id: convert.bp_id ? Number(convert.bp_id) : undefined,
+      supplier:            !convert.bp_id ? (convert.supplier || null) : undefined,
     })
     setConvert(null)
     await load()
@@ -306,7 +335,7 @@ export default function PurchaseFlow({ mode = 'requisitions' }) {
 
   /* ── Normal list view ── */
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16, background: BG_PAGE, padding: 2 }}>
 
       {/* Page bar */}
       <div style={{
@@ -372,7 +401,7 @@ export default function PurchaseFlow({ mode = 'requisitions' }) {
                         </td>
                         <td style={cell}>
                           <button
-                            onClick={() => setConvert({ ...r, quantity: r.suggested_qty, rate: '', supplier: '' })}
+                            onClick={() => setConvert({ ...r, quantity: r.suggested_qty, rate: '', bp_id: '', supplier: '' })}
                             style={{ ...input, background: NAVY, color: '#fff', borderColor: NAVY, cursor: 'pointer' }}
                           >
                             Convert to PO
@@ -424,7 +453,7 @@ export default function PurchaseFlow({ mode = 'requisitions' }) {
                           <td style={cell}>
                             <StatusBadge status={po.status} />
                           </td>
-                          <td style={cell}>{po.supplier || '—'}</td>
+                          <td style={cell}>{po.business_partner_name || po.supplier || '—'}</td>
                           <td style={{ ...cell, maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                             {materials}
                           </td>
@@ -483,13 +512,29 @@ export default function PurchaseFlow({ mode = 'requisitions' }) {
             </div>
             <div style={{ padding: 16, display: 'grid', gap: 10 }}>
               <div>
-                <div style={{ fontSize: 11, color: TX2, marginBottom: 4 }}>Supplier</div>
-                <input
-                  value={convert.supplier}
-                  onChange={e => setConvert({ ...convert, supplier: e.target.value })}
-                  placeholder="Supplier name"
-                  style={{ ...input, width: '100%' }}
-                />
+                <div style={{ fontSize: 11, color: TX2, marginBottom: 4 }}>
+                  Business Partner (MM Vendor) *
+                </div>
+                {mmVendors.length === 0 ? (
+                  <div style={{ fontSize: 11, color: '#bb0000' }}>
+                    No active MM_VENDOR partners — add one in Master Data → Business Partners
+                  </div>
+                ) : (
+                  <select
+                    value={convert.bp_id}
+                    onChange={e => setConvert({ ...convert, bp_id: e.target.value })}
+                    style={{ ...input, width: '100%' }}
+                  >
+                    <option value="">— Select vendor —</option>
+                    {mmVendors
+                      .filter(bp => bp.status === 'Active')
+                      .map(bp => (
+                        <option key={bp.id} value={bp.id}>
+                          {bp.bp_code} · {bp.name}
+                        </option>
+                      ))}
+                  </select>
+                )}
               </div>
               <div>
                 <div style={{ fontSize: 11, color: TX2, marginBottom: 4 }}>Quantity ({convert.unit})</div>
@@ -508,25 +553,30 @@ export default function PurchaseFlow({ mode = 'requisitions' }) {
                   style={{ ...input, width: '100%', fontFamily: 'var(--mono)' }}
                 />
               </div>
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 4 }}>
-                <button onClick={() => setConvert(null)} style={{ ...input, cursor: 'pointer' }}>
-                  Cancel
-                </button>
-                <button
-                  onClick={createPO}
-                  disabled={!convert.rate || !convert.quantity}
-                  style={{
-                    ...input,
-                    background:  convert.rate && convert.quantity ? NAVY : BG_HD,
-                    color:       convert.rate && convert.quantity ? '#fff' : TX3,
-                    borderColor: convert.rate && convert.quantity ? NAVY : BD,
-                    cursor:      convert.rate && convert.quantity ? 'pointer' : 'not-allowed',
-                    fontWeight:  600,
-                  }}
-                >
-                  Create PO
-                </button>
-              </div>
+              {(() => {
+                const canCreate = convert.bp_id && convert.rate && convert.quantity
+                return (
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 4 }}>
+                    <button onClick={() => setConvert(null)} style={{ ...input, cursor: 'pointer' }}>
+                      Cancel
+                    </button>
+                    <button
+                      onClick={createPO}
+                      disabled={!canCreate}
+                      style={{
+                        ...input,
+                        background:  canCreate ? NAVY : BG_HD,
+                        color:       canCreate ? '#fff' : TX3,
+                        borderColor: canCreate ? NAVY : BD,
+                        cursor:      canCreate ? 'pointer' : 'not-allowed',
+                        fontWeight:  600,
+                      }}
+                    >
+                      Create PO
+                    </button>
+                  </div>
+                )
+              })()}
             </div>
           </div>
         </div>

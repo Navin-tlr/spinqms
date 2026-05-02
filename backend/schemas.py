@@ -835,6 +835,7 @@ class InventoryOverviewItem(BaseModel):
     status: str
     action: str
     price_trend: str
+    last_market_price: Optional[float] = None
     recommendation: Optional[PurchaseRecommendationOut] = None
 
 

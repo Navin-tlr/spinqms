@@ -17,32 +17,64 @@ import {
 } from '../../api.js'
 import { Spinner } from '../Primitives.jsx'
 
-/* ── Design tokens (SAP Fiori-inspired) ────────────────────────────────────── */
-const B   = '#012169'
-const BD  = '#89919a'
-const ERR = '#bb0000'
-const OK  = '#188f36'
+/* ── Design tokens (SAP Fiori high-density) ────────────────────────────────── */
+const B      = '#012169'
+const SAP_BLUE = '#0070f2'
+const BD     = '#cccccc'
+const ERR    = '#bb0000'
+const OK     = '#188f36'
+const BG_HD  = '#e8e8e8'
+const BG_PAGE = '#f2f6fa'
 
-const cell  = { padding: '8px 12px', fontSize: 12, borderBottom: '1px solid #eeeeee' }
-const hCell = { padding: '7px 12px', fontSize: 11, fontWeight: 600, color: '#6a6d70',
-                textTransform: 'uppercase', letterSpacing: '.07em',
-                background: '#f5f5f5', borderBottom: '1px solid #d9dadb', whiteSpace: 'nowrap' }
-
+const cell  = {
+  padding: '5px 8px',
+  fontSize: 12,
+  borderBottom: '1px solid #e0e0e0',
+  borderRight:  '1px solid #e0e0e0',
+  color: '#1d1d1d',
+}
+const hCell = {
+  padding: '5px 8px',
+  fontSize: 11,
+  fontWeight: 700,
+  color: '#1d1d1d',
+  textTransform: 'uppercase',
+  letterSpacing: '.05em',
+  background: BG_HD,
+  border: `1px solid ${BD}`,
+  whiteSpace: 'nowrap',
+}
 const inp = {
-  padding: '5px 8px', fontSize: 12,
-  border: `1px solid ${BD}`, borderRadius: 2,
-  background: '#fff', color: '#32363a', fontFamily: 'var(--font)',
+  padding: '4px 7px',
+  fontSize: 12,
+  border: '1px solid #bfbfbf',
+  borderRadius: 2,
+  background: '#fff',
+  color: '#1d1d1d',
+  fontFamily: 'var(--font)',
   boxSizing: 'border-box',
+  outline: 'none',
 }
 const btn = (active = true, danger = false) => ({
   ...inp,
   cursor: active ? 'pointer' : 'not-allowed',
-  background:  danger ? ERR : active ? B : '#f2f2f2',
-  color:       active ? '#fff' : '#89919a',
-  borderColor: danger ? ERR : active ? B : '#d9dadb',
+  background:  danger ? ERR : active ? B : '#e8e8e8',
+  color:       active ? '#fff' : '#8c8c8c',
+  borderColor: danger ? ERR : active ? B : BD,
   fontWeight: 600,
   opacity: active ? 1 : 0.6,
 })
+
+/* ── MRP / EOQ defaults ─────────────────────────────────────────────────────── */
+const EOQ_ORDER_COST   = 500    // ₹ cost to place one order (default)
+const EOQ_HOLDING_PCT  = 0.20   // 20% of unit cost per year (default)
+
+function calcEOQ(avgDaily, unitCost) {
+  const annual = avgDaily * 365
+  if (!annual || annual <= 0) return null
+  const cost = unitCost || 1000   // fallback unit cost when no market price
+  return Math.round(Math.sqrt((2 * annual * EOQ_ORDER_COST) / (cost * EOQ_HOLDING_PCT)))
+}
 
 const COMMON_UNITS = ['Bales', 'Kg', 'Cones', 'Bobbins', 'Bags', 'Litres', 'Nos', 'Rolls']
 const MAT_CATEGORIES = ['Raw Material', 'Dyes & Chemicals', 'Packing Material', 'Spare Parts', 'Consumables', 'Other']
@@ -528,15 +560,19 @@ function MaterialMovements({ movements, loading }) {
    PLANNING (MRP params + market price) — uses aggregate overview rows
 ══════════════════════════════════════════════════════════════════════════════ */
 function Planning({ rows, onSaved }) {
-  const [drafts, setDrafts] = useState({})
-  const [price,  setPrice]  = useState({ material_id: '', price: '', price_date: new Date().toISOString().slice(0, 10) })
+  const [drafts,     setDrafts]     = useState({})
+  const [genLoading, setGenLoading] = useState({})
+  const [price,      setPrice]      = useState({
+    material_id: '',
+    price: '',
+    price_date: new Date().toISOString().slice(0, 10),
+  })
 
   useEffect(() => {
     setDrafts(Object.fromEntries(rows.map(r => [r.material_id, {
       lead_time_days:    r.lead_time_days,
       safety_stock_qty:  r.safety_stock_qty,
       reorder_qty:       r.reorder_qty,
-      critical_days_left: 2,
     }])))
   }, [rows])
 
@@ -546,43 +582,150 @@ function Planning({ rows, onSaved }) {
       lead_time_days:     Number(d.lead_time_days),
       safety_stock_qty:   Number(d.safety_stock_qty),
       reorder_qty:        Number(d.reorder_qty),
-      critical_days_left: Number(d.critical_days_left || 2),
+      critical_days_left: 2,
     })
     onSaved()
   }
 
   const savePrice = async () => {
     if (!price.material_id || !price.price) return
-    await addMaterialMarketPrice(price.material_id, { price_date: price.price_date, price: Number(price.price) })
+    await addMaterialMarketPrice(price.material_id, {
+      price_date: price.price_date,
+      price: Number(price.price),
+    })
     setPrice(p => ({ ...p, price: '' }))
     onSaved()
   }
 
+  // Trigger MRP for one material by refreshing overview (MRP auto-runs on fetch)
+  const genRequisition = async (materialId) => {
+    setGenLoading(p => ({ ...p, [materialId]: true }))
+    await onSaved()
+    setGenLoading(p => ({ ...p, [materialId]: false }))
+  }
+
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 16 }}>
-      <div style={{ background: '#fff', border: '1px solid #d9dadb', overflowX: 'auto' }}>
+
+      {/* ── MRP Table ── */}
+      <div style={{ background: '#fff', border: `1px solid ${BD}`, overflowX: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
-            <tr>{['Material','Stock (Total)','Lead Time (days)','Safety Stock','Reorder Qty','Reorder Level',''].map(h =>
-              <th key={h} style={hCell}>{h}</th>
-            )}</tr>
+            <tr>
+              {[
+                'Material', 'Stock', 'Runway (Days)', 'Lead Time',
+                'Safety Stock', 'Reorder Qty', 'Reorder Level', 'EOQ', 'Action', '',
+              ].map(h => <th key={h} style={hCell}>{h}</th>)}
+            </tr>
           </thead>
           <tbody>
-            {rows.map(r => {
+            {rows.map((r, i) => {
               const d = drafts[r.material_id] || {}
+              const runway    = r.days_left
+              const leadTime  = Number(d.lead_time_days) || r.lead_time_days || 5
+              const critical  = runway !== null && runway !== undefined && runway < leadTime
+              const warn      = !critical && runway !== null && runway !== undefined && runway < leadTime * 1.5
+              const eoq       = calcEOQ(r.avg_consumption_7d, r.last_market_price)
+              const hasPendingRec = r.recommendation && r.recommendation.status === 'open'
+
+              // Row triage background
+              const rowBg = critical
+                ? '#fff0f0'
+                : warn
+                  ? '#fff8ee'
+                  : i % 2 === 0 ? '#fff' : '#fafafa'
+
               return (
-                <tr key={r.material_id}>
-                  <td style={{ ...cell, fontWeight: 600 }}>{r.material_name}</td>
-                  <td style={{ ...cell, fontFamily: 'var(--mono)', fontWeight: 700, color: B }}>{fmt(r.stock, r.unit)}</td>
-                  {['lead_time_days','safety_stock_qty','reorder_qty'].map(k => (
-                    <td key={k} style={{ padding: '5px 12px', borderBottom: '1px solid #eee' }}>
-                      <input type="number" value={d[k] ?? ''} onChange={e => setDrafts(prev => ({ ...prev, [r.material_id]: { ...d, [k]: e.target.value } }))}
-                        style={{ ...inp, width: 90, fontFamily: 'var(--mono)' }} />
+                <tr key={r.material_id} style={{ background: rowBg }}>
+                  <td style={{ ...cell, fontWeight: 600 }}>
+                    <div>{r.material_name}</div>
+                    {critical && (
+                      <div style={{ fontSize: 10, color: ERR, fontWeight: 700, marginTop: 2 }}>
+                        ⚠ CRITICAL — Runway &lt; Lead Time
+                      </div>
+                    )}
+                  </td>
+                  <td style={{ ...cell, fontFamily: 'var(--mono)', fontWeight: 700, color: B }}>
+                    {fmt(r.stock, r.unit)}
+                  </td>
+
+                  {/* Runway cell — tinted if critical */}
+                  <td style={{
+                    ...cell,
+                    fontFamily: 'var(--mono)',
+                    fontWeight: 700,
+                    color: critical ? ERR : warn ? '#b55b00' : OK,
+                    background: critical ? '#ffe8e8' : warn ? '#fff3dc' : undefined,
+                  }}>
+                    {runway !== null && runway !== undefined ? `${runway}d` : '—'}
+                  </td>
+
+                  {/* Editable planning params */}
+                  {['lead_time_days', 'safety_stock_qty', 'reorder_qty'].map(k => (
+                    <td key={k} style={{ padding: '4px 8px', borderBottom: '1px solid #e0e0e0', borderRight: '1px solid #e0e0e0' }}>
+                      <input
+                        type="number"
+                        value={d[k] ?? ''}
+                        onChange={e => setDrafts(prev => ({
+                          ...prev,
+                          [r.material_id]: { ...d, [k]: e.target.value },
+                        }))}
+                        style={{ ...inp, width: 80, fontFamily: 'var(--mono)' }}
+                      />
                     </td>
                   ))}
-                  <td style={{ ...cell, fontFamily: 'var(--mono)' }}>{fmt(r.reorder_level, r.unit)}</td>
-                  <td style={{ padding: '5px 12px', borderBottom: '1px solid #eee' }}>
-                    <button onClick={() => saveRow(r.material_id)} style={{ ...inp, cursor: 'pointer' }}>Save</button>
+
+                  <td style={{ ...cell, fontFamily: 'var(--mono)' }}>
+                    {fmt(r.reorder_level, r.unit)}
+                  </td>
+
+                  {/* EOQ */}
+                  <td style={{ ...cell, fontFamily: 'var(--mono)', color: B }}>
+                    {eoq ? fmt(eoq) : <span style={{ color: '#aaa', fontSize: 10 }}>No price</span>}
+                  </td>
+
+                  {/* Action */}
+                  <td style={{ padding: '4px 8px', borderBottom: '1px solid #e0e0e0', whiteSpace: 'nowrap' }}>
+                    {hasPendingRec ? (
+                      <span style={{
+                        fontSize: 10, fontWeight: 700, padding: '2px 7px',
+                        background: '#ebf4ff', color: '#0064d9',
+                        border: '1px solid #b8d4f8', borderRadius: 2,
+                      }}>
+                        Req. Pending
+                      </span>
+                    ) : r.status === 'BELOW REORDER LEVEL' ? (
+                      <button
+                        onClick={() => genRequisition(r.material_id)}
+                        disabled={!!genLoading[r.material_id]}
+                        style={{
+                          ...inp,
+                          cursor: 'pointer',
+                          background: ERR,
+                          color: '#fff',
+                          borderColor: ERR,
+                          fontWeight: 600,
+                          fontSize: 11,
+                          padding: '3px 8px',
+                        }}
+                      >
+                        {genLoading[r.material_id] ? '…' : 'Generate Req.'}
+                      </button>
+                    ) : (
+                      <span style={{ fontSize: 10, color: '#8c8c8c' }}>
+                        {r.status === 'SAFE (CLOSE)' ? 'Monitor' : 'Safe'}
+                      </span>
+                    )}
+                  </td>
+
+                  {/* Save params */}
+                  <td style={{ padding: '4px 8px', borderBottom: '1px solid #e0e0e0' }}>
+                    <button
+                      onClick={() => saveRow(r.material_id)}
+                      style={{ ...inp, cursor: 'pointer', fontSize: 11 }}
+                    >
+                      Save
+                    </button>
                   </td>
                 </tr>
               )
@@ -590,17 +733,65 @@ function Planning({ rows, onSaved }) {
           </tbody>
         </table>
       </div>
-      <div style={{ background: '#fff', border: '1px solid #d9dadb' }}>
-        <div style={{ padding: '10px 16px', borderBottom: '1px solid #d9dadb', fontSize: 13, fontWeight: 600 }}>Market Price Entry</div>
-        <div style={{ padding: 16, display: 'grid', gap: 10 }}>
-          <select value={price.material_id} onChange={e => setPrice(p => ({ ...p, material_id: e.target.value }))} style={inp}>
-            <option value="">Select Material</option>
-            {rows.map(r => <option key={r.material_id} value={r.material_id}>{r.material_name}</option>)}
-          </select>
-          <input type="date" value={price.price_date} onChange={e => setPrice(p => ({ ...p, price_date: e.target.value }))} style={inp} />
-          <input type="number" value={price.price} onChange={e => setPrice(p => ({ ...p, price: e.target.value }))}
-            placeholder="Market price (₹)" style={{ ...inp, fontFamily: 'var(--mono)' }} />
-          <button onClick={savePrice} disabled={!price.material_id || !price.price} style={btn(price.material_id && price.price)}>Save Price</button>
+
+      {/* ── Market Price Entry ── */}
+      <div style={{ background: '#fff', border: `1px solid ${BD}` }}>
+        <div style={{
+          padding: '8px 14px',
+          borderBottom: `1px solid ${BD}`,
+          fontSize: 12,
+          fontWeight: 700,
+          background: BG_HD,
+          color: '#1d1d1d',
+        }}>
+          Market Price Entry
+        </div>
+        <div style={{ padding: 14, display: 'grid', gap: 10 }}>
+          <div>
+            <div style={{ fontSize: 11, color: '#5a5a5a', marginBottom: 3 }}>Material</div>
+            <select
+              value={price.material_id}
+              onChange={e => setPrice(p => ({ ...p, material_id: e.target.value }))}
+              style={{ ...inp, width: '100%' }}
+            >
+              <option value="">Select Material</option>
+              {rows.map(r => (
+                <option key={r.material_id} value={r.material_id}>
+                  {r.material_name}
+                  {r.last_market_price ? ` (₹${r.last_market_price})` : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <div style={{ fontSize: 11, color: '#5a5a5a', marginBottom: 3 }}>Price Date</div>
+            <input
+              type="date"
+              value={price.price_date}
+              onChange={e => setPrice(p => ({ ...p, price_date: e.target.value }))}
+              style={{ ...inp, width: '100%' }}
+            />
+          </div>
+          <div>
+            <div style={{ fontSize: 11, color: '#5a5a5a', marginBottom: 3 }}>Market Price (₹/{rows.find(r => String(r.material_id) === String(price.material_id))?.unit || 'unit'})</div>
+            <input
+              type="number"
+              value={price.price}
+              onChange={e => setPrice(p => ({ ...p, price: e.target.value }))}
+              placeholder="0.00"
+              style={{ ...inp, width: '100%', fontFamily: 'var(--mono)' }}
+            />
+          </div>
+          <button
+            onClick={savePrice}
+            disabled={!price.material_id || !price.price}
+            style={btn(price.material_id && price.price)}
+          >
+            Save Price
+          </button>
+          <div style={{ fontSize: 10, color: '#8c8c8c', lineHeight: 1.5 }}>
+            Market prices feed EOQ calculations. EOQ uses Order Cost = ₹{EOQ_ORDER_COST}, Holding = {EOQ_HOLDING_PCT * 100}%/yr.
+          </div>
         </div>
       </div>
     </div>
@@ -721,7 +912,7 @@ export default function InventoryPlanning({ mode = 'stock' }) {
   const [title, subtitle] = TITLES[mode] || TITLES.stock
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 0, background: BG_PAGE }}>
       <PageBar title={title} subtitle={subtitle} onRefresh={load}>
         {loading && (
           <span style={{ fontSize: 11, color: '#89919a', display: 'flex', alignItems: 'center', gap: 6 }}>

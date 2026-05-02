@@ -3105,11 +3105,16 @@ def inventory_overview(db: Session = Depends(get_db)):
             status = "BELOW REORDER LEVEL" if stock < reorder_level else ("SAFE (CLOSE)" if stock <= reorder_level * 1.15 and reorder_level > 0 else "SAFE")
             action = "ORDER NOW" if stock < reorder_level else "MONITOR"
             price_trend = _price_trend(db, material.id)
+            last_price_row = (db.query(MaterialMarketPrice)
+                              .filter_by(material_id=material.id)
+                              .order_by(MaterialMarketPrice.price_date.desc())
+                              .first())
+            last_market_price = float(last_price_row.price) if last_price_row else None
         except Exception:
             # Return a safe placeholder row so the material still appears in the UI
             stock = 0.0; avg = 0.0; daily = 0.0; lead = 5.0; safety = 0.0
             reorder_qty = 0.0; reorder_level = 0.0; days_left = None
-            status = "SAFE"; action = "MONITOR"; price_trend = "stable"
+            status = "SAFE"; action = "MONITOR"; price_trend = "stable"; last_market_price = None
         out.append({
             "material_id": material.id,
             "material_code": material.code,
@@ -3126,6 +3131,7 @@ def inventory_overview(db: Session = Depends(get_db)):
             "status": status,
             "action": action,
             "price_trend": price_trend,
+            "last_market_price": last_market_price,
             "recommendation": _recommendation_payload(rec) if rec else None,
         })
     try:
