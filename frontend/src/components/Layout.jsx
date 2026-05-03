@@ -35,9 +35,8 @@ const SHELL = '#0d1e35'
 
 /* ── Navigation manifest ─────────────────────────────────────────────────── */
 const DEFAULT_NAV = [
-  { id: 'overview', label: 'Overview',         abbr: 'OV' },
+  { id: 'overview', label: 'Launchpad',         abbr: 'LP' },
   { id: 'entry',    label: 'Data Entry',        abbr: 'DE' },
-  { id: 'charts',   label: 'Control Charts',    abbr: 'CC' },
   { id: 'uster',    label: 'Uster Benchmarks',  abbr: 'UB' },
   { id: 'report',   label: 'Shift Report',      abbr: 'SR' },
   { id: 'log',      label: 'Data Log',          abbr: 'DL' },
@@ -45,13 +44,12 @@ const DEFAULT_NAV = [
   { id: 'settings', label: 'Settings',          abbr: 'ST' },
   { id: 'guide',    label: 'Operator Guide',    abbr: 'OG' },
 ]
-const BOTTOM_NAV = ['overview', 'entry', 'charts', 'report']
+const BOTTOM_NAV = ['overview', 'entry', 'log', 'report']
 
 /* ── SVG icon paths (16×16 viewBox) ─────────────────────────────────────── */
 const ICONS = {
-  overview: 'M2 2h5.5v5.5H2V2zM8.5 2H14v5.5H8.5V2zM2 8.5h5.5V14H2V8.5zM8.5 8.5H14V14H8.5V8.5z',
+  overview: 'M2 2h5v5H2V2zM9 2h5v5H9V2zM2 9h5v5H2V9zM9 9h5v5H9V9z',
   entry:    'M3 13h2.6L13 5.6 10.4 3 3 10.4V13zm8.8-9.5L13.5 5.2a.6.6 0 000 .9L12 7.5',
-  charts:   'M2.5 2v11.5H14M4.5 11 7 7.5l2.5 2L13 4',
   uster:    'M8 13.5A5.5 5.5 0 108 2.5a5.5 5.5 0 000 11zM8 10.5a2.5 2.5 0 100-5 2.5 2.5 0 000 5zM8 9a1 1 0 100-2 1 1 0 000 2z',
   report:   'M4 2h6l3 3v9a1 1 0 01-1 1H4a1 1 0 01-1-1V3a1 1 0 011-1zm6 0v3h3M5.5 7.5h5M5.5 10h5M5.5 12.5h3',
   log:      'M2 4h12M2 4v8a1 1 0 001 1h10a1 1 0 001-1V4M2 8.5h12M6 4v9M10 4v9',
@@ -172,7 +170,7 @@ export default function Layout({
 
   const navigate = id => { setView(id); setMenuOpen(false) }
   const navItems = navOrder.map(id => DEFAULT_NAV.find(n => n.id === id)).filter(Boolean)
-  const currentLabel = DEFAULT_NAV.find(n => n.id === view)?.label ?? ''
+  const currentLabel = DEFAULT_NAV.find(n => n.id === view)?.label ?? view
 
   /* ── Sidebar width ── */
   const sideW = isMobile ? 0 : (collapsed ? 48 : 220)

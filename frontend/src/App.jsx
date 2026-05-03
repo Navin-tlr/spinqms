@@ -3,7 +3,6 @@ import Layout from './components/Layout.jsx'
 import LandingPage from './components/views/LandingPage.jsx'
 import Overview from './components/views/Overview.jsx'
 import DataEntry from './components/views/DataEntry.jsx'
-import ControlCharts from './components/views/ControlCharts.jsx'
 import UsterBenchmarks from './components/views/UsterBenchmarks.jsx'
 import ShiftReport from './components/views/ShiftReport.jsx'
 import Settings from './components/views/Settings.jsx'
@@ -191,13 +190,16 @@ export default function App() {
             />
           )}
           {view === 'overview' && (
-            <Overview overview={overview} currentDept={currentDept} setCurrentDept={setCurrentDept} />
+            <Overview
+              overview={overview}
+              currentDept={currentDept}
+              setCurrentDept={setCurrentDept}
+              depts={depts}
+              machineFilter={machineFilter}
+            />
           )}
           {view === 'entry' && (
             <DataEntry depts={depts} currentDept={currentDept} setCurrentDept={setCurrentDept} onSaved={handleSaved} />
-          )}
-          {view === 'charts' && (
-            <ControlCharts overview={overview} currentDept={currentDept} depts={depts} machineFilter={machineFilter} />
           )}
           {view === 'uster' && <UsterBenchmarks />}
           {view === 'report' && <ShiftReport />}
